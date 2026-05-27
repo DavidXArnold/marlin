@@ -16,12 +16,12 @@ func TestDefaults(t *testing.T) {
 	assert.False(t, cfg.Behavior.AddAutoDetect)
 	assert.Equal(t, 100, cfg.Behavior.LogTailLines)
 
-	assert.Equal(t, "/etc/vllm/models", cfg.Paths.ModelsDir)
-	assert.Equal(t, "/etc/vllm/model.env", cfg.Paths.ActiveSymlink)
-	assert.Equal(t, "/etc/vllm/secrets.env", cfg.Paths.SecretsEnv)
+	assert.Equal(t, "/etc/marlin/models", cfg.Paths.ModelsDir)
+	assert.Equal(t, "/etc/marlin/model.env", cfg.Paths.ActiveSymlink)
+	assert.Equal(t, "/etc/marlin/secrets.env", cfg.Paths.SecretsEnv)
 
-	assert.Equal(t, "vllm", cfg.Service.SystemdUnit)
-	assert.Equal(t, "vllm", cfg.Service.DockerContainer)
+	assert.Equal(t, "marlin", cfg.Service.SystemdUnit)
+	assert.Equal(t, "marlin", cfg.Service.DockerContainer)
 
 	assert.Equal(t, "localhost", cfg.Server.Host)
 	assert.Equal(t, 8000, cfg.Server.Port)

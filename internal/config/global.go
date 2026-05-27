@@ -61,15 +61,15 @@ func Defaults() *Config {
 			AllowTypeSwitch: true,
 		},
 		Paths: PathsConfig{
-			ModelsDir:     "/etc/vllm/models",
-			ActiveSymlink: "/etc/vllm/model.env",
-			SecretsEnv:    "/etc/vllm/secrets.env",
+			ModelsDir:     "/etc/marlin/models",
+			ActiveSymlink: "/etc/marlin/model.env",
+			SecretsEnv:    "/etc/marlin/secrets.env",
 			StateFile:     "/var/lib/marlin/state.toml",
 			NIMCache:      "/var/cache/nim",
 		},
 		Service: ServiceConfig{
-			SystemdUnit:     "vllm",
-			DockerContainer: "vllm",
+			SystemdUnit:     "marlin",
+			DockerContainer: "marlin",
 		},
 		Server: ServerConfig{
 			Host:  "localhost",

@@ -5,15 +5,15 @@ log_tail_lines   = 100
 allow_type_switch = true   # allow switching between vllm and nim providers
 
 [paths]
-models_dir     = "/etc/vllm/models"
-active_symlink = "/etc/vllm/model.env"
-secrets_env    = "/etc/vllm/secrets.env"
-state_file     = "/var/lib/kajiki/state.toml"
+models_dir     = "/etc/marlin/models"
+active_symlink = "/etc/marlin/model.env"
+secrets_env    = "/etc/marlin/secrets.env"
+state_file     = "/var/lib/marlin/state.toml"
 nim_cache      = "/var/cache/nim"   # FLAG: user home cache vs system path — review for multi-user setups
 
 [service]
-systemd_unit      = "vllm"
-docker_container  = "vllm"
+systemd_unit      = "marlin"
+docker_container  = "marlin"
 # container_runtime = "docker"       # docker (default), podman, or containerd
 # container_socket  = ""             # custom socket path; leave empty for auto-detect
 

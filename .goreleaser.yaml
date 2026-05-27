@@ -45,6 +45,18 @@ nfpms:
       - src: configs/marlin.toml.example
         dst: /etc/marlin/config.toml
         type: config|noreplace
+      - dst: /etc/marlin/models
+        type: dir
+        file_info:
+          mode: 0755
+      - dst: /var/lib/marlin
+        type: dir
+        file_info:
+          mode: 0755
+      - dst: /var/cache/nim
+        type: dir
+        file_info:
+          mode: 0755
 
 dockers:
   - image_templates:

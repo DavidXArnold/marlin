@@ -4,7 +4,7 @@
 
 <h1 align="center">marlin</h1>
 
-<p align="center">A structured CLI for managing local LLM inference. Handles vLLM (systemd) and NIM (Docker) model switching, live health checks, and registry searches.</p>
+<p align="center">An opinionated CLI for managing local LLM inference. Handles vLLM (systemd) and NIM (Docker) model switching, live health checks, and registry searches.</p>
 
 ## Features
 
@@ -51,14 +51,14 @@ Key paths (all overridable in config):
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `paths.models_dir` | `/etc/vllm/models` | TOML model configs and rendered `.env` files |
-| `paths.active_symlink` | `/etc/vllm/model.env` | Symlink pointing at the active model's env file |
-| `paths.secrets_env` | `/etc/vllm/secrets.env` | `HF_TOKEN` and `NGC_API_KEY` |
+| `paths.models_dir` | `/etc/marlin/models` | TOML model configs and rendered `.env` files |
+| `paths.active_symlink` | `/etc/marlin/model.env` | Symlink pointing at the active model's env file |
+| `paths.secrets_env` | `/etc/marlin/secrets.env` | `HF_TOKEN` and `NGC_API_KEY` |
 | `paths.state_file` | `/var/lib/marlin/state.toml` | Active model/provider state |
 | `paths.nim_cache` | `/var/cache/nim` | Host path mounted into NIM containers |
 | `server.alias` | `gn100` | Served-model-name alias expected by clients |
 
-Secrets file format (`/etc/vllm/secrets.env`):
+Secrets file format (`/etc/marlin/secrets.env`):
 
 ```
 HF_TOKEN=hf_...

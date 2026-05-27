@@ -16,8 +16,8 @@ import (
 //
 // Layout on disk:
 //
-//	/etc/vllm/models/<slug>.env   rendered env file for each model
-//	/etc/vllm/model.env           symlink → active model's .env file
+//	/etc/marlin/models/<slug>.env   rendered env file for each model
+//	/etc/marlin/model.env           symlink → active model's .env file
 //
 // On switch: write the new .env, atomically replace the symlink, restart the
 // systemd unit.  The old .env is left in place so the previous model can be

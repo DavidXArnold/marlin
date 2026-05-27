@@ -25,7 +25,7 @@ func TestGlobalConfigMissingFile(t *testing.T) {
 
 	cfg, err := globalConfig()
 	require.NoError(t, err) // missing file → returns defaults
-	assert.Equal(t, "/etc/vllm/models", cfg.Paths.ModelsDir)
+	assert.Equal(t, "/etc/marlin/models", cfg.Paths.ModelsDir)
 }
 
 func TestGlobalConfigFromEnvFile(t *testing.T) {
@@ -34,7 +34,7 @@ func TestGlobalConfigFromEnvFile(t *testing.T) {
 
 	cfg, err := globalConfig()
 	require.NoError(t, err)
-	assert.NotEqual(t, "/etc/vllm/models", cfg.Paths.ModelsDir)
+	assert.NotEqual(t, "/etc/marlin/models", cfg.Paths.ModelsDir)
 }
 
 // --- buildProvider ---
