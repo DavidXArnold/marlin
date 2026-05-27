@@ -10,6 +10,13 @@ import (
 var (
 	getuid = os.Getuid
 	osExit = os.Exit
+	sudoRun = func(args []string) error {
+		cmd := exec.Command("sudo", args...)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
 )
 
 // RequireRoot re-executes the current binary under sudo if not already running
@@ -21,11 +28,7 @@ func RequireRoot() {
 	if getuid() == 0 {
 		return
 	}
-	cmd := exec.Command("sudo", append([]string{os.Args[0]}, os.Args[1:]...)...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := sudoRun(append([]string{os.Args[0]}, os.Args[1:]...)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		osExit(1)
 		return

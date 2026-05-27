@@ -1,6 +1,10 @@
-# marlin
+<p align="center">
+  <img src="assets/marlin_logo.png" alt="marlin" width="200" />
+</p>
 
-A structured CLI for managing local LLM inference. Handles vLLM (systemd) and NIM (Docker) model switching, live health checks, and registry searches.
+<h1 align="center">marlin</h1>
+
+<p align="center">A structured CLI for managing local LLM inference. Handles vLLM (systemd) and NIM (Docker) model switching, live health checks, and registry searches.</p>
 
 ## Features
 
