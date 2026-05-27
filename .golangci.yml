@@ -1,12 +1,8 @@
-version: "2"
-
 linters:
   enable:
     - errcheck
     - govet
     - staticcheck
-    - unused
-    - gosimple
     - ineffassign
     - typecheck
     - gofmt
@@ -14,12 +10,11 @@ linters:
     - misspell
     - noctx
     - bodyclose
-
-linters-settings:
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: github.com/DavidXArnold/marlin
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes: github.com/DavidXArnold/marlin
 
 issues:
   exclude-rules:
