@@ -10,11 +10,6 @@ linters:
     - misspell
     - noctx
     - bodyclose
-  settings:
-    gofmt:
-      simplify: true
-    goimports:
-      local-prefixes: github.com/DavidXArnold/marlin
 
 issues:
   exclude-rules:
