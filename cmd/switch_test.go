@@ -152,7 +152,6 @@ alias = "gn100"
 	assert.Contains(t, err.Error(), "disabled")
 }
 
-
 // TestRunSwitchSuccess covers the happy path: requireRoot no-op, mock provider succeeds.
 func TestRunSwitchSuccess(t *testing.T) {
 	noopRequireRoot(t)

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	dtypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	dimage "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
@@ -28,7 +27,7 @@ type stubDocker struct {
 	createResp container.CreateResponse
 	createErr  error
 	startErr   error
-	listResult []dtypes.Container
+	listResult []container.Summary
 	listErr    error
 	logsReader io.ReadCloser
 	logsErr    error
@@ -49,7 +48,7 @@ func (s *stubDocker) ContainerCreate(_ context.Context, _ *container.Config, _ *
 func (s *stubDocker) ContainerStart(_ context.Context, _ string, _ container.StartOptions) error {
 	return s.startErr
 }
-func (s *stubDocker) ContainerList(_ context.Context, _ container.ListOptions) ([]dtypes.Container, error) {
+func (s *stubDocker) ContainerList(_ context.Context, _ container.ListOptions) ([]container.Summary, error) {
 	return s.listResult, s.listErr
 }
 func (s *stubDocker) ContainerLogs(_ context.Context, _ string, _ container.LogsOptions) (io.ReadCloser, error) {
@@ -131,7 +130,7 @@ func TestNIMSwitchPullFails(t *testing.T) {
 func TestNIMSwitchStopFails(t *testing.T) {
 	d := &stubDocker{
 		pullReader: emptyReader(),
-		listResult: []dtypes.Container{{ID: "old123", State: "running"}},
+		listResult: []container.Summary{{ID: "old123", State: "running"}},
 		stopErr:    fmt.Errorf("stop failed"),
 	}
 	p, _ := testNIMProvider(t, d)
@@ -145,7 +144,7 @@ func TestNIMSwitchStopFails(t *testing.T) {
 func TestNIMSwitchRemoveFails(t *testing.T) {
 	d := &stubDocker{
 		pullReader: emptyReader(),
-		listResult: []dtypes.Container{{ID: "old123", State: "running"}},
+		listResult: []container.Summary{{ID: "old123", State: "running"}},
 		removeErr:  fmt.Errorf("remove failed"),
 	}
 	p, _ := testNIMProvider(t, d)
@@ -193,7 +192,7 @@ func TestNIMStopNoContainers(t *testing.T) {
 
 func TestNIMStopExisting(t *testing.T) {
 	d := &stubDocker{
-		listResult: []dtypes.Container{{ID: "c1", State: "running"}},
+		listResult: []container.Summary{{ID: "c1", State: "running"}},
 	}
 	p, _ := testNIMProvider(t, d)
 	require.NoError(t, p.Stop(context.Background()))
@@ -209,7 +208,7 @@ func TestNIMStopListFails(t *testing.T) {
 
 func TestNIMStatusRunning(t *testing.T) {
 	d := &stubDocker{
-		listResult: []dtypes.Container{
+		listResult: []container.Summary{
 			{ID: "abc123", State: "running", Image: "nvcr.io/nim/meta/llama-3.1-8b:latest"},
 		},
 	}
@@ -241,7 +240,7 @@ func TestNIMStatusListFails(t *testing.T) {
 func TestNIMLogsSuccess(t *testing.T) {
 	content := "\x01\x00\x00\x00\x00\x00\x00\x05hello" // docker multiplexed stream
 	d := &stubDocker{
-		listResult: []dtypes.Container{{ID: "c1"}},
+		listResult: []container.Summary{{ID: "c1"}},
 		logsReader: io.NopCloser(strings.NewReader(content)),
 	}
 	p, _ := testNIMProvider(t, d)
@@ -266,7 +265,7 @@ func TestNIMLogsListFails(t *testing.T) {
 
 func TestNIMLogsReaderFails(t *testing.T) {
 	d := &stubDocker{
-		listResult: []dtypes.Container{{ID: "c1"}},
+		listResult: []container.Summary{{ID: "c1"}},
 		logsErr:    fmt.Errorf("logs failed"),
 	}
 	p, _ := testNIMProvider(t, d)

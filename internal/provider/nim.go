@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 
-	dtypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dimage "github.com/docker/docker/api/types/image"
@@ -31,7 +30,7 @@ type dockerClient interface {
 	ContainerCreate(ctx context.Context, cfg *container.Config, hostCfg *container.HostConfig,
 		netCfg *network.NetworkingConfig, platform *ocispec.Platform, name string) (container.CreateResponse, error)
 	ContainerStart(ctx context.Context, containerID string, options container.StartOptions) error
-	ContainerList(ctx context.Context, options container.ListOptions) ([]dtypes.Container, error)
+	ContainerList(ctx context.Context, options container.ListOptions) ([]container.Summary, error)
 	ContainerLogs(ctx context.Context, containerID string, options container.LogsOptions) (io.ReadCloser, error)
 	ImagePull(ctx context.Context, refStr string, options dimage.PullOptions) (io.ReadCloser, error)
 }
