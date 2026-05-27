@@ -1,0 +1,120 @@
+package cmd
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"github.com/spf13/cobra"
+
+	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/privilege"
+	"github.com/DavidXArnold/marlin/internal/state"
+	"github.com/DavidXArnold/marlin/internal/ui"
+	"github.com/DavidXArnold/marlin/internal/validate"
+)
+
+var requireRoot = privilege.RequireRoot
+
+var switchCmd = &cobra.Command{
+	Use:   "switch [model]",
+	Short: "Switch active model and restart the inference service",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runSwitch,
+}
+
+func init() {
+	rootCmd.AddCommand(switchCmd)
+}
+
+func runSwitch(cmd *cobra.Command, args []string) error {
+	cfg, err := globalConfig()
+	if err != nil {
+		return err
+	}
+
+	models, names, err := config.ListModels(cfg.Paths.ModelsDir)
+	if err != nil {
+		return fmt.Errorf("listing models: %w", err)
+	}
+
+	query := ""
+	if len(args) > 0 {
+		query = args[0]
+	}
+
+	targetSlug, err := resolveModel(query, names, models)
+	if err != nil {
+		return err
+	}
+
+	targetModel, err := config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, targetSlug+".toml"))
+	if err != nil {
+		return err
+	}
+
+	// Validation — errors block, warnings are printed.
+	issues := validate.Model(targetModel, cfg.Server.Alias)
+	for _, iss := range issues {
+		if iss.Level == validate.LevelError {
+			return fmt.Errorf("validation: %s", iss.Message)
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", iss.Message)
+	}
+
+	// Load current state to detect provider type switch.
+	cur, _ := state.Load(cfg.Paths.StateFile)
+
+	if cur.ActiveModel != "" &&
+		cur.ActiveProvider != targetModel.Model.Type &&
+		!cfg.Behavior.AllowTypeSwitch {
+		return fmt.Errorf("switching from %s to %s is disabled (allow_type_switch = false in config)",
+			cur.ActiveProvider, targetModel.Model.Type)
+	}
+
+	// Confirmation prompt (before privilege escalation so it runs as the user).
+	if cfg.Behavior.SwitchPrompt {
+		ok, err := ui.Confirm(fmt.Sprintf("Switch to %q?", targetSlug))
+		if err != nil || !ok {
+			fmt.Fprintln(cmd.OutOrStdout(), "cancelled")
+			return nil
+		}
+	}
+
+	// Escalate privilege now — re-execs under sudo if not root.
+	requireRoot()
+
+	// Stop old provider if the type is changing.
+	if cur.ActiveModel != "" && cur.ActiveProvider != targetModel.Model.Type {
+		oldProvider, err := buildProvider(cur.ActiveProvider, cfg)
+		if err == nil {
+			if stopErr := oldProvider.Stop(cmd.Context()); stopErr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: stopping previous provider: %v\n", stopErr)
+			}
+		}
+	}
+
+	// Execute the switch.
+	p, err := buildProvider(targetModel.Model.Type, cfg)
+	if err != nil {
+		return err
+	}
+
+	if err := p.Switch(cmd.Context(), targetSlug); err != nil {
+		return err
+	}
+
+	// Persist state.
+	newState := &state.State{
+		ActiveModel:    targetSlug,
+		ActiveProvider: targetModel.Model.Type,
+	}
+	if st, err := p.Status(cmd.Context()); err == nil {
+		newState.ContainerID = st.ContainerID
+	}
+	if err := state.Save(cfg.Paths.StateFile, newState); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not save state: %v\n", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "switched to %s (%s)\n", targetSlug, targetModel.Model.Type)
+	return nil
+}

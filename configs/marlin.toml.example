@@ -1,0 +1,34 @@
+[behavior]
+switch_prompt    = true    # prompt before restart on switch
+add_auto_detect  = false   # auto-detect model params on add (YMMV)
+log_tail_lines   = 100
+allow_type_switch = true   # allow switching between vllm and nim providers
+
+[paths]
+models_dir     = "/etc/vllm/models"
+active_symlink = "/etc/vllm/model.env"
+secrets_env    = "/etc/vllm/secrets.env"
+state_file     = "/var/lib/kajiki/state.toml"
+nim_cache      = "/var/cache/nim"   # FLAG: user home cache vs system path — review for multi-user setups
+
+[service]
+systemd_unit      = "vllm"
+docker_container  = "vllm"
+# container_runtime = "docker"       # docker (default), podman, or containerd
+# container_socket  = ""             # custom socket path; leave empty for auto-detect
+
+[server]
+host  = "localhost"
+port  = 8000
+alias = "gn100"
+
+[registries.huggingface]
+enabled = true
+# HF_TOKEN is read from secrets_env
+
+[registries.ngc]
+enabled = true
+# NGC_API_KEY is read from secrets_env
+
+[registries.modelscope]
+enabled = false

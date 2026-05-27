@@ -1,0 +1,91 @@
+version: 2
+
+project_name: marlin
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: marlin
+    main: ./cmd/marlin
+    binary: marlin
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: marlin
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+nfpms:
+  - id: marlin
+    package_name: marlin
+    vendor: DavidXArnold
+    homepage: https://github.com/DavidXArnold/marlin
+    maintainer: David Arnold <darnold@soundofcorduroy.com>
+    description: Local LLM inference server manager
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/local/bin
+    contents:
+      - src: configs/marlin.toml.example
+        dst: /etc/marlin/config.toml
+        type: config|noreplace
+
+dockers:
+  - image_templates:
+      - "ghcr.io/davidxarnold/marlin:{{ .Version }}-amd64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.revision={{.Commit}}"
+    dockerfile: Dockerfile
+    goarch: amd64
+
+  - image_templates:
+      - "ghcr.io/davidxarnold/marlin:{{ .Version }}-arm64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.revision={{.Commit}}"
+    dockerfile: Dockerfile
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/davidxarnold/marlin:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/davidxarnold/marlin:{{ .Version }}-amd64"
+      - "ghcr.io/davidxarnold/marlin:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/davidxarnold/marlin:latest"
+    image_templates:
+      - "ghcr.io/davidxarnold/marlin:{{ .Version }}-amd64"
+      - "ghcr.io/davidxarnold/marlin:{{ .Version }}-arm64"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: DavidXArnold
+    name: marlin

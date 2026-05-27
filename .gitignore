@@ -1,0 +1,27 @@
+# Build output
+bin/
+dist/
+
+# Test artifacts
+coverage.out
+coverage.html
+
+# Go tool cache
+*.test
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local Claude Code settings
+.claude/
+
+# Secrets — never commit
+*.env
+secrets.env
