@@ -632,3 +632,127 @@ func TestRunEditDirect(t *testing.T) {
 	defer cleanup()
 	require.NoError(t, runEdit(cmdWithContext(io.Discard), []string{"llama-8b"}))
 }
+
+// --- update notice in Execute() ---
+
+func TestExecuteUpdateNotice(t *testing.T) {
+	// Drain any leftover from previous tests.
+	select {
+	case <-updateNoticeCh:
+	default:
+	}
+
+	oldVersion := currentVersion
+	currentVersion = "0.0.1"
+	defer func() { currentVersion = oldVersion }()
+
+	// Pre-populate the channel so Execute() prints the notice.
+	updateNoticeCh <- "v99.0.0"
+
+	// Capture stderr.
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	oldStderr := os.Stderr
+	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+
+	oldExit := osExit
+	osExit = func(int) {}
+	defer func() { osExit = oldExit }()
+
+	rootCmd.SetArgs([]string{"--help"})
+	rootCmd.SetOut(io.Discard)
+	rootCmd.SetErr(io.Discard)
+	Execute()
+	rootCmd.SetArgs(nil)
+
+	w.Close()
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	assert.Contains(t, buf.String(), "v99.0.0")
+	assert.Contains(t, buf.String(), "0.0.1")
+}
+
+func TestPersistentPreRunE_UpdateEnabled(t *testing.T) {
+	// Drain channel.
+	select {
+	case <-updateNoticeCh:
+	default:
+	}
+
+	done := make(chan struct{})
+	old := checkForUpdate
+	checkForUpdate = func(_ context.Context, _ string) (string, bool, error) {
+		close(done)
+		return "v99.0.0", true, nil
+	}
+	defer func() { checkForUpdate = old }()
+
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	oldVersion := currentVersion
+	currentVersion = "0.0.1"
+	defer func() { currentVersion = oldVersion }()
+
+	require.NoError(t, rootCmd.PersistentPreRunE(nil, nil))
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("checkForUpdate goroutine not called")
+	}
+	// Give the goroutine time to send on the channel.
+	time.Sleep(10 * time.Millisecond)
+	select {
+	case latest := <-updateNoticeCh:
+		assert.Equal(t, "v99.0.0", latest)
+	default:
+		t.Fatal("update notice not sent to channel")
+	}
+}
+
+func TestPersistentPreRunE_UpdateDisabled(t *testing.T) {
+	called := false
+	old := checkForUpdate
+	checkForUpdate = func(_ context.Context, _ string) (string, bool, error) {
+		called = true
+		return "", false, nil
+	}
+	defer func() { checkForUpdate = old }()
+
+	cleanup := tempEnvWithBehavior(t, "check_updates = false")
+	defer cleanup()
+
+	require.NoError(t, rootCmd.PersistentPreRunE(nil, nil))
+	time.Sleep(50 * time.Millisecond)
+	assert.False(t, called, "checkForUpdate should not be called when check_updates=false")
+}
+
+// tempEnvWithBehavior creates a config with extra behavior lines appended.
+func tempEnvWithBehavior(t *testing.T, behaviorLine string) func() {
+	t.Helper()
+	dir := t.TempDir()
+	modelsDir := dir + "/models"
+	require.NoError(t, os.MkdirAll(modelsDir, 0o755))
+
+	content := fmt.Sprintf(`[behavior]
+%s
+
+[paths]
+models_dir = %q
+state_file = %q
+secrets_env = %q
+active_symlink = %q
+`, behaviorLine, modelsDir,
+		dir+"/state.toml",
+		dir+"/secrets.env",
+		dir+"/model.env",
+	)
+	cfgPath := dir + "/config.toml"
+	require.NoError(t, os.WriteFile(cfgPath, []byte(content), 0o644))
+
+	old := cfgFile
+	cfgFile = cfgPath
+	return func() { cfgFile = old }
+}

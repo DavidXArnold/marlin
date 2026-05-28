@@ -4,6 +4,7 @@ add_auto_detect  = false   # auto-detect model params on add (YMMV)
 log_tail_lines   = 100
 allow_type_switch = true   # allow switching between vllm and nim providers
 warn_unmanaged_containers = true  # warn if unmanaged inference containers are detected
+check_updates    = true    # notify when a newer marlin release is available on GitHub
 
 [paths]
 models_dir     = "/etc/marlin/models"

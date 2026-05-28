@@ -20,6 +20,7 @@ type BehaviorConfig struct {
 	LogTailLines            int  `toml:"log_tail_lines"`
 	AllowTypeSwitch         bool `toml:"allow_type_switch"`
 	WarnUnmanagedContainers bool `toml:"warn_unmanaged_containers"`
+	CheckUpdates            bool `toml:"check_updates"`
 }
 
 type PathsConfig struct {
@@ -62,6 +63,7 @@ func Defaults() *Config {
 			LogTailLines:            100,
 			AllowTypeSwitch:         true,
 			WarnUnmanagedContainers: true,
+			CheckUpdates:            true,
 		},
 		Paths: PathsConfig{
 			ModelsDir:     "/etc/marlin/models",
