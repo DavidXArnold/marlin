@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -28,7 +29,7 @@ func NewNGC(apiKey string) *NGC {
 func (n *NGC) Name() string { return "ngc" }
 
 func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
-	endpoint := fmt.Sprintf("%s/search/resources/MODEL?q=%s&pageSize=20", n.base, url.QueryEscape(query))
+	endpoint := fmt.Sprintf("%s/search/resources/CONTAINER?q=%s&pageSize=20", n.base, url.QueryEscape(query))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -76,11 +77,12 @@ type ngcResource struct {
 	DisplayName string `json:"displayName"`
 	Description string `json:"shortDescription"`
 	UpdatedDate string `json:"updatedDate"` // RFC3339 or similar
+	LatestTag   string `json:"latestTag"`   // image tag; defaults to "latest"
 }
 
 func (r ngcResource) toModelInfo() ModelInfo {
 	info := ModelInfo{
-		ID:          r.Name,
+		ID:          nimImageRef(r.Name, r.LatestTag),
 		Registry:    "ngc",
 		Description: r.Description,
 	}
@@ -90,4 +92,19 @@ func (r ngcResource) toModelInfo() ModelInfo {
 		}
 	}
 	return info
+}
+
+// nimImageRef constructs the full nvcr.io pull reference from an NGC resource
+// name. Names that already look like full references are returned unchanged.
+//
+// e.g. "nvidia/llama-3.1-8b-instruct" + "" → "nvcr.io/nim/nvidia/llama-3.1-8b-instruct:latest"
+//      "nvidia/llama-3.1-8b-instruct" + "1.8" → "nvcr.io/nim/nvidia/llama-3.1-8b-instruct:1.8"
+func nimImageRef(name, tag string) string {
+	if strings.HasPrefix(name, "nvcr.io/") {
+		return name
+	}
+	if tag == "" {
+		tag = "latest"
+	}
+	return "nvcr.io/nim/" + name + ":" + tag
 }

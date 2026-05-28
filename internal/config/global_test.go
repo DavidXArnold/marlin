@@ -18,7 +18,7 @@ func TestDefaults(t *testing.T) {
 
 	assert.Equal(t, "/etc/marlin/models", cfg.Paths.ModelsDir)
 	assert.Equal(t, "/etc/marlin/model.env", cfg.Paths.ActiveSymlink)
-	assert.Equal(t, "/etc/marlin/secrets.env", cfg.Paths.SecretsEnv)
+	assert.Contains(t, cfg.Paths.SecretsEnv, "secrets.env") // path varies by $HOME
 
 	assert.Equal(t, "marlin", cfg.Service.SystemdUnit)
 	assert.Equal(t, "marlin", cfg.Service.DockerContainer)

@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/BurntSushi/toml"
 )
@@ -55,6 +56,17 @@ type RegistryConfig struct {
 	Enabled bool `toml:"enabled"`
 }
 
+// defaultSecretsPath returns the user-local secrets path so that marlin
+// configure works without sudo. Falls back to the system path when the home
+// directory cannot be determined (e.g. headless service contexts).
+func defaultSecretsPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/etc/marlin/secrets.env"
+	}
+	return filepath.Join(home, ".config", "marlin", "secrets.env")
+}
+
 func Defaults() *Config {
 	return &Config{
 		Behavior: BehaviorConfig{
@@ -68,7 +80,7 @@ func Defaults() *Config {
 		Paths: PathsConfig{
 			ModelsDir:     "/etc/marlin/models",
 			ActiveSymlink: "/etc/marlin/model.env",
-			SecretsEnv:    "/etc/marlin/secrets.env",
+			SecretsEnv:    defaultSecretsPath(),
 			StateFile:     "/var/lib/marlin/state.toml",
 			NIMCache:      "/var/cache/nim",
 		},

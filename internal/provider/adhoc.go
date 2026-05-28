@@ -87,7 +87,12 @@ func (a *AdhocRunner) Start(ctx context.Context, slug string) (string, error) {
 		return "", err
 	}
 
-	reader, err := a.docker.ImagePull(ctx, image, dimage.PullOptions{})
+	pullOpts := dimage.PullOptions{}
+	if m.Model.Type == config.ProviderNIM {
+		sec, _ := secrets.Load(a.cfg.Paths.SecretsEnv)
+		pullOpts.RegistryAuth = ngcRegistryAuth(sec["NGC_API_KEY"])
+	}
+	reader, err := a.docker.ImagePull(ctx, image, pullOpts)
 	if err != nil {
 		return "", fmt.Errorf("pulling image %s: %w", image, err)
 	}

@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -322,4 +323,20 @@ func TestNewNIMProviderPodmanAutoSocket(t *testing.T) {
 	p, err := NewNIMProvider(cfg, "")
 	require.NoError(t, err)
 	assert.NotNil(t, p)
+}
+
+func TestNGCRegistryAuth(t *testing.T) {
+	auth := ngcRegistryAuth("nvapi-test-key")
+	assert.NotEmpty(t, auth)
+
+	// Decode and verify the JSON payload contains the expected credentials.
+	raw, err := base64.URLEncoding.DecodeString(auth)
+	require.NoError(t, err)
+	payload := string(raw)
+	assert.Contains(t, payload, `"$oauthtoken"`)
+	assert.Contains(t, payload, `"nvapi-test-key"`)
+}
+
+func TestNGCRegistryAuthEmpty(t *testing.T) {
+	assert.Empty(t, ngcRegistryAuth(""))
 }

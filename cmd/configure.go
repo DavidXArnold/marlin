@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,16 @@ import (
 
 // configureIn is injectable for tests.
 var configureIn io.Reader = os.Stdin
+
+// dockerLoginFunc is injectable for tests.
+var dockerLoginFunc = func(apiKey string) error {
+	cmd := exec.Command("docker", "login", "nvcr.io",
+		"--username", "$oauthtoken", "--password-stdin")
+	cmd.Stdin = strings.NewReader(apiKey)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
 
 var configureCmd = &cobra.Command{
 	Use:   "configure",
@@ -95,12 +106,27 @@ func runConfigure(cmd *cobra.Command, _ []string) error {
 	}
 
 	if err := secrets.Save(path, updates); err != nil {
-		if os.IsPermission(err) {
-			requireRoot()
-		}
 		return fmt.Errorf("saving secrets: %w", err)
 	}
+	fmt.Fprintf(w, "Saved to %s\n\n", path)
 
-	fmt.Fprintf(w, "Saved to %s\n", path)
+	// If an NGC key was just set, offer to authenticate Docker to nvcr.io.
+	// NIM image pulls require: docker login nvcr.io -u $oauthtoken -p <key>
+	if ngcKey, ok := updates["NGC_API_KEY"]; ok && ngcKey != "" {
+		fmt.Fprintf(w, "NIM images are hosted on nvcr.io and require Docker registry auth.\n")
+		fmt.Fprintf(w, "  docker login nvcr.io --username '$oauthtoken' --password-stdin\n\n")
+		fmt.Fprintf(w, "Run docker login nvcr.io now? [y/N]: ")
+
+		line, _ := reader.ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(line)) == "y" {
+			if err := dockerLoginFunc(ngcKey); err != nil {
+				fmt.Fprintf(w, "docker login failed: %v\n", err)
+				fmt.Fprintf(w, "Run it manually with your NGC API key as the password.\n")
+			} else {
+				fmt.Fprintln(w, "Docker authenticated to nvcr.io.")
+			}
+		}
+	}
+
 	return nil
 }

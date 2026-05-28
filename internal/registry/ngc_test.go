@@ -25,6 +25,7 @@ func TestNGCSearch(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.String(), "llama")
+		assert.Contains(t, r.URL.String(), "CONTAINER")
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 	}))
@@ -34,8 +35,22 @@ func TestNGCSearch(t *testing.T) {
 	results, err := n.Search(context.Background(), "llama")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
-	assert.Equal(t, "nvidia/llama-3.1-8b-instruct", results[0].ID)
+	assert.Equal(t, "nvcr.io/nim/nvidia/llama-3.1-8b-instruct:latest", results[0].ID)
 	assert.Equal(t, "ngc", results[0].Registry)
+}
+
+func TestNimImageRef(t *testing.T) {
+	cases := []struct {
+		name, tag, want string
+	}{
+		{"nvidia/llama-3.1-8b-instruct", "", "nvcr.io/nim/nvidia/llama-3.1-8b-instruct:latest"},
+		{"nvidia/llama-3.1-8b-instruct", "1.8", "nvcr.io/nim/nvidia/llama-3.1-8b-instruct:1.8"},
+		{"nvcr.io/nim/meta/llama:latest", "", "nvcr.io/nim/meta/llama:latest"}, // passthrough
+		{"meta/llama-3.1-8b", "2.0", "nvcr.io/nim/meta/llama-3.1-8b:2.0"},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, nimImageRef(c.name, c.tag), "nimImageRef(%q, %q)", c.name, c.tag)
+	}
 }
 
 func TestNGCSearchWithAPIKey(t *testing.T) {

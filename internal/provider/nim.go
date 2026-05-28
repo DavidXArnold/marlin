@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -21,6 +23,21 @@ import (
 )
 
 const nimContainerName = "marlin-nim"
+
+// ngcRegistryAuth encodes NGC credentials into the base64 JSON string that the
+// Docker SDK expects for nvcr.io authentication.
+// Docker requires username="$oauthtoken" (literal) and password=NGC API key.
+func ngcRegistryAuth(apiKey string) string {
+	if apiKey == "" {
+		return ""
+	}
+	type creds struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	b, _ := json.Marshal(creds{Username: "$oauthtoken", Password: apiKey})
+	return base64.URLEncoding.EncodeToString(b)
+}
 
 // dockerClient is the subset of the Docker SDK used by NIMProvider.
 // Defined as an interface so tests can inject a stub.
@@ -107,7 +124,7 @@ func (n *NIMProvider) Switch(ctx context.Context, modelSlug string) error {
 	// Pull image, streaming progress output.
 	// NOTE: downtime begins here — zero-downtime proxy is a future enhancement.
 	reader, err := n.docker.ImagePull(ctx, m.Model.Image, dimage.PullOptions{
-		RegistryAuth: n.ngcKey,
+		RegistryAuth: ngcRegistryAuth(n.ngcKey),
 	})
 	if err != nil {
 		return fmt.Errorf("pulling image %s: %w", m.Model.Image, err)
