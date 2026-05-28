@@ -21,13 +21,16 @@
 ### From release (recommended)
 
 ```bash
+# Detect arch automatically
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+
 # .deb (Ubuntu/Debian)
-curl -LO https://github.com/DavidXArnold/marlin/releases/latest/download/marlin_linux_arm64.deb
-sudo dpkg -i marlin_linux_arm64.deb
+curl -LO "https://github.com/DavidXArnold/marlin/releases/latest/download/marlin_linux_${ARCH}.deb"
+sudo dpkg -i "marlin_linux_${ARCH}.deb"
 
 # .rpm (RHEL/Fedora)
-curl -LO https://github.com/DavidXArnold/marlin/releases/latest/download/marlin_linux_arm64.rpm
-sudo rpm -i marlin_linux_arm64.rpm
+curl -LO "https://github.com/DavidXArnold/marlin/releases/latest/download/marlin_linux_${ARCH}.rpm"
+sudo rpm -i "marlin_linux_${ARCH}.rpm"
 ```
 
 ### From source

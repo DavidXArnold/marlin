@@ -32,6 +32,7 @@ archives:
 nfpms:
   - id: marlin
     package_name: marlin
+    file_name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     vendor: DavidXArnold
     homepage: https://github.com/DavidXArnold/marlin
     maintainer: David Arnold <darnold@soundofcorduroy.com>
