@@ -89,8 +89,8 @@ func emptyReader() io.ReadCloser { return io.NopCloser(strings.NewReader("")) }
 
 func TestNIMSwitchSuccess(t *testing.T) {
 	d := &stubDocker{
-		pullReader:  emptyReader(),
-		createResp:  container.CreateResponse{ID: "abc123"},
+		pullReader: emptyReader(),
+		createResp: container.CreateResponse{ID: "abc123"},
 	}
 	p, _ := testNIMProvider(t, d)
 	writeNIMModel(t, p.cfg.Paths.ModelsDir, "llama-nim", "nvcr.io/nim/meta/llama-3.1-8b:latest")

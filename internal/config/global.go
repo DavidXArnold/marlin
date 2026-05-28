@@ -15,10 +15,10 @@ type Config struct {
 }
 
 type BehaviorConfig struct {
-	SwitchPrompt           bool `toml:"switch_prompt"`
-	AddAutoDetect          bool `toml:"add_auto_detect"`
-	LogTailLines           int  `toml:"log_tail_lines"`
-	AllowTypeSwitch        bool `toml:"allow_type_switch"`
+	SwitchPrompt            bool `toml:"switch_prompt"`
+	AddAutoDetect           bool `toml:"add_auto_detect"`
+	LogTailLines            int  `toml:"log_tail_lines"`
+	AllowTypeSwitch         bool `toml:"allow_type_switch"`
 	WarnUnmanagedContainers bool `toml:"warn_unmanaged_containers"`
 }
 

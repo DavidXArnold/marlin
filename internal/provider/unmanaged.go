@@ -13,7 +13,7 @@ import (
 var inferenceImageFragments = []string{
 	"vllm",
 	"nim",
-	"tgi",                      // text-generation-inference short tag
+	"tgi",                       // text-generation-inference short tag
 	"text-generation-inference", // huggingface TGI full image name
 	"ollama",
 	"llama.cpp",
@@ -21,7 +21,7 @@ var inferenceImageFragments = []string{
 	"localai",
 	"lmstudio",
 	"deepspeed",
-	"triton",       // NVIDIA Triton Inference Server
+	"triton", // NVIDIA Triton Inference Server
 }
 
 // UnmanagedContainer describes a running container that looks like an

@@ -11,9 +11,9 @@ import (
 
 // State tracks which model and provider are currently active on this machine.
 type State struct {
-	ActiveModel    string               `toml:"active_model"`    // slug (TOML filename without .toml)
-	ActiveProvider config.ProviderType  `toml:"active_provider"` // "vllm" or "nim"
-	ContainerID    string               `toml:"container_id"`    // populated for nim, empty for vllm
+	ActiveModel    string              `toml:"active_model"`    // slug (TOML filename without .toml)
+	ActiveProvider config.ProviderType `toml:"active_provider"` // "vllm" or "nim"
+	ContainerID    string              `toml:"container_id"`    // populated for nim, empty for vllm
 }
 
 func Empty() *State {
