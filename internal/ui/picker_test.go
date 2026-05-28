@@ -43,7 +43,7 @@ func TestAutoSlugFromModelID(t *testing.T) {
 		{"simple", "simple"},
 	}
 	for _, c := range cases {
-		assert.Equal(t, c.want, autoSlug(c.input), c.input)
+		assert.Equal(t, c.want, AutoSlug(c.input), c.input)
 	}
 }
 

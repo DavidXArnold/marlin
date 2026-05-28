@@ -156,8 +156,8 @@ func (w wizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ti, cmd = ti.Update(msg)
 				w.inputs[stepModelID] = ti
 				slug := w.inputs[stepSlug]
-				if slug.Value() == "" || slug.Value() == autoSlug(ti.Value()[:max(0, len(ti.Value())-1)]) {
-					slug.SetValue(autoSlug(ti.Value()))
+				if slug.Value() == "" || slug.Value() == AutoSlug(ti.Value()[:max(0, len(ti.Value())-1)]) {
+					slug.SetValue(AutoSlug(ti.Value()))
 					w.inputs[stepSlug] = slug
 				}
 				return w, cmd
@@ -203,7 +203,7 @@ func (w wizardModel) advance() (tea.Model, tea.Cmd) {
 		// auto-suggest slug from image last segment
 		slug := w.inputs[stepSlug]
 		if slug.Value() == "" {
-			slug.SetValue(autoSlug(w.inputs[stepImage].Value()))
+			slug.SetValue(AutoSlug(w.inputs[stepImage].Value()))
 			w.inputs[stepSlug] = slug
 		}
 		w.step = stepSlug
@@ -350,8 +350,8 @@ func RunAddWizard() (*WizardResult, error) {
 	return wm.result, nil
 }
 
-// autoSlug derives a filesystem-safe slug from a model ID or image path.
-func autoSlug(input string) string {
+// AutoSlug derives a filesystem-safe slug from a model ID or image path.
+func AutoSlug(input string) string {
 	// Use last path segment, strip tag
 	base := input
 	for i := len(base) - 1; i >= 0; i-- {

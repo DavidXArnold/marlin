@@ -14,8 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"time"
+
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
+	"github.com/DavidXArnold/marlin/internal/registry"
 	"github.com/DavidXArnold/marlin/internal/ui"
 )
 
@@ -79,6 +82,7 @@ func buildRootCmd() *cobra.Command {
 
 	search := &cobra.Command{Use: "search <query>", Args: cobra.ExactArgs(1), RunE: runSearch}
 	search.Flags().StringSlice("registry", []string{"huggingface", "ngc"}, "")
+	search.Flags().Bool("plain", false, "")
 
 	validate := &cobra.Command{Use: "validate <model>", Args: cobra.ExactArgs(1), RunE: runValidate}
 
@@ -415,7 +419,87 @@ func TestRunSearchDirect(t *testing.T) {
 	defer cleanup()
 	cmd := cmdWithContext(io.Discard)
 	cmd.Flags().StringSlice("registry", []string{"huggingface"}, "")
+	cmd.Flags().Bool("plain", false, "")
 	require.NoError(t, runSearch(cmd, []string{"llama"}))
+}
+
+func TestAddFromSearchResultNew(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+
+	m := registry.ModelInfo{
+		ID:            "Qwen/Qwen2.5-7B-Instruct-AWQ",
+		Registry:      "huggingface",
+		Quantization:  "awq",
+		ParamsBillion: 7,
+	}
+	err = addFromSearchResult(cfg, m, io.Discard)
+	require.NoError(t, err)
+}
+
+func TestAddFromSearchResultAlreadyExists(t *testing.T) {
+	// AutoSlug("Qwen/Qwen2.5-7B-Instruct-AWQ") → "qwen2.5-7b-instruct-awq"
+	cleanup := tempEnv(t, "qwen2.5-7b-instruct-awq")
+	defer cleanup()
+
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+
+	m := registry.ModelInfo{ID: "Qwen/Qwen2.5-7B-Instruct-AWQ", Registry: "huggingface"}
+	err = addFromSearchResult(cfg, m, io.Discard)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
+}
+
+// --- search helpers ---
+
+func TestFormatUpdated(t *testing.T) {
+	assert.Equal(t, "unknown", formatUpdated(time.Time{}))
+	assert.Equal(t, "today", formatUpdated(time.Now()))
+	assert.Contains(t, formatUpdated(time.Now().AddDate(0, 0, -3)), "d ago")
+	assert.Contains(t, formatUpdated(time.Now().AddDate(0, 0, -14)), "w ago")
+	assert.Contains(t, formatUpdated(time.Now().AddDate(0, -2, 0)), "mo ago")
+	assert.Contains(t, formatUpdated(time.Now().AddDate(-2, 0, 0)), "y ago")
+}
+
+func TestFitLabel(t *testing.T) {
+	assert.Equal(t, "?", fitLabel(0, 1000))
+	assert.Equal(t, "?", fitLabel(1000, 0))
+	assert.Equal(t, "✓", fitLabel(800, 1000))
+	assert.Equal(t, "~", fitLabel(900, 1000))
+	assert.Equal(t, "✗", fitLabel(1100, 1000))
+}
+
+func TestFormatVRAM(t *testing.T) {
+	assert.Equal(t, "unknown", formatVRAM(0))
+	assert.NotEmpty(t, formatVRAM(8192))
+}
+
+func TestModelConfigFromInfoNGC(t *testing.T) {
+	m := registry.ModelInfo{
+		ID:       "nvcr.io/nim/meta/llama:latest",
+		Registry: "ngc",
+	}
+	mc := modelConfigFromInfo(m, "local")
+	assert.Equal(t, config.ProviderNIM, mc.Model.Type)
+	assert.Equal(t, "nvcr.io/nim/meta/llama:latest", mc.Model.Image)
+	assert.Empty(t, mc.Serve.ServedModelName)
+}
+
+func TestModelConfigFromInfoHuggingFace(t *testing.T) {
+	m := registry.ModelInfo{
+		ID:           "Qwen/Qwen2.5-7B",
+		Registry:     "huggingface",
+		Quantization: "awq",
+	}
+	mc := modelConfigFromInfo(m, "local")
+	assert.Equal(t, config.ProviderVLLM, mc.Model.Type)
+	assert.Equal(t, "Qwen/Qwen2.5-7B", mc.Model.ID)
+	assert.Equal(t, []string{"local"}, mc.Serve.ServedModelName)
+	assert.Equal(t, "awq", mc.Serve.Quantization)
 }
 
 func TestRunValidateDirect(t *testing.T) {
