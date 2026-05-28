@@ -15,15 +15,17 @@ import (
 
 // stubAdhoc is a controllable in-process stub for adhocRunner.
 type stubAdhoc struct {
-	startID       string
-	startErr      error
-	foregroundErr error
-	listResult    []provider.AdhocInfo
-	listErr       error
-	stopErr       error
-	stopAllErr    error
-	stopCalled    string
-	stopAllCalled bool
+	startID         string
+	startErr        error
+	foregroundErr   error
+	listResult      []provider.AdhocInfo
+	listErr         error
+	stopErr         error
+	stopAllErr      error
+	stopCalled      string
+	stopAllCalled   bool
+	unmanagedResult []provider.UnmanagedContainer
+	unmanagedErr    error
 }
 
 func (s *stubAdhoc) Start(_ context.Context, _ string) (string, error) {
@@ -42,6 +44,9 @@ func (s *stubAdhoc) Stop(_ context.Context, slug string) error {
 func (s *stubAdhoc) StopAll(_ context.Context) error {
 	s.stopAllCalled = true
 	return s.stopAllErr
+}
+func (s *stubAdhoc) DetectUnmanaged(_ context.Context) ([]provider.UnmanagedContainer, error) {
+	return s.unmanagedResult, s.unmanagedErr
 }
 
 // injectAdhocRunner replaces buildAdhocRunner with one that always returns stub.
@@ -218,4 +223,34 @@ func TestStopRunnerBuildError(t *testing.T) {
 
 	_, err := executeCmd("stop")
 	assert.Error(t, err)
+}
+
+// --- marlin status unmanaged warning ---
+
+func TestStatusUnmanagedWarning(t *testing.T) {
+	stub := &stubAdhoc{
+		unmanagedResult: []provider.UnmanagedContainer{
+			{ID: "aabbccddeeff1234", Image: "vllm/vllm-openai:latest", Names: []string{"/my-vllm"}},
+		},
+	}
+	injectAdhocRunner(t, stub)
+	_, cleanup := switchEnv(t)
+	defer cleanup()
+
+	out, err := executeCmd("status")
+	require.NoError(t, err)
+	assert.Contains(t, out, "unmanaged inference containers detected")
+	assert.Contains(t, out, "vllm/vllm-openai:latest")
+	assert.Contains(t, out, "aabbccddeeff") // truncated ID
+}
+
+func TestStatusNoUnmanagedWarning(t *testing.T) {
+	stub := &stubAdhoc{} // empty unmanagedResult
+	injectAdhocRunner(t, stub)
+	_, cleanup := switchEnv(t)
+	defer cleanup()
+
+	out, err := executeCmd("status")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "unmanaged")
 }

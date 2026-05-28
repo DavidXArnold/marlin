@@ -15,10 +15,11 @@ type Config struct {
 }
 
 type BehaviorConfig struct {
-	SwitchPrompt    bool `toml:"switch_prompt"`
-	AddAutoDetect   bool `toml:"add_auto_detect"`
-	LogTailLines    int  `toml:"log_tail_lines"`
-	AllowTypeSwitch bool `toml:"allow_type_switch"`
+	SwitchPrompt           bool `toml:"switch_prompt"`
+	AddAutoDetect          bool `toml:"add_auto_detect"`
+	LogTailLines           int  `toml:"log_tail_lines"`
+	AllowTypeSwitch        bool `toml:"allow_type_switch"`
+	WarnUnmanagedContainers bool `toml:"warn_unmanaged_containers"`
 }
 
 type PathsConfig struct {
@@ -56,10 +57,11 @@ type RegistryConfig struct {
 func Defaults() *Config {
 	return &Config{
 		Behavior: BehaviorConfig{
-			SwitchPrompt:    true,
-			AddAutoDetect:   false,
-			LogTailLines:    100,
-			AllowTypeSwitch: true,
+			SwitchPrompt:            true,
+			AddAutoDetect:           false,
+			LogTailLines:            100,
+			AllowTypeSwitch:         true,
+			WarnUnmanagedContainers: true,
 		},
 		Paths: PathsConfig{
 			ModelsDir:     "/etc/marlin/models",

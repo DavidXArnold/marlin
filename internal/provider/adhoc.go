@@ -185,6 +185,11 @@ func (a *AdhocRunner) Stop(ctx context.Context, slug string) error {
 	return a.stopAll(ctx, containers)
 }
 
+// DetectUnmanaged returns running inference containers not managed by marlin.
+func (a *AdhocRunner) DetectUnmanaged(ctx context.Context) ([]UnmanagedContainer, error) {
+	return DetectUnmanaged(ctx, a.docker)
+}
+
 // StopAll stops and removes every marlin-managed ad-hoc container.
 func (a *AdhocRunner) StopAll(ctx context.Context) error {
 	containers, err := a.docker.ContainerList(ctx, container.ListOptions{

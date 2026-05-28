@@ -14,7 +14,7 @@ import (
 	"github.com/DavidXArnold/marlin/internal/provider"
 )
 
-// adhocRunner is the subset of provider.AdhocRunner used by run/ps/stop commands.
+// adhocRunner is the subset of provider.AdhocRunner used by run/ps/stop/status commands.
 // Declared as an interface so tests can inject a stub.
 type adhocRunner interface {
 	Start(ctx context.Context, slug string) (string, error)
@@ -22,6 +22,7 @@ type adhocRunner interface {
 	List(ctx context.Context) ([]provider.AdhocInfo, error)
 	Stop(ctx context.Context, slug string) error
 	StopAll(ctx context.Context) error
+	DetectUnmanaged(ctx context.Context) ([]provider.UnmanagedContainer, error)
 }
 
 // injectable for tests

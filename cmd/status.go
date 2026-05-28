@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -76,9 +77,29 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	for path, d := range si.Disks {
-		fmt.Fprintf(w, "disk %-8s: %.1f GiB free / %.1f GiB total\n",
+		fmt.Fprintf(w, "disk %-11s: %.1f GiB free / %.1f GiB total\n",
 			diskLabel(path, cfg.Paths.ModelsDir, cfg.Paths.NIMCache),
 			d.FreeGB, d.TotalGB)
+	}
+
+	// Unmanaged container warning — soft failure, configurable.
+	if cfg.Behavior.WarnUnmanagedContainers {
+		runner, err := buildAdhocRunner(cfg)
+		if err == nil {
+			if unmanaged, err := runner.DetectUnmanaged(cmd.Context()); err == nil && len(unmanaged) > 0 {
+				fmt.Fprintln(w)
+				fmt.Fprintln(w, "warning: unmanaged inference containers detected (not started by marlin):")
+				for _, c := range unmanaged {
+					name := strings.Join(c.Names, ", ")
+					id := c.ID
+					if len(id) > 12 {
+						id = id[:12]
+					}
+					fmt.Fprintf(w, "  %s  image: %s  name: %s\n", id, c.Image, name)
+				}
+				fmt.Fprintln(w, "  use 'marlin run' to manage containers, or set warn_unmanaged_containers=false to silence")
+			}
+		}
 	}
 
 	return nil
