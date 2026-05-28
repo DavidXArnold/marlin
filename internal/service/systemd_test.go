@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,6 +32,15 @@ func TestNewSystemdManager(t *testing.T) {
 	m := NewSystemdManager("vllm.service")
 	assert.Equal(t, "vllm.service", m.unit)
 	assert.NotNil(t, m.execRunner)
+}
+
+func TestDefaultExecRunner(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell command path differs on Windows")
+	}
+	out, err := defaultExecRunner(context.Background(), "printf", "ok")
+	require.NoError(t, err)
+	assert.Equal(t, "ok", string(out))
 }
 
 func TestNewSystemdManagerWithRunner(t *testing.T) {

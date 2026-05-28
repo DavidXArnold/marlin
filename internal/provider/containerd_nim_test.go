@@ -3,8 +3,10 @@ package provider
 import (
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -223,6 +225,29 @@ func TestContainerdNIMProviderStatusEmptyArray(t *testing.T) {
 	status, err := p.Status(context.Background())
 	require.NoError(t, err)
 	assert.False(t, status.Running)
+}
+
+func TestContainerdNIMProviderLogs(t *testing.T) {
+	stub := &stubRunner{}
+	p := newContainerdProviderWithStub(t, stub)
+
+	var gotName string
+	var gotArgs []string
+	restore := SetRunCommandForTest(func(_ context.Context, w io.Writer, name string, args ...string) error {
+		gotName = name
+		gotArgs = args
+		_, _ = fmt.Fprint(w, "log line")
+		return nil
+	})
+	defer restore()
+
+	var buf strings.Builder
+	require.NoError(t, p.Logs(context.Background(), &buf, true, 25))
+	assert.Equal(t, "nerdctl", gotName)
+	assert.Contains(t, gotArgs, "logs")
+	assert.Contains(t, gotArgs, "-f")
+	assert.Contains(t, gotArgs, "25")
+	assert.Contains(t, buf.String(), "log line")
 }
 
 // — defaultPodmanSocket —

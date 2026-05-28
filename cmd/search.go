@@ -54,6 +54,14 @@ var openBrowserCmd = func(url string) error {
 	return cmd.Start()
 }
 
+var newHuggingFaceRegistry = func(token string) registry.Registry {
+	return registry.NewHuggingFace(token)
+}
+
+var newNGCRegistry = func(apiKey string) registry.Registry {
+	return registry.NewNGC(apiKey)
+}
+
 func runSearch(cmd *cobra.Command, args []string) error {
 	cfg, err := globalConfig()
 	if err != nil {
@@ -254,12 +262,12 @@ func buildRegistries(names []string, sec map[string]string) []registry.Registry 
 		seen[name] = true
 		switch name {
 		case "huggingface", "hf":
-			out = append(out, registry.NewHuggingFace(sec["HF_TOKEN"]))
+			out = append(out, newHuggingFaceRegistry(sec["HF_TOKEN"]))
 		case "ngc":
 			if sec["NGC_API_KEY"] == "" {
 				continue // no key configured — skip silently
 			}
-			out = append(out, registry.NewNGC(sec["NGC_API_KEY"]))
+			out = append(out, newNGCRegistry(sec["NGC_API_KEY"]))
 		}
 	}
 	return out

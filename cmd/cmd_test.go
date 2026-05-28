@@ -5,23 +5,25 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"time"
-
-	"strings"
-
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/registry"
 	"github.com/DavidXArnold/marlin/internal/secrets"
+	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/ui"
 )
 
@@ -139,6 +141,22 @@ func cmdWithContext(buf io.Writer) *cobra.Command {
 		cmd.SetErr(buf)
 	}
 	return cmd
+}
+
+type fakeRegistry struct {
+	name    string
+	results []registry.ModelInfo
+	err     error
+}
+
+func (f fakeRegistry) Name() string { return f.name }
+
+func (f fakeRegistry) Search(context.Context, string) ([]registry.ModelInfo, error) {
+	return f.results, f.err
+}
+
+func (f fakeRegistry) Fetch(context.Context, string) (*registry.ModelInfo, error) {
+	return nil, fmt.Errorf("not implemented")
 }
 
 // --- SetVersionInfo ---
@@ -423,6 +441,23 @@ func TestRunListDirect(t *testing.T) {
 	require.NoError(t, runList(cmdWithContext(io.Discard), nil))
 }
 
+func TestRunListMarksActiveModel(t *testing.T) {
+	cleanup := tempEnv(t, "qwen25-72b")
+	defer cleanup()
+
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+	require.NoError(t, state.Save(cfg.Paths.StateFile, &state.State{
+		ActiveModel:    "qwen25-72b",
+		ActiveProvider: config.ProviderVLLM,
+	}))
+
+	out, err := executeCmd("list")
+	require.NoError(t, err)
+	assert.Contains(t, out, "qwen25-72b")
+	assert.Contains(t, out, "active")
+}
+
 func TestRunSwitchDirectNotFound(t *testing.T) {
 	cleanup := tempEnv(t)
 	defer cleanup()
@@ -437,6 +472,106 @@ func TestRunSearchDirect(t *testing.T) {
 	cmd.Flags().StringSlice("registry", []string{"huggingface"}, "")
 	cmd.Flags().Bool("plain", false, "")
 	require.NoError(t, runSearch(cmd, []string{"llama"}))
+}
+
+func TestRunSearchPlainTableWithResults(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	oldHF := newHuggingFaceRegistry
+	newHuggingFaceRegistry = func(string) registry.Registry {
+		return fakeRegistry{
+			name: "huggingface",
+			results: []registry.ModelInfo{
+				{
+					ID:            "meta-llama/Llama-3.1-8B-Instruct",
+					Registry:      "huggingface",
+					Description:   "chat model",
+					ParamsBillion: 8,
+					Quantization:  "awq",
+				},
+			},
+		}
+	}
+	defer func() { newHuggingFaceRegistry = oldHF }()
+
+	cmd := cmdWithContext(new(bytes.Buffer))
+	cmd.Flags().StringSlice("registry", []string{"huggingface"}, "")
+	cmd.Flags().Bool("plain", true, "")
+
+	require.NoError(t, runSearch(cmd, []string{"llama"}))
+	out := cmd.OutOrStdout().(*bytes.Buffer).String()
+	assert.Contains(t, out, "[huggingface]")
+	assert.Contains(t, out, "meta-llama/Llama-3.1-8B-Instruct")
+	assert.Contains(t, out, "VRAM EST")
+}
+
+func TestRunSearchWarnsOnRegistryError(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	oldHF := newHuggingFaceRegistry
+	newHuggingFaceRegistry = func(string) registry.Registry {
+		return fakeRegistry{name: "huggingface", err: fmt.Errorf("offline")}
+	}
+	defer func() { newHuggingFaceRegistry = oldHF }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().StringSlice("registry", []string{"huggingface"}, "")
+	cmd.Flags().Bool("plain", true, "")
+
+	require.NoError(t, runSearch(cmd, []string{"llama"}))
+	assert.Contains(t, buf.String(), "warning: huggingface search failed: offline")
+}
+
+func TestRunSearchPlainNoResults(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	oldHF := newHuggingFaceRegistry
+	newHuggingFaceRegistry = func(string) registry.Registry {
+		return fakeRegistry{name: "huggingface"}
+	}
+	defer func() { newHuggingFaceRegistry = oldHF }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().StringSlice("registry", []string{"huggingface"}, "")
+	cmd.Flags().Bool("plain", true, "")
+
+	require.NoError(t, runSearch(cmd, []string{"llama"}))
+	assert.Contains(t, buf.String(), "[huggingface] no results")
+}
+
+func TestRunSearchNGCWithConfiguredKey(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+	require.NoError(t, secrets.Save(cfg.Paths.SecretsEnv, map[string]string{"NGC_API_KEY": "nvapi_test"}))
+
+	oldNGC := newNGCRegistry
+	newNGCRegistry = func(apiKey string) registry.Registry {
+		assert.Equal(t, "nvapi_test", apiKey)
+		return fakeRegistry{
+			name: "ngc",
+			results: []registry.ModelInfo{
+				{ID: "nvcr.io/nim/meta/llama:latest", Registry: "ngc", Description: "nim"},
+			},
+		}
+	}
+	defer func() { newNGCRegistry = oldNGC }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().StringSlice("registry", []string{"ngc"}, "")
+	cmd.Flags().Bool("plain", true, "")
+
+	require.NoError(t, runSearch(cmd, []string{"llama"}))
+	assert.Contains(t, buf.String(), "[ngc]")
+	assert.Contains(t, buf.String(), "nvcr.io/nim/meta/llama:latest")
 }
 
 func TestAddFromSearchResultNew(t *testing.T) {
@@ -468,6 +603,23 @@ func TestAddFromSearchResultAlreadyExists(t *testing.T) {
 	err = addFromSearchResult(cfg, m, io.Discard)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
+}
+
+func TestAddFromSearchResultNGC(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+
+	m := registry.ModelInfo{ID: "nvcr.io/nim/meta/llama:latest", Registry: "ngc"}
+	require.NoError(t, addFromSearchResult(cfg, m, io.Discard))
+
+	slug := ui.AutoSlug(m.ID)
+	saved, err := config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
+	require.NoError(t, err)
+	assert.Equal(t, config.ProviderNIM, saved.Model.Type)
+	assert.Equal(t, "nvcr.io/nim/meta/llama:latest", saved.Model.Image)
 }
 
 // --- configure ---
@@ -519,6 +671,73 @@ func TestRunConfigureShowsURLs(t *testing.T) {
 	require.NoError(t, runConfigure(cmd, nil))
 	assert.Contains(t, buf.String(), "huggingface.co/settings/tokens")
 	assert.Contains(t, buf.String(), "ngc.nvidia.com/setup/personal-keys")
+}
+
+func TestRunConfigureKeepsExistingSecrets(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+	require.NoError(t, secrets.Save(cfg.Paths.SecretsEnv, map[string]string{
+		"HF_TOKEN":    "hf_existing",
+		"NGC_API_KEY": "nvapi_existing",
+	}))
+
+	old := configureIn
+	configureIn = strings.NewReader("\n\n")
+	defer func() { configureIn = old }()
+
+	var buf bytes.Buffer
+	require.NoError(t, runConfigure(cmdWithContext(&buf), nil))
+	assert.Contains(t, buf.String(), "Status:   [set]")
+	assert.Contains(t, buf.String(), "No changes made")
+
+	got, err := secrets.Load(cfg.Paths.SecretsEnv)
+	require.NoError(t, err)
+	assert.Equal(t, "hf_existing", got["HF_TOKEN"])
+	assert.Equal(t, "nvapi_existing", got["NGC_API_KEY"])
+}
+
+func TestRunConfigureNGCDockerLoginSuccess(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	oldIn := configureIn
+	configureIn = strings.NewReader("\nnvapi_test\ny\n")
+	defer func() { configureIn = oldIn }()
+
+	called := false
+	oldLogin := dockerLoginFunc
+	dockerLoginFunc = func(apiKey string) error {
+		called = true
+		assert.Equal(t, "nvapi_test", apiKey)
+		return nil
+	}
+	defer func() { dockerLoginFunc = oldLogin }()
+
+	var buf bytes.Buffer
+	require.NoError(t, runConfigure(cmdWithContext(&buf), nil))
+	assert.True(t, called)
+	assert.Contains(t, buf.String(), "Docker authenticated")
+}
+
+func TestRunConfigureNGCDockerLoginFailure(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	oldIn := configureIn
+	configureIn = strings.NewReader("\nnvapi_test\ny\n")
+	defer func() { configureIn = oldIn }()
+
+	oldLogin := dockerLoginFunc
+	dockerLoginFunc = func(string) error { return fmt.Errorf("denied") }
+	defer func() { dockerLoginFunc = oldLogin }()
+
+	var buf bytes.Buffer
+	require.NoError(t, runConfigure(cmdWithContext(&buf), nil))
+	assert.Contains(t, buf.String(), "docker login failed")
+	assert.Contains(t, buf.String(), "Run it manually")
 }
 
 // --- buildRegistries ---
@@ -593,6 +812,69 @@ func TestRunStatusDirect(t *testing.T) {
 	cleanup := tempEnv(t)
 	defer cleanup()
 	require.NoError(t, runStatus(cmdWithContext(io.Discard), nil))
+}
+
+func TestRunStatusActiveModelReady(t *testing.T) {
+	dir := t.TempDir()
+	modelsDir := filepath.Join(dir, "models")
+	require.NoError(t, os.MkdirAll(modelsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(modelsDir, "qwen25-72b.toml"), []byte(`[model]
+id = "qwen-model-id"
+type = "vllm"
+status = "untested"
+`), 0o644))
+
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/health", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+	}))
+	srv.Listener = listener
+	srv.Start()
+	defer srv.Close()
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	cfgPath := filepath.Join(dir, "config.toml")
+	statePath := filepath.Join(dir, "state.toml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(fmt.Sprintf(`[behavior]
+warn_unmanaged_containers = false
+
+[paths]
+models_dir = %q
+state_file = %q
+secrets_env = %q
+active_symlink = %q
+
+[server]
+host = "127.0.0.1"
+port = %d
+alias = "gn100"
+`, modelsDir, statePath, filepath.Join(dir, "secrets.env"), filepath.Join(dir, "model.env"), port)), 0o644))
+
+	old := cfgFile
+	cfgFile = cfgPath
+	defer func() { cfgFile = old }()
+
+	require.NoError(t, state.Save(statePath, &state.State{
+		ActiveModel:    "qwen25-72b",
+		ActiveProvider: config.ProviderVLLM,
+		ContainerID:    "abcdef1234567890",
+	}))
+
+	var buf bytes.Buffer
+	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
+	out := buf.String()
+	assert.Contains(t, out, "active model : qwen25-72b")
+	assert.Contains(t, out, "provider     : vllm")
+	assert.Contains(t, out, "container    : abcdef123456")
+	assert.Contains(t, out, "api health   : ready")
+}
+
+func TestDiskLabel(t *testing.T) {
+	assert.Equal(t, "(models)", diskLabel("/models", "/models", "/nim"))
+	assert.Equal(t, "(nim cache)", diskLabel("/nim", "/models", "/nim"))
+	assert.Empty(t, diskLabel("/other", "/models", "/nim"))
 }
 
 func TestRunLogsDirect(t *testing.T) {

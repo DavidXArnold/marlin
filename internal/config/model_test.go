@@ -81,6 +81,13 @@ func TestSaveAndReloadModel(t *testing.T) {
 	assert.InDelta(t, original.Serve.GPUMemoryUtilization, loaded.Serve.GPUMemoryUtilization, 0.001)
 }
 
+func TestSaveModelCreateError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "model.toml")
+	err := SaveModel(path, &ModelConfig{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "creating model config")
+}
+
 func TestListModels(t *testing.T) {
 	dir := t.TempDir()
 

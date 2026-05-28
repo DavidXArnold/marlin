@@ -39,6 +39,25 @@ func TestNGCSearch(t *testing.T) {
 	assert.Equal(t, "ngc", results[0].Registry)
 }
 
+func TestNGCResourceToModelInfoWithUpdatedDate(t *testing.T) {
+	info := ngcResource{
+		Name:        "meta/llama",
+		Description: "NIM model",
+		UpdatedDate: "2024-01-02T03:04:05Z",
+		LatestTag:   "1.2.3",
+	}.toModelInfo()
+
+	assert.Equal(t, "nvcr.io/nim/meta/llama:1.2.3", info.ID)
+	assert.Equal(t, "ngc", info.Registry)
+	assert.Equal(t, "NIM model", info.Description)
+	assert.False(t, info.LastUpdated.IsZero())
+}
+
+func TestNGCResourceToModelInfoInvalidUpdatedDate(t *testing.T) {
+	info := ngcResource{Name: "meta/llama", UpdatedDate: "not a date"}.toModelInfo()
+	assert.True(t, info.LastUpdated.IsZero())
+}
+
 func TestNimImageRef(t *testing.T) {
 	cases := []struct {
 		name, tag, want string
