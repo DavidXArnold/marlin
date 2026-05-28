@@ -219,6 +219,9 @@ func buildRegistries(names []string, sec map[string]string) []registry.Registry 
 		case "huggingface", "hf":
 			out = append(out, registry.NewHuggingFace(sec["HF_TOKEN"]))
 		case "ngc":
+			if sec["NGC_API_KEY"] == "" {
+				continue // no key configured — skip silently
+			}
 			out = append(out, registry.NewNGC(sec["NGC_API_KEY"]))
 		}
 	}

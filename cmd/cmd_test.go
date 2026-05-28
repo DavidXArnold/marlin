@@ -465,6 +465,20 @@ func TestAddFromSearchResultAlreadyExists(t *testing.T) {
 	assert.Contains(t, err.Error(), "already exists")
 }
 
+// --- buildRegistries ---
+
+func TestBuildRegistriesSkipsNGCWithNoKey(t *testing.T) {
+	regs := buildRegistries([]string{"huggingface", "ngc"}, map[string]string{})
+	require.Len(t, regs, 1)
+	assert.Equal(t, "huggingface", regs[0].Name())
+}
+
+func TestBuildRegistriesIncludesNGCWhenKeySet(t *testing.T) {
+	regs := buildRegistries([]string{"ngc"}, map[string]string{"NGC_API_KEY": "nvapi-test"})
+	require.Len(t, regs, 1)
+	assert.Equal(t, "ngc", regs[0].Name())
+}
+
 // --- search helpers ---
 
 func TestFormatUpdated(t *testing.T) {

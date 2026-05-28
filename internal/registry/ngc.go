@@ -44,6 +44,9 @@ func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, fmt.Errorf("ngc search: authentication failed (set NGC_API_KEY in secrets.env)")
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ngc search: unexpected status %d", resp.StatusCode)
 	}

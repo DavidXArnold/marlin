@@ -210,6 +210,45 @@ func TestHuggingFaceSearchWithMetadata(t *testing.T) {
 	assert.Equal(t, "awq", results[0].Quantization)
 }
 
+func TestExtractParamsFromID(t *testing.T) {
+	cases := []struct {
+		id   string
+		want float64
+	}{
+		{"meta-llama/Llama-3.1-8B-Instruct", 8.0},
+		{"meta-llama/Llama-3.3-70B-Instruct", 70.0},
+		{"meta-llama/Llama-3.2-1B", 1.0},
+		{"unsloth/Llama-3.3-70B-Instruct-GGUF", 70.0},
+		{"DavidAU/Model-18.4B-GGUF", 18.4},
+		{"some/no-size-here", 0},
+		{"meta-llama/Llama-Guard-3-8B", 8.0},
+		{"Qwen/Qwen2.5-7B-Instruct", 7.0},
+	}
+	for _, c := range cases {
+		t.Run(c.id, func(t *testing.T) {
+			assert.InDelta(t, c.want, extractParamsFromID(c.id), 0.01)
+		})
+	}
+}
+
+func TestHuggingFaceSearchParamsFromID(t *testing.T) {
+	// No safetensors, no size tags — param count must come from the model ID.
+	models := []hfModel{
+		{ID: "meta-llama/Llama-3.1-8B-Instruct", Tags: []string{"transformers", "llama3"}},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(models)
+	}))
+	defer srv.Close()
+
+	hf := newHuggingFaceWithBase("", srv.URL)
+	results, err := hf.Search(context.Background(), "llama")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.InDelta(t, 8.0, results[0].ParamsBillion, 0.01)
+}
+
 func TestHuggingFaceSearchFallbackToCreatedAt(t *testing.T) {
 	models := []hfModel{
 		{ID: "some/model", CreatedAt: "2024-01-15T10:00:00.000Z"},

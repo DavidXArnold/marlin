@@ -111,8 +111,23 @@ type hfSafeTensors struct {
 	Total int64 `json:"total"`
 }
 
-// paramRegexp matches tags like "7B", "70b", "8.0B", "0.5b".
+// paramRegexp matches tokens like "7B", "70b", "8.0B", "0.5b".
 var paramRegexp = regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)b$`)
+
+// extractParamsFromID splits a model ID on /, - and _ and returns the first
+// token that looks like a parameter count (e.g. "8B" → 8.0). Returns 0 if
+// none is found.
+func extractParamsFromID(id string) float64 {
+	isDelim := func(r rune) bool { return r == '/' || r == '-' || r == '_' }
+	for _, tok := range strings.FieldsFunc(id, isDelim) {
+		if matches := paramRegexp.FindStringSubmatch(tok); len(matches) == 2 {
+			if v, err := strconv.ParseFloat(matches[1], 64); err == nil {
+				return v
+			}
+		}
+	}
+	return 0
+}
 
 var hfTimeLayouts = []string{
 	time.RFC3339Nano,
@@ -158,6 +173,12 @@ func (m hfModel) toModelInfo() ModelInfo {
 				}
 			}
 		}
+	}
+
+	// Last resort: extract size token from the model ID (e.g. "Llama-3.1-8B-Instruct" → 8).
+	// This handles models whose tags don't include a standalone size token.
+	if info.ParamsBillion == 0 {
+		info.ParamsBillion = extractParamsFromID(m.ID)
 	}
 
 	// Quantization from tags (e.g. "awq", "gptq", "gguf").
