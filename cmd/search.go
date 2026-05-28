@@ -72,12 +72,28 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	plain, _ := cmd.Flags().GetBool("plain")
 	query := args[0]
 	w := cmd.OutOrStdout()
+	writef := func(format string, args ...any) error {
+		_, err := fmt.Fprintf(w, format, args...)
+		return err
+	}
+	writeln := func(args ...any) error {
+		_, err := fmt.Fprintln(w, args...)
+		return err
+	}
+	writeErrf := func(format string, args ...any) error {
+		_, err := fmt.Fprintf(cmd.ErrOrStderr(), format, args...)
+		return err
+	}
 
 	// Warn about registries that will be skipped due to missing credentials.
 	for _, name := range regs {
 		if name == "ngc" && sec["NGC_API_KEY"] == "" {
-			fmt.Fprintf(cmd.ErrOrStderr(), "notice: NGC not searched — API key not configured\n")
-			fmt.Fprintf(cmd.ErrOrStderr(), "        run 'marlin configure' or generate a key at https://org.ngc.nvidia.com/setup/personal-keys\n")
+			if err := writeErrf("notice: NGC not searched — API key not configured\n"); err != nil {
+				return err
+			}
+			if err := writeErrf("        run 'marlin configure' or generate a key at https://org.ngc.nvidia.com/setup/personal-keys\n"); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -94,7 +110,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	for _, r := range registries {
 		results, err := r.Search(cmd.Context(), query)
 		if err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s search failed: %v\n", r.Name(), err)
+			if err := writeErrf("warning: %s search failed: %v\n", r.Name(), err); err != nil {
+				return err
+			}
 			continue
 		}
 		perRegistry = append(perRegistry, registryResults{name: r.Name(), results: results})
@@ -104,27 +122,37 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	// Always print the table.
 	for _, pr := range perRegistry {
 		if len(pr.results) == 0 {
-			fmt.Fprintf(w, "[%s] no results\n", pr.name)
+			if err := writef("[%s] no results\n", pr.name); err != nil {
+				return err
+			}
 			continue
 		}
-		fmt.Fprintf(w, "\n[%s]\n", pr.name)
-		fmt.Fprintf(w, "%-52s %-12s %-9s %-4s  %s\n",
-			"ID", "UPDATED", "VRAM EST", "FIT", "DESCRIPTION")
-		fmt.Fprintf(w, "%-52s %-12s %-9s %-4s  %s\n",
-			"--", "-------", "--------", "---", "-----------")
+		if err := writef("\n[%s]\n", pr.name); err != nil {
+			return err
+		}
+		if err := writef("%-52s %-12s %-9s %-4s  %s\n",
+			"ID", "UPDATED", "VRAM EST", "FIT", "DESCRIPTION"); err != nil {
+			return err
+		}
+		if err := writef("%-52s %-12s %-9s %-4s  %s\n",
+			"--", "-------", "--------", "---", "-----------"); err != nil {
+			return err
+		}
 
 		for _, m := range pr.results {
 			desc := m.Description
 			if len(desc) > 40 {
 				desc = desc[:37] + "..."
 			}
-			fmt.Fprintf(w, "%-52s %-12s %-9s %-4s  %s\n",
+			if err := writef("%-52s %-12s %-9s %-4s  %s\n",
 				m.ID,
 				formatUpdated(m.LastUpdated),
 				formatVRAM(m.EstimatedVRAMMB()),
 				fitLabel(m.EstimatedVRAMMB(), freeVRAM),
 				desc,
-			)
+			); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -150,10 +178,11 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	switch action {
 	case ui.SearchActionBrowse:
 		if url == "" {
-			fmt.Fprintln(w, "no URL available for this model")
-			return nil
+			return writeln("no URL available for this model")
 		}
-		fmt.Fprintf(w, "opening %s\n", url)
+		if err := writef("opening %s\n", url); err != nil {
+			return err
+		}
 		if err := openBrowserCmd(url); err != nil {
 			return fmt.Errorf("opening browser: %w", err)
 		}
@@ -183,8 +212,8 @@ func addFromSearchResult(cfg *config.Config, m registry.ModelInfo, w io.Writer) 
 		return err
 	}
 
-	fmt.Fprintf(w, "created %s\n", path)
-	return nil
+	_, err := fmt.Fprintf(w, "created %s\n", path)
+	return err
 }
 
 func modelConfigFromInfo(m registry.ModelInfo, serverAlias string) *config.ModelConfig {

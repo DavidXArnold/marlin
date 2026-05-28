@@ -58,7 +58,9 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		if iss.Level == validate.LevelError {
 			return fmt.Errorf("validation: %s", iss.Message)
 		}
-		fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", iss.Message)
+		if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", iss.Message); err != nil {
+			return err
+		}
 	}
 
 	// Load current state to detect provider type switch.
@@ -75,8 +77,8 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	if cfg.Behavior.SwitchPrompt {
 		ok, err := ui.Confirm(fmt.Sprintf("Switch to %q?", targetSlug))
 		if err != nil || !ok {
-			fmt.Fprintln(cmd.OutOrStdout(), "cancelled")
-			return nil
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), "cancelled")
+			return err
 		}
 	}
 
@@ -88,7 +90,9 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		oldProvider, err := buildProvider(cur.ActiveProvider, cfg)
 		if err == nil {
 			if stopErr := oldProvider.Stop(cmd.Context()); stopErr != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: stopping previous provider: %v\n", stopErr)
+				if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "warning: stopping previous provider: %v\n", stopErr); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -112,9 +116,11 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		newState.ContainerID = st.ContainerID
 	}
 	if err := state.Save(cfg.Paths.StateFile, newState); err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not save state: %v\n", err)
+		if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not save state: %v\n", err); writeErr != nil {
+			return writeErr
+		}
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "switched to %s (%s)\n", targetSlug, targetModel.Model.Type)
-	return nil
+	_, err = fmt.Fprintf(cmd.OutOrStdout(), "switched to %s (%s)\n", targetSlug, targetModel.Model.Type)
+	return err
 }

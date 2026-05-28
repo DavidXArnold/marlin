@@ -173,7 +173,7 @@ func TestLogs(t *testing.T) {
 	old := runCommand
 	runCommand = func(_ context.Context, w io.Writer, name string, args ...string) error {
 		called = true
-		fmt.Fprint(w, "log line 1\nlog line 2\n")
+		_, _ = fmt.Fprint(w, "log line 1\nlog line 2\n")
 		return nil
 	}
 	defer func() { runCommand = old }()
@@ -222,7 +222,7 @@ func TestSwitchEnvFileWriteFails(t *testing.T) {
 	p, _ := testVLLMProvider(t, successRunner)
 	writeTestModel(t, p.cfg.Paths.ModelsDir, "qwen25-72b")
 	require.NoError(t, os.Chmod(p.cfg.Paths.ModelsDir, 0555))
-	defer os.Chmod(p.cfg.Paths.ModelsDir, 0755)
+	defer func() { _ = os.Chmod(p.cfg.Paths.ModelsDir, 0755) }()
 
 	err := p.Switch(context.Background(), "qwen25-72b")
 	assert.Error(t, err)
@@ -306,7 +306,7 @@ func TestAtomicSymlinkSymlinkFails(t *testing.T) {
 
 	linkDir := filepath.Join(dir, "readonly")
 	require.NoError(t, os.MkdirAll(linkDir, 0555))
-	defer os.Chmod(linkDir, 0755)
+	defer func() { _ = os.Chmod(linkDir, 0755) }()
 
 	err := atomicSymlink(target, filepath.Join(linkDir, "active.env"))
 	assert.Error(t, err)

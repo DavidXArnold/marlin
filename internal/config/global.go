@@ -112,7 +112,7 @@ func Load(path string) (*Config, error) {
 		}
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := toml.NewDecoder(f).Decode(cfg); err != nil {
 		return nil, err

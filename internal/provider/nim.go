@@ -129,8 +129,13 @@ func (n *NIMProvider) Switch(ctx context.Context, modelSlug string) error {
 	if err != nil {
 		return fmt.Errorf("pulling image %s: %w", m.Model.Image, err)
 	}
-	_, _ = io.Copy(io.Discard, reader)
-	reader.Close()
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		_ = reader.Close()
+		return fmt.Errorf("reading image pull response: %w", err)
+	}
+	if err := reader.Close(); err != nil {
+		return fmt.Errorf("closing image pull response: %w", err)
+	}
 
 	// Stop and remove any existing marlin-nim container.
 	if err := n.stopExisting(ctx); err != nil {
@@ -212,7 +217,7 @@ func (n *NIMProvider) Logs(ctx context.Context, w io.Writer, follow bool, lines 
 	if err != nil {
 		return fmt.Errorf("fetching NIM logs: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	_, err = stdcopy.StdCopy(w, w, reader)
 	return err

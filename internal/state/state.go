@@ -30,7 +30,7 @@ func Load(path string) (*State, error) {
 		}
 		return nil, fmt.Errorf("opening state file %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if _, err := toml.NewDecoder(f).Decode(s); err != nil {
 		return nil, fmt.Errorf("parsing state file %s: %w", path, err)
@@ -48,10 +48,14 @@ func Save(path string, s *State) error {
 	if err != nil {
 		return fmt.Errorf("creating state file %s: %w", path, err)
 	}
-	defer f.Close()
 
 	if err := toml.NewEncoder(f).Encode(s); err != nil {
+		_ = f.Close()
 		return fmt.Errorf("writing state file %s: %w", path, err)
+	}
+
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("closing state file %s: %w", path, err)
 	}
 
 	return nil

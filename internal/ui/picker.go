@@ -43,11 +43,11 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		return
 	}
 	if index == m.Index() {
-		fmt.Fprint(w, selStyle.Render("> "+item.slug))
-		fmt.Fprint(w, "\n"+selStyle.Render("  "+item.Description()))
+		_, _ = fmt.Fprint(w, selStyle.Render("> "+item.slug))
+		_, _ = fmt.Fprint(w, "\n"+selStyle.Render("  "+item.Description()))
 	} else {
-		fmt.Fprint(w, itemStyle.Render(item.slug))
-		fmt.Fprint(w, "\n"+dimStyle.Render(item.Description()))
+		_, _ = fmt.Fprint(w, itemStyle.Render(item.slug))
+		_, _ = fmt.Fprint(w, "\n"+dimStyle.Render(item.Description()))
 	}
 }
 

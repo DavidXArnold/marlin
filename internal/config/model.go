@@ -49,7 +49,7 @@ func LoadModel(path string) (*ModelConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening model config %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var m ModelConfig
 	if _, err := toml.NewDecoder(f).Decode(&m); err != nil {
@@ -64,9 +64,11 @@ func SaveModel(path string, m *ModelConfig) error {
 	if err != nil {
 		return fmt.Errorf("creating model config %s: %w", path, err)
 	}
-	defer f.Close()
-
-	return toml.NewEncoder(f).Encode(m)
+	if err := toml.NewEncoder(f).Encode(m); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func ListModels(dir string) ([]*ModelConfig, []string, error) {

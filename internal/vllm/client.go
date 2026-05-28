@@ -46,7 +46,7 @@ func (c *Client) Health(ctx context.Context) (*HealthStatus, error) {
 	if err != nil {
 		return &HealthStatus{Ready: false}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	return &HealthStatus{Ready: resp.StatusCode == http.StatusOK}, nil
 }
@@ -75,7 +75,7 @@ func (c *Client) Models(ctx context.Context) ([]Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listing models: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("listing models: unexpected status %d", resp.StatusCode)

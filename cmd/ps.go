@@ -35,19 +35,25 @@ func runPs(cmd *cobra.Command, _ []string) error {
 	w := cmd.OutOrStdout()
 
 	if len(items) == 0 {
-		fmt.Fprintln(w, "no marlin-managed containers running")
-		return nil
+		_, err := fmt.Fprintln(w, "no marlin-managed containers running")
+		return err
 	}
 
-	fmt.Fprintf(w, "%-20s %-8s %-10s %-6s %s\n", "MODEL", "PROVIDER", "STATUS", "PORT", "CONTAINER ID")
-	fmt.Fprintf(w, "%-20s %-8s %-10s %-6s %s\n", "-----", "--------", "------", "----", "------------")
+	if _, err := fmt.Fprintf(w, "%-20s %-8s %-10s %-6s %s\n", "MODEL", "PROVIDER", "STATUS", "PORT", "CONTAINER ID"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "%-20s %-8s %-10s %-6s %s\n", "-----", "--------", "------", "----", "------------"); err != nil {
+		return err
+	}
 	for _, c := range items {
 		id := c.ID
 		if len(id) > 12 {
 			id = id[:12]
 		}
-		fmt.Fprintf(w, "%-20s %-8s %-10s %-6s %s\n",
-			c.Slug, c.Provider, c.Status, c.Port, id)
+		if _, err := fmt.Fprintf(w, "%-20s %-8s %-10s %-6s %s\n",
+			c.Slug, c.Provider, c.Status, c.Port, id); err != nil {
+			return err
+		}
 	}
 	return nil
 }

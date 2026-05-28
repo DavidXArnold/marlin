@@ -37,12 +37,14 @@ func runValidate(cmd *cobra.Command, args []string) error {
 
 	w := cmd.OutOrStdout()
 	if len(issues) == 0 {
-		fmt.Fprintf(w, "%s: OK\n", slug)
-		return nil
+		_, err := fmt.Fprintf(w, "%s: OK\n", slug)
+		return err
 	}
 
 	for _, iss := range issues {
-		fmt.Fprintf(w, "[%s] %s\n", iss.Level, iss.Message)
+		if _, err := fmt.Fprintf(w, "[%s] %s\n", iss.Level, iss.Message); err != nil {
+			return err
+		}
 	}
 
 	return nil

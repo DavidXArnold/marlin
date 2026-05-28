@@ -41,7 +41,7 @@ func TestCheck_UpdateAvailable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "application/vnd.github+json", r.Header.Get("Accept"))
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(githubRelease{TagName: "v99.0.0"})
+		require.NoError(t, json.NewEncoder(w).Encode(githubRelease{TagName: "v99.0.0"}))
 	}))
 	defer srv.Close()
 
@@ -58,7 +58,7 @@ func TestCheck_UpdateAvailable(t *testing.T) {
 func TestCheck_AlreadyLatest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(githubRelease{TagName: "v0.0.7"})
+		require.NoError(t, json.NewEncoder(w).Encode(githubRelease{TagName: "v0.0.7"}))
 	}))
 	defer srv.Close()
 
@@ -88,7 +88,7 @@ func TestCheck_ServerError(t *testing.T) {
 func TestCheck_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer srv.Close()
 

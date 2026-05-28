@@ -22,7 +22,7 @@ func Load(path string) (map[string]string, error) {
 		}
 		return nil, fmt.Errorf("opening secrets file %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	result := make(map[string]string)
 	scanner := bufio.NewScanner(f)
@@ -68,20 +68,28 @@ func Save(path string, updates map[string]string) error {
 	if err != nil {
 		return fmt.Errorf("writing secrets file %s: %w", path, err)
 	}
-	defer f.Close()
-
 	bw := bufio.NewWriter(f)
 	written := make(map[string]bool, len(knownOrder))
 	for _, k := range knownOrder {
 		if v, ok := existing[k]; ok {
-			fmt.Fprintf(bw, "%s=%s\n", k, v)
+			if _, err := fmt.Fprintf(bw, "%s=%s\n", k, v); err != nil {
+				_ = f.Close()
+				return err
+			}
 			written[k] = true
 		}
 	}
 	for k, v := range existing {
 		if !written[k] {
-			fmt.Fprintf(bw, "%s=%s\n", k, v)
+			if _, err := fmt.Fprintf(bw, "%s=%s\n", k, v); err != nil {
+				_ = f.Close()
+				return err
+			}
 		}
 	}
-	return bw.Flush()
+	if err := bw.Flush(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }

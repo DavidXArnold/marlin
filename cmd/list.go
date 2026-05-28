@@ -31,15 +31,19 @@ func runList(cmd *cobra.Command, _ []string) error {
 	}
 
 	if len(names) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "no models found — run 'marlin add' to create one")
-		return nil
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), "no models found — run 'marlin add' to create one")
+		return err
 	}
 
 	cur, _ := state.Load(cfg.Paths.StateFile)
 
 	w := cmd.OutOrStdout()
-	fmt.Fprintf(w, "%-30s %-6s %-10s %s\n", "SLUG", "TYPE", "STATUS", "MODEL ID")
-	fmt.Fprintf(w, "%-30s %-6s %-10s %s\n", "----", "----", "------", "--------")
+	if _, err := fmt.Fprintf(w, "%-30s %-6s %-10s %s\n", "SLUG", "TYPE", "STATUS", "MODEL ID"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "%-30s %-6s %-10s %s\n", "----", "----", "------", "--------"); err != nil {
+		return err
+	}
 
 	for i, slug := range names {
 		m := models[i]
@@ -47,8 +51,10 @@ func runList(cmd *cobra.Command, _ []string) error {
 		if slug == cur.ActiveModel {
 			active = " ◀ active"
 		}
-		fmt.Fprintf(w, "%-30s %-6s %-10s %s%s\n",
-			slug, m.Model.Type, m.Model.Status, m.Model.ID, active)
+		if _, err := fmt.Fprintf(w, "%-30s %-6s %-10s %s%s\n",
+			slug, m.Model.Type, m.Model.Status, m.Model.ID, active); err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -27,7 +27,7 @@ func TestNGCSearch(t *testing.T) {
 		assert.Contains(t, r.URL.String(), "llama")
 		assert.Contains(t, r.URL.String(), "CONTAINER")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		require.NoError(t, json.NewEncoder(w).Encode(response))
 	}))
 	defer srv.Close()
 
@@ -57,7 +57,7 @@ func TestNGCSearchWithAPIKey(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "ApiKey test-key", r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ngcSearchResponse{})
+		require.NoError(t, json.NewEncoder(w).Encode(ngcSearchResponse{}))
 	}))
 	defer srv.Close()
 
@@ -79,7 +79,7 @@ func TestNGCSearchServerError(t *testing.T) {
 
 func TestNGCSearchInvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer srv.Close()
 

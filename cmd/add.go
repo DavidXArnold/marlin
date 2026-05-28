@@ -32,7 +32,9 @@ func runAdd(cmd *cobra.Command, _ []string) error {
 
 	result, err := runAddWizardFunc()
 	if err != nil {
-		fmt.Fprintln(cmd.OutOrStdout(), err)
+		if _, writeErr := fmt.Fprintln(cmd.OutOrStdout(), err); writeErr != nil {
+			return writeErr
+		}
 		return nil
 	}
 
@@ -50,12 +52,12 @@ func runAdd(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("creating model file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := toml.NewEncoder(f).Encode(result.Cfg); err != nil {
 		return fmt.Errorf("writing model config: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "created %s\n", destPath)
-	return nil
+	_, err = fmt.Fprintf(cmd.OutOrStdout(), "created %s\n", destPath)
+	return err
 }

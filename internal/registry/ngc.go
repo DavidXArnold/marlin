@@ -43,7 +43,7 @@ func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ngc search: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, fmt.Errorf("ngc search: authentication failed — verify NGC_API_KEY or generate one at https://org.ngc.nvidia.com/setup/personal-keys")
@@ -98,7 +98,8 @@ func (r ngcResource) toModelInfo() ModelInfo {
 // name. Names that already look like full references are returned unchanged.
 //
 // e.g. "nvidia/llama-3.1-8b-instruct" + "" → "nvcr.io/nim/nvidia/llama-3.1-8b-instruct:latest"
-//      "nvidia/llama-3.1-8b-instruct" + "1.8" → "nvcr.io/nim/nvidia/llama-3.1-8b-instruct:1.8"
+//
+//	"nvidia/llama-3.1-8b-instruct" + "1.8" → "nvcr.io/nim/nvidia/llama-3.1-8b-instruct:1.8"
 func nimImageRef(name, tag string) string {
 	if strings.HasPrefix(name, "nvcr.io/") {
 		return name

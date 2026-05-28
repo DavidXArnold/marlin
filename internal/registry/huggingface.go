@@ -45,7 +45,7 @@ func (h *HuggingFace) Search(ctx context.Context, query string) ([]ModelInfo, er
 	if err != nil {
 		return nil, fmt.Errorf("huggingface search: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("huggingface search: unexpected status %d", resp.StatusCode)
@@ -78,7 +78,7 @@ func (h *HuggingFace) Fetch(ctx context.Context, id string) (*ModelInfo, error) 
 	if err != nil {
 		return nil, fmt.Errorf("huggingface fetch %s: %w", id, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("model %s not found on HuggingFace", id)

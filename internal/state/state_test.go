@@ -26,9 +26,10 @@ func TestLoadMissing(t *testing.T) {
 func TestLoadInvalidTOML(t *testing.T) {
 	f, err := os.CreateTemp("", "state-*.toml")
 	require.NoError(t, err)
-	defer os.Remove(f.Name())
-	f.WriteString("[[[[not valid")
-	f.Close()
+	defer func() { _ = os.Remove(f.Name()) }()
+	_, err = f.WriteString("[[[[not valid")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
 
 	_, err = Load(f.Name())
 	assert.Error(t, err)
@@ -100,11 +101,12 @@ func TestSaveCannotCreate(t *testing.T) {
 func TestLoadPermissionDenied(t *testing.T) {
 	f, err := os.CreateTemp("", "state-*.toml")
 	require.NoError(t, err)
-	defer os.Remove(f.Name())
-	f.WriteString("active_model = \"test\"\n")
-	f.Close()
+	defer func() { _ = os.Remove(f.Name()) }()
+	_, err = f.WriteString("active_model = \"test\"\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
 	require.NoError(t, os.Chmod(f.Name(), 0000))
-	defer os.Chmod(f.Name(), 0644)
+	defer func() { _ = os.Chmod(f.Name(), 0644) }()
 
 	if os.Getuid() == 0 {
 		t.Skip("root bypasses file permissions")

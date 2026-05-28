@@ -55,11 +55,11 @@ func (d searchDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 		return
 	}
 	if index == m.Index() {
-		fmt.Fprint(w, selStyle.Render("> "+sr.info.ID))
-		fmt.Fprint(w, "\n"+selStyle.Render("  "+sr.desc))
+		_, _ = fmt.Fprint(w, selStyle.Render("> "+sr.info.ID))
+		_, _ = fmt.Fprint(w, "\n"+selStyle.Render("  "+sr.desc))
 	} else {
-		fmt.Fprint(w, itemStyle.Render(sr.info.ID))
-		fmt.Fprint(w, "\n"+dimStyle.Render(sr.desc))
+		_, _ = fmt.Fprint(w, itemStyle.Render(sr.info.ID))
+		_, _ = fmt.Fprint(w, "\n"+dimStyle.Render(sr.desc))
 	}
 }
 

@@ -60,7 +60,7 @@ func TestLoadPermissionDenied(t *testing.T) {
 	}
 	f := tmpFile(t, "KEY=val\n")
 	require.NoError(t, os.Chmod(f, 0000))
-	defer os.Chmod(f, 0644)
+	defer func() { _ = os.Chmod(f, 0644) }()
 
 	_, err := Load(f)
 	assert.Error(t, err)
@@ -122,9 +122,9 @@ func tmpFile(t *testing.T, content string) string {
 	t.Helper()
 	f, err := os.CreateTemp("", "secrets-*.env")
 	require.NoError(t, err)
-	t.Cleanup(func() { os.Remove(f.Name()) })
+	t.Cleanup(func() { _ = os.Remove(f.Name()) })
 	_, err = f.WriteString(content)
 	require.NoError(t, err)
-	f.Close()
+	require.NoError(t, f.Close())
 	return f.Name()
 }

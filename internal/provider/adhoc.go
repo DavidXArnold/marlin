@@ -96,8 +96,13 @@ func (a *AdhocRunner) Start(ctx context.Context, slug string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("pulling image %s: %w", image, err)
 	}
-	_, _ = io.Copy(io.Discard, reader)
-	reader.Close()
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		_ = reader.Close()
+		return "", fmt.Errorf("reading image pull response: %w", err)
+	}
+	if err := reader.Close(); err != nil {
+		return "", fmt.Errorf("closing image pull response: %w", err)
+	}
 
 	_ = providerName // embedded in labels already
 	containerName := "marlin-adhoc-" + slug
@@ -136,7 +141,7 @@ func (a *AdhocRunner) RunForeground(ctx context.Context, slug string, w io.Write
 	if err != nil {
 		return fmt.Errorf("fetching container logs: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	_, _ = stdcopy.StdCopy(w, w, reader)
 	return nil

@@ -72,16 +72,22 @@ func runRun(cmd *cobra.Command, args []string) error {
 		if len(short) > 12 {
 			short = short[:12]
 		}
-		fmt.Fprintf(w, "started %s (container %s)\n", slug, short)
-		fmt.Fprintln(w, "use 'marlin ps' to list running containers")
-		fmt.Fprintf(w, "use 'marlin stop %s' to stop it\n", slug)
-		return nil
+		if _, err := fmt.Fprintf(w, "started %s (container %s)\n", slug, short); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintln(w, "use 'marlin ps' to list running containers"); err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(w, "use 'marlin stop %s' to stop it\n", slug)
+		return err
 	}
 
 	// Foreground: catch interrupt so cleanup deferred in RunForeground fires.
 	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	fmt.Fprintf(w, "running %s (Ctrl-C to stop and remove)\n", slug)
+	if _, err := fmt.Fprintf(w, "running %s (Ctrl-C to stop and remove)\n", slug); err != nil {
+		return err
+	}
 	return runner.RunForeground(ctx, slug, w)
 }

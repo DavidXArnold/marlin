@@ -1,18 +1,20 @@
+version: "2"
+
+run:
+  timeout: 5m
+
 linters:
   enable:
-    - errcheck
-    - govet
-    - staticcheck
-    - ineffassign
-    - typecheck
-    - gofmt
-    - goimports
-    - misspell
-    - noctx
-    - bodyclose
+  - errcheck
+  - govet
+  - staticcheck
+  - ineffassign
+  - misspell
+  - noctx
+  - bodyclose
 
 issues:
   exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+  - path: _test\.go
+    linters:
+    - errcheck

@@ -25,7 +25,7 @@ func TestHuggingFaceSearch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.String(), "search=qwen")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(models)
+		require.NoError(t, json.NewEncoder(w).Encode(models))
 	}))
 	defer srv.Close()
 
@@ -42,7 +42,7 @@ func TestHuggingFaceSearchWithToken(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]hfModel{})
+		require.NoError(t, json.NewEncoder(w).Encode([]hfModel{}))
 	}))
 	defer srv.Close()
 
@@ -65,7 +65,7 @@ func TestHuggingFaceSearchServerError(t *testing.T) {
 func TestHuggingFaceSearchInvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer srv.Close()
 
@@ -80,7 +80,7 @@ func TestHuggingFaceFetch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.Path, "Qwen")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(model)
+		require.NoError(t, json.NewEncoder(w).Encode(model))
 	}))
 	defer srv.Close()
 
@@ -125,7 +125,7 @@ func TestHuggingFaceSearchNetworkError(t *testing.T) {
 func TestHuggingFaceFetchInvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("not json"))
+		_, _ = w.Write([]byte("not json"))
 	}))
 	defer srv.Close()
 
@@ -177,7 +177,7 @@ func TestHuggingFaceSearchFullParam(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.String(), "full=true")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]hfModel{})
+		require.NoError(t, json.NewEncoder(w).Encode([]hfModel{}))
 	}))
 	defer srv.Close()
 
@@ -197,7 +197,7 @@ func TestHuggingFaceSearchWithMetadata(t *testing.T) {
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(models)
+		require.NoError(t, json.NewEncoder(w).Encode(models))
 	}))
 	defer srv.Close()
 
@@ -238,7 +238,7 @@ func TestHuggingFaceSearchParamsFromID(t *testing.T) {
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(models)
+		require.NoError(t, json.NewEncoder(w).Encode(models))
 	}))
 	defer srv.Close()
 
@@ -255,7 +255,7 @@ func TestHuggingFaceSearchFallbackToCreatedAt(t *testing.T) {
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(models)
+		require.NoError(t, json.NewEncoder(w).Encode(models))
 	}))
 	defer srv.Close()
 

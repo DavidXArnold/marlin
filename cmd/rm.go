@@ -36,6 +36,6 @@ func runRm(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("removing %s: %w", path, err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", path)
-	return nil
+	_, err = fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", path)
+	return err
 }

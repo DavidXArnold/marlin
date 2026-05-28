@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -46,9 +45,6 @@ func writeNIMModelFixture(t *testing.T, modelsDir, slug string) {
 			GPUMemoryUtilization: 0.9,
 		},
 	}
-	f, err := os.Create(filepath.Join(modelsDir, slug+".toml"))
-	require.NoError(t, err)
-	defer f.Close()
 	require.NoError(t, config.SaveModel(filepath.Join(modelsDir, slug+".toml"), mc))
 }
 

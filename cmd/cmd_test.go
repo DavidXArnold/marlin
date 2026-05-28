@@ -181,9 +181,9 @@ func TestExecuteError(t *testing.T) {
 func TestInitConfigWithFile(t *testing.T) {
 	f, err := os.CreateTemp("", "marlin-*.toml")
 	require.NoError(t, err)
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }()
 	_, _ = f.WriteString("[behavior]\nswitch_prompt = true\n")
-	f.Close()
+	require.NoError(t, f.Close())
 
 	old := cfgFile
 	cfgFile = f.Name()
@@ -201,9 +201,9 @@ func TestInitConfigBadFile(t *testing.T) {
 
 	f, err := os.CreateTemp("", "marlin-bad-*.toml")
 	require.NoError(t, err)
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }()
 	_, _ = f.WriteString("[[[[invalid toml")
-	f.Close()
+	require.NoError(t, f.Close())
 
 	old2 := cfgFile
 	cfgFile = f.Name()
@@ -372,7 +372,7 @@ func TestStatusCmdNoActiveModel(t *testing.T) {
 
 func TestLogsCmd(t *testing.T) {
 	restore := provider.SetRunCommandForTest(func(_ context.Context, w io.Writer, _ string, _ ...string) error {
-		fmt.Fprintln(w, "fake log line")
+		_, _ = fmt.Fprintln(w, "fake log line")
 		return nil
 	})
 	defer restore()
@@ -386,7 +386,7 @@ func TestLogsCmd(t *testing.T) {
 
 func TestLogsCmdFollowFlag(t *testing.T) {
 	restore := provider.SetRunCommandForTest(func(_ context.Context, w io.Writer, _ string, _ ...string) error {
-		fmt.Fprintln(w, "following")
+		_, _ = fmt.Fprintln(w, "following")
 		return nil
 	})
 	defer restore()
@@ -736,9 +736,10 @@ func TestExecuteUpdateNotice(t *testing.T) {
 	Execute()
 	rootCmd.SetArgs(nil)
 
-	w.Close()
+	require.NoError(t, w.Close())
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, err = buf.ReadFrom(r)
+	require.NoError(t, err)
 	assert.Contains(t, buf.String(), "v99.0.0")
 	assert.Contains(t, buf.String(), "0.0.1")
 }

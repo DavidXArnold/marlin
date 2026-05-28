@@ -39,13 +39,13 @@ func runStop(cmd *cobra.Command, args []string) error {
 		if err := runner.Stop(cmd.Context(), slug); err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "stopped %s\n", slug)
-		return nil
+		_, err := fmt.Fprintf(w, "stopped %s\n", slug)
+		return err
 	}
 
 	if err := runner.StopAll(cmd.Context()); err != nil {
 		return err
 	}
-	fmt.Fprintln(w, "stopped all marlin-managed containers")
-	return nil
+	_, err = fmt.Fprintln(w, "stopped all marlin-managed containers")
+	return err
 }
