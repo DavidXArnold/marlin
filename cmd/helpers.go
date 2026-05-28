@@ -16,8 +16,8 @@ func globalConfig() (*config.Config, error) {
 	path := cfgFile
 	if path == "" {
 		candidates := []string{
-			"/etc/marlin/config.toml",
 			filepath.Join(os.Getenv("HOME"), ".config", "marlin", "config.toml"),
+			"/etc/marlin/config.toml",
 		}
 		for _, p := range candidates {
 			if _, err := os.Stat(p); err == nil {

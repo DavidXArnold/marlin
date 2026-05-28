@@ -9,9 +9,11 @@ check_updates    = true    # notify when a newer marlin release is available on 
 [paths]
 models_dir     = "/etc/marlin/models"
 active_symlink = "/etc/marlin/model.env"
-secrets_env    = "/etc/marlin/secrets.env"
+# secrets_env defaults to $HOME/.config/marlin/secrets.env — writable without sudo.
+# Override here only for shared/system deployments:
+# secrets_env = "/etc/marlin/secrets.env"
 state_file     = "/var/lib/marlin/state.toml"
-nim_cache      = "/var/cache/nim"   # FLAG: user home cache vs system path — review for multi-user setups
+nim_cache      = "/var/cache/nim"
 
 [service]
 systemd_unit      = "marlin"
