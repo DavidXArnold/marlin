@@ -29,7 +29,7 @@ func NewNGC(apiKey string) *NGC {
 func (n *NGC) Name() string { return "ngc" }
 
 func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
-	endpoint := fmt.Sprintf("%s/search/resources/CONTAINER?q=%s&pageSize=20", n.base, url.QueryEscape(query))
+	endpoint := fmt.Sprintf("%s/search/resources?q=%s&resourceType=CONTAINER&pageSize=20", n.base, url.QueryEscape(query))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -46,7 +46,10 @@ func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("ngc search: authentication failed — verify NGC_API_KEY or generate one at https://org.ngc.nvidia.com/setup/personal-keys")
+		if n.apiKey != "" {
+			return nil, fmt.Errorf("ngc search: authentication failed — run 'marlin configure' to update NGC_API_KEY or generate a new key at https://org.ngc.nvidia.com/setup/personal-keys")
+		}
+		return nil, fmt.Errorf("ngc search: authentication required — run 'marlin configure' to add an NGC_API_KEY")
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("ngc search: unexpected status %d", resp.StatusCode)

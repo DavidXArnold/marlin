@@ -25,7 +25,7 @@ func TestNGCSearch(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.String(), "llama")
-		assert.Contains(t, r.URL.String(), "CONTAINER")
+		assert.Contains(t, r.URL.RawQuery, "resourceType=CONTAINER")
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(response))
 	}))
@@ -94,6 +94,19 @@ func TestNGCSearchServerError(t *testing.T) {
 	n := newNGCWithBase("", srv.URL)
 	_, err := n.Search(context.Background(), "query")
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "authentication required")
+}
+
+func TestNGCSearchBadKeyError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	n := newNGCWithBase("bad-key", srv.URL)
+	_, err := n.Search(context.Background(), "query")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "marlin configure")
 }
 
 func TestNGCSearchInvalidJSON(t *testing.T) {

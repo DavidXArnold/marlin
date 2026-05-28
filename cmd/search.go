@@ -97,14 +97,26 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Warn about registries that will be skipped due to missing credentials.
+	// Warn about registries that will be skipped or have limited results due to missing credentials.
 	for _, name := range regs {
-		if name == "ngc" && sec["NGC_API_KEY"] == "" {
-			if err := writeErrf("notice: NGC not searched — API key not configured\n"); err != nil {
-				return err
+		switch name {
+		case "ngc":
+			if sec["NGC_API_KEY"] == "" {
+				if err := writeErrf("notice: NGC not searched — run 'marlin configure' to add NGC_API_KEY\n"); err != nil {
+					return err
+				}
+				if err := writeErrf("        generate a key at https://org.ngc.nvidia.com/setup/personal-keys\n"); err != nil {
+					return err
+				}
 			}
-			if err := writeErrf("        run 'marlin configure' or generate a key at https://org.ngc.nvidia.com/setup/personal-keys\n"); err != nil {
-				return err
+		case "huggingface":
+			if sec["HF_TOKEN"] == "" {
+				if err := writeErrf("notice: HF_TOKEN not configured — gated models will be excluded from results\n"); err != nil {
+					return err
+				}
+				if err := writeErrf("        run 'marlin configure' to add your HuggingFace token\n"); err != nil {
+					return err
+				}
 			}
 		}
 	}
