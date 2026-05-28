@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
 )
 
 const hfAPIBase = "https://huggingface.co/api"
@@ -33,7 +37,6 @@ func (h *HuggingFace) Search(ctx context.Context, query string) ([]ModelInfo, er
 	if err != nil {
 		return nil, err
 	}
-
 	if h.token != "" {
 		req.Header.Set("Authorization", "Bearer "+h.token)
 	}
@@ -57,7 +60,6 @@ func (h *HuggingFace) Search(ctx context.Context, query string) ([]ModelInfo, er
 	for _, r := range raw {
 		results = append(results, r.toModelInfo())
 	}
-
 	return results, nil
 }
 
@@ -68,7 +70,6 @@ func (h *HuggingFace) Fetch(ctx context.Context, id string) (*ModelInfo, error) 
 	if err != nil {
 		return nil, err
 	}
-
 	if h.token != "" {
 		req.Header.Set("Authorization", "Bearer "+h.token)
 	}
@@ -96,16 +97,56 @@ func (h *HuggingFace) Fetch(ctx context.Context, id string) (*ModelInfo, error) 
 }
 
 type hfModel struct {
-	ID          string `json:"id"`
-	Private     bool   `json:"private"`
-	Description string `json:"description"`
+	ID           string    `json:"id"`
+	Private      bool      `json:"private"`
+	Description  string    `json:"description"`
+	LastModified time.Time `json:"lastModified"`
+	Tags         []string  `json:"tags"`
+	// SafeTensors holds per-file parameter counts.
+	SafeTensors *hfSafeTensors `json:"safetensors"`
 }
 
+type hfSafeTensors struct {
+	Total int64 `json:"total"`
+}
+
+// paramRegexp matches tags like "7B", "70b", "8.0B", "0.5b".
+var paramRegexp = regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)b$`)
+
 func (m hfModel) toModelInfo() ModelInfo {
-	return ModelInfo{
+	info := ModelInfo{
 		ID:          m.ID,
 		Registry:    "huggingface",
 		Private:     m.Private,
 		Description: m.Description,
+		LastUpdated: m.LastModified,
 	}
+
+	// Parameter count from safetensors metadata (most accurate).
+	if m.SafeTensors != nil && m.SafeTensors.Total > 0 {
+		info.ParamsBillion = float64(m.SafeTensors.Total) / 1e9
+	}
+
+	// Fall back to tag heuristic (e.g. "7b", "70B", "8.0b").
+	if info.ParamsBillion == 0 {
+		for _, tag := range m.Tags {
+			if matches := paramRegexp.FindStringSubmatch(tag); len(matches) == 2 {
+				if v, err := strconv.ParseFloat(matches[1], 64); err == nil {
+					info.ParamsBillion = v
+					break
+				}
+			}
+		}
+	}
+
+	// Quantization from tags (e.g. "awq", "gptq", "gguf").
+	for _, tag := range m.Tags {
+		lower := strings.ToLower(tag)
+		switch lower {
+		case "awq", "gptq", "gguf", "int8", "int4", "fp8":
+			info.Quantization = lower
+		}
+	}
+
+	return info
 }

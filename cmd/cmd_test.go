@@ -88,7 +88,14 @@ func buildRootCmd() *cobra.Command {
 	logs.Flags().BoolP("follow", "f", false, "")
 	logs.Flags().Int("lines", 100, "")
 
-	root.AddCommand(add, list, sw, search, validate, status, logs)
+	run := &cobra.Command{Use: "run <model>", Args: cobra.ExactArgs(1), RunE: runRun}
+	run.Flags().BoolP("detach", "d", false, "")
+
+	ps := &cobra.Command{Use: "ps", RunE: runPs}
+
+	stop := &cobra.Command{Use: "stop [model]", Args: cobra.MaximumNArgs(1), RunE: runStop}
+
+	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop)
 	return root
 }
 

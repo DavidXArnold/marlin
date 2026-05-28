@@ -14,6 +14,7 @@ nim_cache      = "/var/cache/nim"   # FLAG: user home cache vs system path — r
 [service]
 systemd_unit      = "marlin"
 docker_container  = "marlin"
+vllm_image        = "vllm/vllm-openai:latest"  # Docker image for ad-hoc marlin run
 # container_runtime = "docker"       # docker (default), podman, or containerd
 # container_socket  = ""             # custom socket path; leave empty for auto-detect
 

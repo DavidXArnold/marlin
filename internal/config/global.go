@@ -34,6 +34,7 @@ type ServiceConfig struct {
 	DockerContainer  string `toml:"docker_container"`
 	ContainerRuntime string `toml:"container_runtime"` // "docker" (default), "podman", or "containerd"
 	ContainerSocket  string `toml:"container_socket"`  // optional custom socket path (docker/podman)
+	VLLMImage        string `toml:"vllm_image"`        // Docker image used for ad-hoc vLLM runs
 }
 
 type ServerConfig struct {
@@ -70,6 +71,7 @@ func Defaults() *Config {
 		Service: ServiceConfig{
 			SystemdUnit:     "marlin",
 			DockerContainer: "marlin",
+			VLLMImage:       "vllm/vllm-openai:latest",
 		},
 		Server: ServerConfig{
 			Host:  "localhost",
