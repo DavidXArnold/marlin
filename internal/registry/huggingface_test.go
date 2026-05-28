@@ -149,3 +149,80 @@ func newHuggingFaceWithBase(token, base string) *HuggingFace {
 	hf.base = base
 	return hf
 }
+
+func TestParseHFTime(t *testing.T) {
+	cases := []struct {
+		input    string
+		wantZero bool
+	}{
+		{"2024-10-10T07:41:18.000Z", false},  // fractional seconds
+		{"2024-10-10T07:41:18Z", false},      // no fractional seconds
+		{"2024-10-10T07:41:18+00:00", false}, // RFC3339 with offset
+		{"", true},
+		{"not-a-date", true},
+	}
+	for _, c := range cases {
+		t.Run(c.input, func(t *testing.T) {
+			got := parseHFTime(c.input)
+			if c.wantZero {
+				assert.True(t, got.IsZero(), "expected zero time for %q", c.input)
+			} else {
+				assert.False(t, got.IsZero(), "expected non-zero time for %q", c.input)
+			}
+		})
+	}
+}
+
+func TestHuggingFaceSearchFullParam(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Contains(t, r.URL.String(), "full=true")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]hfModel{})
+	}))
+	defer srv.Close()
+
+	hf := newHuggingFaceWithBase("", srv.URL)
+	_, err := hf.Search(context.Background(), "llama")
+	require.NoError(t, err)
+}
+
+func TestHuggingFaceSearchWithMetadata(t *testing.T) {
+	models := []hfModel{
+		{
+			ID:           "Qwen/Qwen2.5-7B-AWQ",
+			LastModified: "2024-10-10T07:41:18.000Z",
+			Tags:         []string{"awq", "7b"},
+			SafeTensors:  &hfSafeTensors{Total: 7_000_000_000},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(models)
+	}))
+	defer srv.Close()
+
+	hf := newHuggingFaceWithBase("", srv.URL)
+	results, err := hf.Search(context.Background(), "qwen")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.False(t, results[0].LastUpdated.IsZero(), "LastUpdated should be populated")
+	assert.InDelta(t, 7.0, results[0].ParamsBillion, 0.01)
+	assert.Equal(t, "awq", results[0].Quantization)
+}
+
+func TestHuggingFaceSearchFallbackToCreatedAt(t *testing.T) {
+	models := []hfModel{
+		{ID: "some/model", CreatedAt: "2024-01-15T10:00:00.000Z"},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(models)
+	}))
+	defer srv.Close()
+
+	hf := newHuggingFaceWithBase("", srv.URL)
+	results, err := hf.Search(context.Background(), "model")
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.False(t, results[0].LastUpdated.IsZero(), "should fall back to createdAt")
+}

@@ -169,6 +169,9 @@ func addFromSearchResult(cfg *config.Config, m registry.ModelInfo, w io.Writer) 
 	mc := modelConfigFromInfo(m, cfg.Server.Alias)
 
 	if err := config.SaveModel(path, mc); err != nil {
+		if os.IsPermission(err) {
+			requireRoot() // re-exec as sudo; search TUI repeats under root
+		}
 		return err
 	}
 

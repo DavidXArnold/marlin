@@ -31,7 +31,7 @@ func NewHuggingFace(token string) *HuggingFace {
 func (h *HuggingFace) Name() string { return "huggingface" }
 
 func (h *HuggingFace) Search(ctx context.Context, query string) ([]ModelInfo, error) {
-	endpoint := fmt.Sprintf("%s/models?search=%s&limit=20", h.base, url.QueryEscape(query))
+	endpoint := fmt.Sprintf("%s/models?search=%s&limit=20&full=true", h.base, url.QueryEscape(query))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -97,11 +97,12 @@ func (h *HuggingFace) Fetch(ctx context.Context, id string) (*ModelInfo, error) 
 }
 
 type hfModel struct {
-	ID           string    `json:"id"`
-	Private      bool      `json:"private"`
-	Description  string    `json:"description"`
-	LastModified time.Time `json:"lastModified"`
-	Tags         []string  `json:"tags"`
+	ID           string   `json:"id"`
+	Private      bool     `json:"private"`
+	Description  string   `json:"description"`
+	LastModified string   `json:"lastModified"` // "2024-10-10T07:41:18.000Z"
+	CreatedAt    string   `json:"createdAt"`
+	Tags         []string `json:"tags"`
 	// SafeTensors holds per-file parameter counts.
 	SafeTensors *hfSafeTensors `json:"safetensors"`
 }
@@ -113,13 +114,33 @@ type hfSafeTensors struct {
 // paramRegexp matches tags like "7B", "70b", "8.0B", "0.5b".
 var paramRegexp = regexp.MustCompile(`(?i)^(\d+(?:\.\d+)?)b$`)
 
+var hfTimeLayouts = []string{
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02T15:04:05.000Z",
+	"2006-01-02T15:04:05Z",
+}
+
+func parseHFTime(s string) time.Time {
+	for _, layout := range hfTimeLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
 func (m hfModel) toModelInfo() ModelInfo {
+	ts := parseHFTime(m.LastModified)
+	if ts.IsZero() {
+		ts = parseHFTime(m.CreatedAt)
+	}
 	info := ModelInfo{
 		ID:          m.ID,
 		Registry:    "huggingface",
 		Private:     m.Private,
 		Description: m.Description,
-		LastUpdated: m.LastModified,
+		LastUpdated: ts,
 	}
 
 	// Parameter count from safetensors metadata (most accurate).
