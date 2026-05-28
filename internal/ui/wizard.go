@@ -70,15 +70,15 @@ func newWizard() wizardModel {
 	}
 
 	inputs := map[wizardStep]textinput.Model{
-		stepModelID:     mkInput("Qwen/Qwen2.5-72B-Instruct-AWQ"),
-		stepImage:       mkInput("nvcr.io/nim/meta/llama-3.1-8b-instruct:latest"),
-		stepSlug:        mkInput("qwen25-72b"),
+		stepModelID:      mkInput("Qwen/Qwen2.5-72B-Instruct-AWQ"),
+		stepImage:        mkInput("nvcr.io/nim/meta/llama-3.1-8b-instruct:latest"),
+		stepSlug:         mkInput("qwen25-72b"),
 		stepQuantization: mkInput("awq_marlin  (leave blank to omit)"),
-		stepGPUMem:      mkInput("0.90"),
-		stepMaxLen:      mkInput("0  (0 = auto)"),
-		stepServedNames: mkInput("gn100  (comma-separated aliases)"),
-		stepToolParser:  mkInput("hermes  (leave blank to omit)"),
-		stepNotes:       mkInput("optional notes"),
+		stepGPUMem:       mkInput("0.90"),
+		stepMaxLen:       mkInput("0  (0 = auto)"),
+		stepServedNames:  mkInput("gn100  (comma-separated aliases)"),
+		stepToolParser:   mkInput("hermes  (leave blank to omit)"),
+		stepNotes:        mkInput("optional notes"),
 	}
 
 	return wizardModel{

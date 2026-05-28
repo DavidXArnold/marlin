@@ -86,8 +86,8 @@ func checkQuantization(m *config.ModelConfig) []Issue {
 
 // parserByFamily maps model family name fragments to their expected tool-call parser.
 var parserByFamily = map[string]string{
-	"Qwen": "hermes",
-	"Llama": "llama3_json",
+	"Qwen":    "hermes",
+	"Llama":   "llama3_json",
 	"gpt-oss": "openai",
 }
 

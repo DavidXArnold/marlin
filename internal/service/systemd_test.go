@@ -20,8 +20,8 @@ func failRunner(_ context.Context, _ string, _ ...string) ([]byte, error) {
 // inactiveErr simulates systemctl exit code 3 (unit inactive).
 type inactiveErr struct{}
 
-func (e *inactiveErr) Error() string  { return "exit status 3" }
-func (e *inactiveErr) ExitCode() int  { return 3 }
+func (e *inactiveErr) Error() string { return "exit status 3" }
+func (e *inactiveErr) ExitCode() int { return 3 }
 
 func inactiveRunner(_ context.Context, _ string, _ ...string) ([]byte, error) {
 	return []byte("inactive"), &inactiveErr{}
