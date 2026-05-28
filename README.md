@@ -170,9 +170,18 @@ marlin stop                    # stop all marlin-managed containers
 Search HuggingFace and NGC for models. Results include last-updated time,
 estimated VRAM requirement, and a fit indicator based on your GPU's free VRAM.
 
+When running in a terminal, search drops into an interactive TUI picker after
+printing the results table. Select a model to:
+
+- **Open in browser** — opens the HuggingFace or NGC catalog page
+- **Add as model profile** — derives a slug and writes a `.toml` to `paths.models_dir`
+
+Use `--plain` for non-interactive/scripted output.
+
 ```bash
 marlin search "Qwen 72B"
 marlin search --registry ngc llama
+marlin search --plain "llama 8b"   # table only, no picker
 ```
 
 ```
@@ -185,6 +194,32 @@ Qwen/Qwen2.5-7B-Instruct                             3mo ago      14 GiB    ✓ 
 ```
 
 FIT legend: `✓` comfortable fit · `~` tight fit · `✗` exceeds free VRAM · `?` unknown
+
+### `marlin rm <model>`
+
+Remove a model profile from `paths.models_dir`.
+
+```bash
+marlin rm qwen25-72b-awq
+```
+
+### `marlin edit <model>`
+
+Open a model profile in `$EDITOR` (falls back to `vi`).
+
+```bash
+marlin edit qwen25-72b-awq
+```
+
+### `marlin completion`
+
+Generate shell completion scripts.
+
+```bash
+marlin completion bash   | sudo tee /etc/bash_completion.d/marlin
+marlin completion zsh    | sudo tee /usr/local/share/zsh/site-functions/_marlin
+marlin completion fish   > ~/.config/fish/completions/marlin.fish
+```
 
 ## Model config format
 

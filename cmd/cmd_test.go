@@ -99,7 +99,18 @@ func buildRootCmd() *cobra.Command {
 
 	stop := &cobra.Command{Use: "stop [model]", Args: cobra.MaximumNArgs(1), RunE: runStop}
 
-	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop)
+	rm := &cobra.Command{Use: "rm <model>", Args: cobra.ExactArgs(1), RunE: runRm}
+
+	edit := &cobra.Command{Use: "edit <model>", Args: cobra.ExactArgs(1), RunE: runEdit}
+
+	completion := &cobra.Command{
+		Use:       "completion [bash|zsh|fish|powershell]",
+		ValidArgs: []string{"bash", "zsh", "fish", "powershell"},
+		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+		RunE:      completionCmd.RunE,
+	}
+
+	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop, rm, edit, completion)
 	return root
 }
 
@@ -527,4 +538,97 @@ func TestRunLogsDirect(t *testing.T) {
 	cmd.Flags().BoolP("follow", "f", false, "")
 	cmd.Flags().Int("lines", 100, "")
 	require.NoError(t, runLogs(cmd, nil))
+}
+
+// --- completion ---
+
+func TestCompletionBash(t *testing.T) {
+	out, err := executeCmd("completion", "bash")
+	require.NoError(t, err)
+	assert.Contains(t, out, "bash")
+}
+
+func TestCompletionZsh(t *testing.T) {
+	out, err := executeCmd("completion", "zsh")
+	require.NoError(t, err)
+	assert.NotEmpty(t, out)
+}
+
+func TestCompletionFish(t *testing.T) {
+	out, err := executeCmd("completion", "fish")
+	require.NoError(t, err)
+	assert.NotEmpty(t, out)
+}
+
+func TestCompletionInvalidShell(t *testing.T) {
+	_, err := executeCmd("completion", "invalid")
+	assert.Error(t, err)
+}
+
+func TestCompletionNoArgs(t *testing.T) {
+	_, err := executeCmd("completion")
+	assert.Error(t, err)
+}
+
+// --- rm ---
+
+func TestRmNotFound(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+	_, err := executeCmd("rm", "nonexistent")
+	assert.Error(t, err)
+}
+
+func TestRmExistingModel(t *testing.T) {
+	cleanup := tempEnv(t, "qwen25-72b")
+	defer cleanup()
+	out, err := executeCmd("rm", "qwen25-72b")
+	require.NoError(t, err)
+	assert.Contains(t, out, "removed")
+}
+
+func TestRmMissingArg(t *testing.T) {
+	_, err := executeCmd("rm")
+	assert.Error(t, err)
+}
+
+func TestRunRmDirect(t *testing.T) {
+	cleanup := tempEnv(t, "llama-8b")
+	defer cleanup()
+	require.NoError(t, runRm(cmdWithContext(io.Discard), []string{"llama-8b"}))
+}
+
+// --- edit ---
+
+func TestEditNotFound(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+	_, err := executeCmd("edit", "nonexistent")
+	assert.Error(t, err)
+}
+
+func TestEditExistingModel(t *testing.T) {
+	old := execEditorFunc
+	execEditorFunc = func(_, _ string) error { return nil }
+	defer func() { execEditorFunc = old }()
+
+	cleanup := tempEnv(t, "qwen25-72b")
+	defer cleanup()
+	_, err := executeCmd("edit", "qwen25-72b")
+	require.NoError(t, err)
+}
+
+func TestEditMissingArg(t *testing.T) {
+	_, err := executeCmd("edit")
+	assert.Error(t, err)
+}
+
+func TestRunEditDirect(t *testing.T) {
+	old := execEditorFunc
+	execEditorFunc = func(_, _ string) error { return nil }
+	defer func() { execEditorFunc = old }()
+
+	cleanup := tempEnv(t, "llama-8b")
+	defer cleanup()
+	require.NoError(t, runEdit(cmdWithContext(io.Discard), []string{"llama-8b"}))
 }
