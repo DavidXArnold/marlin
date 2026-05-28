@@ -16,9 +16,12 @@ import (
 
 	"time"
 
+	"strings"
+
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/registry"
+	"github.com/DavidXArnold/marlin/internal/secrets"
 	"github.com/DavidXArnold/marlin/internal/ui"
 )
 
@@ -110,7 +113,9 @@ func buildRootCmd() *cobra.Command {
 		RunE:      completionCmd.RunE,
 	}
 
-	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop, rm, edit, completion)
+	configure := &cobra.Command{Use: "configure", Args: cobra.NoArgs, RunE: runConfigure}
+
+	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop, rm, edit, completion, configure)
 	return root
 }
 
@@ -463,6 +468,57 @@ func TestAddFromSearchResultAlreadyExists(t *testing.T) {
 	err = addFromSearchResult(cfg, m, io.Discard)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
+}
+
+// --- configure ---
+
+func TestRunConfigureNoChanges(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	old := configureIn
+	configureIn = strings.NewReader("\n\n") // Enter for each prompt → keep/skip
+	defer func() { configureIn = old }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	require.NoError(t, runConfigure(cmd, nil))
+	assert.Contains(t, buf.String(), "No changes made")
+}
+
+func TestRunConfigureSetsToken(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	old := configureIn
+	configureIn = strings.NewReader("hf_testtoken\n\n") // HF_TOKEN then skip NGC
+	defer func() { configureIn = old }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	require.NoError(t, runConfigure(cmd, nil))
+	assert.Contains(t, buf.String(), "Saved to")
+
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+	m, err := secrets.Load(cfg.Paths.SecretsEnv)
+	require.NoError(t, err)
+	assert.Equal(t, "hf_testtoken", m["HF_TOKEN"])
+}
+
+func TestRunConfigureShowsURLs(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	old := configureIn
+	configureIn = strings.NewReader("\n\n")
+	defer func() { configureIn = old }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	require.NoError(t, runConfigure(cmd, nil))
+	assert.Contains(t, buf.String(), "huggingface.co/settings/tokens")
+	assert.Contains(t, buf.String(), "ngc.nvidia.com/setup/personal-keys")
 }
 
 // --- buildRegistries ---

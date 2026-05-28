@@ -73,6 +73,14 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	query := args[0]
 	w := cmd.OutOrStdout()
 
+	// Warn about registries that will be skipped due to missing credentials.
+	for _, name := range regs {
+		if name == "ngc" && sec["NGC_API_KEY"] == "" {
+			fmt.Fprintf(cmd.ErrOrStderr(), "notice: NGC not searched — API key not configured\n")
+			fmt.Fprintf(cmd.ErrOrStderr(), "        run 'marlin configure' or generate a key at https://org.ngc.nvidia.com/setup/personal-keys\n")
+		}
+	}
+
 	registries := buildRegistries(regs, sec)
 
 	// Collect all results across registries so the picker has the full set.
