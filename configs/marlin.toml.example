@@ -22,7 +22,7 @@ vllm_image        = "vllm/vllm-openai:latest"  # Docker image for ad-hoc marlin 
 [server]
 host  = "localhost"
 port  = 8000
-alias = "gn100"
+alias = "local"
 
 [registries.huggingface]
 enabled = true

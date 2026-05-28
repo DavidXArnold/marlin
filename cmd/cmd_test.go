@@ -333,7 +333,7 @@ func TestValidateCmdWithModel(t *testing.T) {
 	defer cleanup()
 	out, err := executeCmd("validate", "qwen25-72b")
 	require.NoError(t, err)
-	// Model has served_model_name = ["gn100"] matching alias, no gpu warn → OK
+	// Model has served_model_name = ["gn100"] matching alias set in tempEnv → OK
 	assert.Contains(t, out, "OK")
 }
 

@@ -25,7 +25,7 @@ func TestDefaults(t *testing.T) {
 
 	assert.Equal(t, "localhost", cfg.Server.Host)
 	assert.Equal(t, 8000, cfg.Server.Port)
-	assert.Equal(t, "gn100", cfg.Server.Alias)
+	assert.Equal(t, "local", cfg.Server.Alias)
 
 	assert.True(t, cfg.Registries.HuggingFace.Enabled)
 	assert.True(t, cfg.Registries.NGC.Enabled)

@@ -76,7 +76,7 @@ func newWizard() wizardModel {
 		stepQuantization: mkInput("awq_marlin  (leave blank to omit)"),
 		stepGPUMem:       mkInput("0.90"),
 		stepMaxLen:       mkInput("0  (0 = auto)"),
-		stepServedNames:  mkInput("gn100  (comma-separated aliases)"),
+		stepServedNames:  mkInput("local  (comma-separated aliases)"),
 		stepToolParser:   mkInput("hermes  (leave blank to omit)"),
 		stepNotes:        mkInput("optional notes"),
 	}

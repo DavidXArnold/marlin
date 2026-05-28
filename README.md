@@ -56,7 +56,7 @@ Key paths (all overridable in config):
 | `paths.secrets_env` | `/etc/marlin/secrets.env` | `HF_TOKEN` and `NGC_API_KEY` |
 | `paths.state_file` | `/var/lib/marlin/state.toml` | Active model/provider state |
 | `paths.nim_cache` | `/var/cache/nim` | Host path mounted into NIM containers |
-| `server.alias` | `gn100` | Served-model-name alias expected by clients |
+| `server.alias` | `local` | Served-model-name alias expected by clients |
 
 Secrets file format (`/etc/marlin/secrets.env`):
 
@@ -201,7 +201,7 @@ notes  = "Best for tool-calling on GN100"
 quantization          = "awq_marlin"
 gpu_memory_utilization = 0.90
 max_model_len          = 131072
-served_model_name      = ["gn100", "qwen25-72b"]
+served_model_name      = ["local", "qwen25-72b"]
 tool_call_parser       = "hermes"
 ```
 

@@ -78,7 +78,7 @@ func Defaults() *Config {
 		Server: ServerConfig{
 			Host:  "localhost",
 			Port:  8000,
-			Alias: "gn100",
+			Alias: "local",
 		},
 		Registries: RegistriesConfig{
 			HuggingFace: RegistryConfig{Enabled: true},
