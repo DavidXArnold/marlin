@@ -112,10 +112,17 @@ marlin validate qwen25-72b-awq
 
 ### `marlin status`
 
+Shows the active model, API health, and detected hardware resources.
+
 ```
 active model : qwen25-72b-awq
 provider     : vllm
 api health   : ready at http://localhost:8000/v1
+
+gpu[0]       : NVIDIA H100 80GB HBM3  vram 74 GiB free / 80 GiB total
+ram          : 220 GiB free / 256 GiB total
+disk (models): 1.2 TiB free / 2.0 TiB total
+disk (nim cache): 800 GiB free / 2.0 TiB total
 ```
 
 ### `marlin logs [-f] [--lines N]`
@@ -127,14 +134,57 @@ marlin logs -f
 marlin logs --lines 200
 ```
 
+### `marlin run <model>`
+
+Run a model ad-hoc in a Docker container — no systemd service required.
+The container is labelled so marlin can track, list, and stop it.
+
+```bash
+marlin run llama-3.1-8b-nim           # foreground — streams logs, Ctrl-C stops and removes
+marlin run llama-3.1-8b-nim --detach  # background — returns immediately
+```
+
+The vLLM image used for ad-hoc runs is configurable via `service.vllm_image` (default: `vllm/vllm-openai:latest`).
+
+### `marlin ps`
+
+List all marlin-managed ad-hoc containers.
+
+```
+MODEL                PROVIDER STATUS     PORT   CONTAINER ID
+-----                -------- ------     ----   ------------
+llama-3.1-8b-nim     nim      running    8000   a1b2c3d4e5f6
+```
+
+### `marlin stop [model]`
+
+Stop and remove one or all ad-hoc containers started with `marlin run`.
+
+```bash
+marlin stop llama-3.1-8b-nim  # stop a specific model
+marlin stop                    # stop all marlin-managed containers
+```
+
 ### `marlin search <query>`
 
-Search HuggingFace and NGC for models.
+Search HuggingFace and NGC for models. Results include last-updated time,
+estimated VRAM requirement, and a fit indicator based on your GPU's free VRAM.
 
 ```bash
 marlin search "Qwen 72B"
 marlin search --registry ngc llama
 ```
+
+```
+[huggingface]
+ID                                                   UPDATED      VRAM EST  FIT   DESCRIPTION
+--                                                   -------      --------  ---   -----------
+Qwen/Qwen2.5-72B-Instruct-AWQ                        3mo ago      34 GiB    ✓     Qwen2.5 72B AWQ...
+Qwen/Qwen2.5-72B-Instruct                            3mo ago      144 GiB   ✗     Qwen2.5 72B fp16...
+Qwen/Qwen2.5-7B-Instruct                             3mo ago      14 GiB    ✓     Qwen2.5 7B...
+```
+
+FIT legend: `✓` comfortable fit · `~` tight fit · `✗` exceeds free VRAM · `?` unknown
 
 ## Model config format
 

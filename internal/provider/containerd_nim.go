@@ -19,8 +19,8 @@ import (
 //   - containerd with the NVIDIA container runtime configured
 //   - nerdctl installed and on PATH
 type ContainerdNIMProvider struct {
-	cfg       *config.Config
-	ngcKey    string
+	cfg    *config.Config
+	ngcKey string
 	// cmdOutput runs a nerdctl sub-command and returns its combined output.
 	// Replaceable in tests without a real container runtime.
 	cmdOutput func(ctx context.Context, args ...string) ([]byte, error)
@@ -143,7 +143,7 @@ func (p *ContainerdNIMProvider) Logs(ctx context.Context, w io.Writer, follow bo
 
 func (p *ContainerdNIMProvider) stopExisting(ctx context.Context) error {
 	// Ignore errors — container may not exist.
-	p.cmdOutput(ctx, "stop", nimContainerName)        //nolint:errcheck
-	p.cmdOutput(ctx, "rm", "-f", nimContainerName)    //nolint:errcheck
+	p.cmdOutput(ctx, "stop", nimContainerName)     //nolint:errcheck
+	p.cmdOutput(ctx, "rm", "-f", nimContainerName) //nolint:errcheck
 	return nil
 }

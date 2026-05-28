@@ -23,8 +23,8 @@ import (
 // systemd unit.  The old .env is left in place so the previous model can be
 // switched back without regenerating it.
 type VLLMProvider struct {
-	cfg     *config.Config
-	svc     *service.SystemdManager
+	cfg       *config.Config
+	svc       *service.SystemdManager
 	loadModel func(slug string) (*config.ModelConfig, error)
 }
 

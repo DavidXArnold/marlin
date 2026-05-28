@@ -15,14 +15,14 @@ import (
 
 // stubAdhoc is a controllable in-process stub for adhocRunner.
 type stubAdhoc struct {
-	startID     string
-	startErr    error
+	startID       string
+	startErr      error
 	foregroundErr error
-	listResult  []provider.AdhocInfo
-	listErr     error
-	stopErr     error
-	stopAllErr  error
-	stopCalled  string
+	listResult    []provider.AdhocInfo
+	listErr       error
+	stopErr       error
+	stopAllErr    error
+	stopCalled    string
 	stopAllCalled bool
 }
 
