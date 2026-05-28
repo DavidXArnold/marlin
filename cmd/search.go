@@ -62,6 +62,10 @@ var newNGCRegistry = func(apiKey string) registry.Registry {
 	return registry.NewNGC(apiKey)
 }
 
+var pickSearchResult = ui.PickSearchResult
+var searchActionMenu = ui.SearchActionMenu
+var modelURL = ui.ModelURL
+
 func runSearch(cmd *cobra.Command, args []string) error {
 	cfg, err := globalConfig()
 	if err != nil {
@@ -169,7 +173,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	selected, err := ui.PickSearchResult(allResults, freeVRAM)
+	selected, err := pickSearchResult(allResults, freeVRAM)
 	if err != nil {
 		return err
 	}
@@ -177,8 +181,8 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		return nil // user cancelled
 	}
 
-	url := ui.ModelURL(*selected)
-	action, err := ui.SearchActionMenu(selected.ID, url)
+	url := modelURL(*selected)
+	action, err := searchActionMenu(selected.ID, url)
 	if err != nil {
 		return err
 	}

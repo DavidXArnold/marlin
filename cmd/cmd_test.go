@@ -574,6 +574,108 @@ func TestRunSearchNGCWithConfiguredKey(t *testing.T) {
 	assert.Contains(t, buf.String(), "nvcr.io/nim/meta/llama:latest")
 }
 
+func TestRunSearchInteractiveBrowseOpensURL(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	selected := registry.ModelInfo{ID: "Qwen/Qwen2.5-7B", Registry: "huggingface"}
+	restoreSearchUI(t, &selected, ui.SearchActionBrowse, "https://huggingface.co/Qwen/Qwen2.5-7B")
+	restoreSingleHFResult(t, selected)
+
+	oldTerminal := stdoutIsTerminal
+	stdoutIsTerminal = func() bool { return true }
+	defer func() { stdoutIsTerminal = oldTerminal }()
+
+	var opened string
+	oldOpen := openBrowserCmd
+	openBrowserCmd = func(url string) error {
+		opened = url
+		return nil
+	}
+	defer func() { openBrowserCmd = oldOpen }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().StringSlice("registry", []string{"huggingface"}, "")
+	cmd.Flags().Bool("plain", false, "")
+
+	require.NoError(t, runSearch(cmd, []string{"qwen"}))
+	assert.Equal(t, "https://huggingface.co/Qwen/Qwen2.5-7B", opened)
+	assert.Contains(t, buf.String(), "opening https://huggingface.co/Qwen/Qwen2.5-7B")
+}
+
+func TestRunSearchInteractiveBrowseNoURL(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	selected := registry.ModelInfo{ID: "unknown/model", Registry: "unknown"}
+	restoreSearchUI(t, &selected, ui.SearchActionBrowse, "")
+	restoreSingleHFResult(t, selected)
+
+	oldTerminal := stdoutIsTerminal
+	stdoutIsTerminal = func() bool { return true }
+	defer func() { stdoutIsTerminal = oldTerminal }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().StringSlice("registry", []string{"huggingface"}, "")
+	cmd.Flags().Bool("plain", false, "")
+
+	require.NoError(t, runSearch(cmd, []string{"unknown"}))
+	assert.Contains(t, buf.String(), "no URL available")
+}
+
+func TestRunSearchInteractiveAdd(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	selected := registry.ModelInfo{ID: "Qwen/Qwen2.5-7B", Registry: "huggingface"}
+	restoreSearchUI(t, &selected, ui.SearchActionAdd, "https://huggingface.co/Qwen/Qwen2.5-7B")
+	restoreSingleHFResult(t, selected)
+
+	oldTerminal := stdoutIsTerminal
+	stdoutIsTerminal = func() bool { return true }
+	defer func() { stdoutIsTerminal = oldTerminal }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().StringSlice("registry", []string{"huggingface"}, "")
+	cmd.Flags().Bool("plain", false, "")
+
+	require.NoError(t, runSearch(cmd, []string{"qwen"}))
+	assert.Contains(t, buf.String(), "created")
+}
+
+func restoreSearchUI(t *testing.T, selected *registry.ModelInfo, action ui.SearchAction, url string) {
+	t.Helper()
+	oldPick := pickSearchResult
+	oldAction := searchActionMenu
+	oldURL := modelURL
+	pickSearchResult = func([]registry.ModelInfo, uint64) (*registry.ModelInfo, error) {
+		return selected, nil
+	}
+	searchActionMenu = func(string, string) (ui.SearchAction, error) {
+		return action, nil
+	}
+	modelURL = func(registry.ModelInfo) string {
+		return url
+	}
+	t.Cleanup(func() {
+		pickSearchResult = oldPick
+		searchActionMenu = oldAction
+		modelURL = oldURL
+	})
+}
+
+func restoreSingleHFResult(t *testing.T, result registry.ModelInfo) {
+	t.Helper()
+	oldHF := newHuggingFaceRegistry
+	newHuggingFaceRegistry = func(string) registry.Registry {
+		return fakeRegistry{name: "huggingface", results: []registry.ModelInfo{result}}
+	}
+	t.Cleanup(func() { newHuggingFaceRegistry = oldHF })
+}
+
 func TestAddFromSearchResultNew(t *testing.T) {
 	cleanup := tempEnv(t)
 	defer cleanup()

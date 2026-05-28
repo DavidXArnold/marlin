@@ -129,6 +129,20 @@ func TestAdhocStartStartFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "starting container")
 }
 
+func TestAdhocDetectUnmanaged(t *testing.T) {
+	d := &stubDocker{
+		listResult: []container.Summary{
+			{ID: "abc123", Image: "vllm/vllm-openai:latest", Names: []string{"/outside"}},
+		},
+	}
+	runner, _ := testAdhocRunner(t, d)
+
+	got, err := runner.DetectUnmanaged(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "abc123", got[0].ID)
+}
+
 // --- RunForeground ---
 
 func TestAdhocRunForeground(t *testing.T) {
