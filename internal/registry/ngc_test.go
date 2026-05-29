@@ -26,7 +26,7 @@ func TestNGCSearch(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.URL.Path, "CONTAINER")
-		assert.Contains(t, r.URL.RawQuery, "llama")
+		assert.Contains(t, r.URL.RawQuery, "query=llama")
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(response))
 	}))

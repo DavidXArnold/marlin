@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const ngcAPIBase = "https://api.ngc.nvidia.com/v2"
+const ngcAPIBase = "https://api.ngc.nvidia.com/v1"
 
 type NGC struct {
 	apiKey    string
@@ -45,7 +45,7 @@ func (n *NGC) logf(level int, format string, args ...any) {
 func (n *NGC) Name() string { return "ngc" }
 
 func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
-	endpoint := fmt.Sprintf("%s/search/resources/CONTAINER?q=%s&pageSize=20", n.base, url.QueryEscape(query))
+	endpoint := fmt.Sprintf("%s/search/resources/CONTAINER?query=%s&pageSize=20", n.base, url.QueryEscape(query))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
