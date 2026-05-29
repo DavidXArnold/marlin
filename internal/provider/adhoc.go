@@ -45,6 +45,12 @@ type AdhocRunner struct {
 func NewAdhocRunner(cfg *config.Config) (*AdhocRunner, error) {
 	opts := []client.Opt{client.WithAPIVersionNegotiation()}
 	switch cfg.Service.ContainerRuntime {
+	case "nerdctl":
+		nc, err := newNerdctlClient()
+		if err != nil {
+			return nil, fmt.Errorf("connecting to container runtime: %w", err)
+		}
+		return newAdhocRunnerWithClient(cfg, nc), nil
 	case "podman":
 		socket := cfg.Service.ContainerSocket
 		if socket == "" {

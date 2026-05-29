@@ -71,6 +71,12 @@ func NewNIMProvider(cfg *config.Config, ngcKey string) (*NIMProvider, error) {
 	opts := []client.Opt{client.WithAPIVersionNegotiation()}
 
 	switch cfg.Service.ContainerRuntime {
+	case "nerdctl":
+		nc, err := newNerdctlClient()
+		if err != nil {
+			return nil, fmt.Errorf("connecting to container runtime: %w", err)
+		}
+		return newNIMProviderWithClient(cfg, ngcKey, nc), nil
 	case "podman":
 		socket := cfg.Service.ContainerSocket
 		if socket == "" {

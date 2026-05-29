@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/secrets"
 )
 
@@ -18,7 +19,11 @@ var configureIn io.Reader = os.Stdin
 
 // dockerLoginFunc is injectable for tests.
 var dockerLoginFunc = func(apiKey string) error {
-	cmd := exec.Command("docker", "login", "nvcr.io",
+	bin, err := provider.ContainerBinary()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(bin, "login", "nvcr.io",
 		"--username", "$oauthtoken", "--password-stdin")
 	cmd.Stdin = strings.NewReader(apiKey)
 	cmd.Stdout = os.Stdout

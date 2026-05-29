@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
 
-const ngcAPIBase = "https://api.ngc.nvidia.com/v2"
+// nimCatalogBase is the NVIDIA NIM hosted API catalog endpoint. The /v1/models
+// list covers all publicly available NIM containers and uses the same NGC API key.
+const nimCatalogBase = "https://integrate.api.nvidia.com"
 
 type NGC struct {
 	apiKey    string
@@ -26,7 +27,7 @@ func NewNGC(apiKey string) *NGC {
 	return &NGC{
 		apiKey: apiKey,
 		client: &http.Client{},
-		base:   ngcAPIBase,
+		base:   nimCatalogBase,
 	}
 }
 
@@ -45,7 +46,7 @@ func (n *NGC) logf(level int, format string, args ...any) {
 func (n *NGC) Name() string { return "ngc" }
 
 func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
-	endpoint := fmt.Sprintf("%s/search/resources/CONTAINER?query=%s&pageSize=20", n.base, url.QueryEscape(query))
+	endpoint := fmt.Sprintf("%s/v1/models", n.base)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -95,17 +96,22 @@ func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
 		return nil, fmt.Errorf("ngc search: unexpected status %d: %s", resp.StatusCode, snippet)
 	}
 
-	var raw ngcSearchResponse
+	var raw nimModelsResponse
 	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&raw); err != nil {
 		return nil, fmt.Errorf("ngc search: decoding response: %w", err)
 	}
 
-	n.logf(3, "results: %d\n", len(raw.Results))
-
-	results := make([]ModelInfo, 0, len(raw.Results))
-	for _, r := range raw.Results {
-		results = append(results, r.toModelInfo())
+	lower := strings.ToLower(query)
+	var results []ModelInfo
+	for _, m := range raw.Data {
+		if strings.Contains(strings.ToLower(m.ID), lower) {
+			results = append(results, m.toModelInfo())
+		}
+		if len(results) == 20 {
+			break
+		}
 	}
+	n.logf(3, "matched %d of %d models\n", len(results), len(raw.Data))
 	return results, nil
 }
 
@@ -113,28 +119,28 @@ func (n *NGC) Fetch(_ context.Context, _ string) (*ModelInfo, error) {
 	return nil, fmt.Errorf("ngc fetch not yet implemented")
 }
 
-type ngcSearchResponse struct {
-	Results []ngcResource `json:"results"`
+type nimModelsResponse struct {
+	Data []nimModel `json:"data"`
 }
 
-type ngcResource struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"displayName"`
-	Description string `json:"shortDescription"`
-	UpdatedDate string `json:"updatedDate"` // RFC3339 or similar
-	LatestTag   string `json:"latestTag"`   // image tag; defaults to "latest"
+type nimModel struct {
+	ID      string `json:"id"`       // e.g. "meta/llama-3.1-8b-instruct"
+	Created int64  `json:"created"`  // Unix timestamp
+	OwnedBy string `json:"owned_by"` // e.g. "meta"
 }
 
-func (r ngcResource) toModelInfo() ModelInfo {
+// nimEpoch is the earliest plausible NIM container creation date (2022-01-01 UTC).
+// The NVIDIA API catalog returns non-Unix `created` values for older entries;
+// we treat anything before this as unknown rather than showing bogus dates.
+const nimEpoch = int64(1640995200)
+
+func (m nimModel) toModelInfo() ModelInfo {
 	info := ModelInfo{
-		ID:          nimImageRef(r.Name, r.LatestTag),
-		Registry:    "ngc",
-		Description: r.Description,
+		ID:       nimImageRef(m.ID, ""),
+		Registry: "ngc",
 	}
-	if r.UpdatedDate != "" {
-		if t, err := time.Parse(time.RFC3339, r.UpdatedDate); err == nil {
-			info.LastUpdated = t
-		}
+	if m.Created >= nimEpoch {
+		info.LastUpdated = time.Unix(m.Created, 0)
 	}
 	return info
 }
