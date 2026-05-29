@@ -1,9 +1,11 @@
 package registry
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,9 +15,11 @@ import (
 const ngcAPIBase = "https://api.ngc.nvidia.com/v2"
 
 type NGC struct {
-	apiKey string
-	client *http.Client
-	base   string // overridable for tests
+	apiKey    string
+	client    *http.Client
+	base      string // overridable for tests
+	log       io.Writer
+	verbosity int
 }
 
 func NewNGC(apiKey string) *NGC {
@@ -26,10 +30,22 @@ func NewNGC(apiKey string) *NGC {
 	}
 }
 
+// SetVerbose enables debug logging at the given level (1=requests, 2=headers, 3=bodies).
+func (n *NGC) SetVerbose(w io.Writer, level int) {
+	n.log = w
+	n.verbosity = level
+}
+
+func (n *NGC) logf(level int, format string, args ...any) {
+	if n.log != nil && n.verbosity >= level {
+		fmt.Fprintf(n.log, "[ngc] "+format, args...)
+	}
+}
+
 func (n *NGC) Name() string { return "ngc" }
 
 func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
-	endpoint := fmt.Sprintf("%s/search/resources?q=%s&resourceType=CONTAINER&pageSize=20", n.base, url.QueryEscape(query))
+	endpoint := fmt.Sprintf("%s/search/resources/CONTAINER?q=%s&pageSize=20", n.base, url.QueryEscape(query))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -39,11 +55,30 @@ func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
 		req.Header.Set("Authorization", "Bearer "+n.apiKey)
 	}
 
+	n.logf(1, "GET %s\n", endpoint)
+	if n.verbosity >= 2 {
+		for k, vs := range req.Header {
+			if strings.EqualFold(k, "authorization") {
+				n.logf(2, "  %s: Bearer ***\n", k)
+			} else {
+				n.logf(2, "  %s: %s\n", k, strings.Join(vs, ", "))
+			}
+		}
+	}
+
 	resp, err := n.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("ngc search: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("ngc search: reading response: %w", err)
+	}
+
+	n.logf(1, "status: %d\n", resp.StatusCode)
+	n.logf(3, "response body: %s\n", body)
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		if n.apiKey != "" {
@@ -52,13 +87,20 @@ func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
 		return nil, fmt.Errorf("ngc search: authentication required — run 'marlin configure' to add an NGC_API_KEY")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ngc search: unexpected status %d", resp.StatusCode)
+		snippet := strings.TrimSpace(string(body))
+		if len(snippet) > 300 {
+			snippet = snippet[:300] + "..."
+		}
+		n.logf(1, "error body: %s\n", snippet)
+		return nil, fmt.Errorf("ngc search: unexpected status %d: %s", resp.StatusCode, snippet)
 	}
 
 	var raw ngcSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&raw); err != nil {
 		return nil, fmt.Errorf("ngc search: decoding response: %w", err)
 	}
+
+	n.logf(3, "results: %d\n", len(raw.Results))
 
 	results := make([]ModelInfo, 0, len(raw.Results))
 	for _, r := range raw.Results {

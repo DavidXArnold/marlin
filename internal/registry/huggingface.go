@@ -1,9 +1,11 @@
 package registry
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -15,9 +17,11 @@ import (
 const hfAPIBase = "https://huggingface.co/api"
 
 type HuggingFace struct {
-	token  string
-	client *http.Client
-	base   string // overridable for tests
+	token     string
+	client    *http.Client
+	base      string // overridable for tests
+	log       io.Writer
+	verbosity int
 }
 
 func NewHuggingFace(token string) *HuggingFace {
@@ -25,6 +29,18 @@ func NewHuggingFace(token string) *HuggingFace {
 		token:  token,
 		client: &http.Client{},
 		base:   hfAPIBase,
+	}
+}
+
+// SetVerbose enables debug logging at the given level (1=requests, 2=headers, 3=bodies).
+func (h *HuggingFace) SetVerbose(w io.Writer, level int) {
+	h.log = w
+	h.verbosity = level
+}
+
+func (h *HuggingFace) logf(level int, format string, args ...any) {
+	if h.log != nil && h.verbosity >= level {
+		fmt.Fprintf(h.log, "[hf] "+format, args...)
 	}
 }
 
@@ -41,18 +57,32 @@ func (h *HuggingFace) Search(ctx context.Context, query string) ([]ModelInfo, er
 		req.Header.Set("Authorization", "Bearer "+h.token)
 	}
 
+	h.logf(1, "GET %s\n", endpoint)
+
 	resp, err := h.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("huggingface search: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("huggingface search: reading response: %w", err)
+	}
+
+	h.logf(1, "status: %d\n", resp.StatusCode)
+	h.logf(3, "response body: %s\n", body)
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("huggingface search: unexpected status %d", resp.StatusCode)
+		snippet := strings.TrimSpace(string(body))
+		if len(snippet) > 300 {
+			snippet = snippet[:300] + "..."
+		}
+		return nil, fmt.Errorf("huggingface search: unexpected status %d: %s", resp.StatusCode, snippet)
 	}
 
 	var raw []hfModel
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&raw); err != nil {
 		return nil, fmt.Errorf("huggingface search: decoding response: %w", err)
 	}
 

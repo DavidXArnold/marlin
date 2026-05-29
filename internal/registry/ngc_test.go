@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,8 +25,8 @@ func TestNGCSearch(t *testing.T) {
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Contains(t, r.URL.String(), "llama")
-		assert.Contains(t, r.URL.RawQuery, "resourceType=CONTAINER")
+		assert.Contains(t, r.URL.Path, "CONTAINER")
+		assert.Contains(t, r.URL.RawQuery, "llama")
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(response))
 	}))
@@ -118,6 +119,22 @@ func TestNGCSearchInvalidJSON(t *testing.T) {
 	n := newNGCWithBase("", srv.URL)
 	_, err := n.Search(context.Background(), "query")
 	assert.Error(t, err)
+}
+
+func TestNGCVerboseLogging(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(ngcSearchResponse{}))
+	}))
+	defer srv.Close()
+
+	var buf strings.Builder
+	n := newNGCWithBase("key", srv.URL)
+	n.SetVerbose(&buf, 2)
+	_, err := n.Search(context.Background(), "llama")
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), "GET ")
+	assert.Contains(t, buf.String(), "status: 200")
 }
 
 func TestNGCFetchNotImplemented(t *testing.T) {

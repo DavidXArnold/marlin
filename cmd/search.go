@@ -123,6 +123,17 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	registries := buildRegistries(regs, sec)
 
+	if Verbosity > 0 {
+		type verboseSetter interface {
+			SetVerbose(w io.Writer, level int)
+		}
+		for _, r := range registries {
+			if vs, ok := r.(verboseSetter); ok {
+				vs.SetVerbose(cmd.ErrOrStderr(), Verbosity)
+			}
+		}
+	}
+
 	// Collect all results across registries so the picker has the full set.
 	var allResults []registry.ModelInfo
 	type registryResults struct {

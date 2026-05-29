@@ -75,9 +75,13 @@ func Execute() {
 	}
 }
 
+// Verbosity is set by the -v/-vv/-vvv persistent flag.
+var Verbosity int
+
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: /etc/marlin/config.toml or $HOME/.config/marlin/config.toml)")
+	rootCmd.PersistentFlags().CountVarP(&Verbosity, "verbose", "v", "verbosity: -v requests, -vv headers, -vvv bodies")
 }
 
 func initConfig() {
