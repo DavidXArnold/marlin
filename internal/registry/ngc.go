@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const ngcAPIBase = "https://api.ngc.nvidia.com/v1"
+const ngcAPIBase = "https://api.ngc.nvidia.com/v2"
 
 type NGC struct {
 	apiKey    string
