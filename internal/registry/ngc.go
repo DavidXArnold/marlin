@@ -38,7 +38,7 @@ func (n *NGC) SetVerbose(w io.Writer, level int) {
 
 func (n *NGC) logf(level int, format string, args ...any) {
 	if n.log != nil && n.verbosity >= level {
-		fmt.Fprintf(n.log, "[ngc] "+format, args...)
+		_, _ = fmt.Fprintf(n.log, "[ngc] "+format, args...)
 	}
 }
 

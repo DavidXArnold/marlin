@@ -40,7 +40,7 @@ func (h *HuggingFace) SetVerbose(w io.Writer, level int) {
 
 func (h *HuggingFace) logf(level int, format string, args ...any) {
 	if h.log != nil && h.verbosity >= level {
-		fmt.Fprintf(h.log, "[hf] "+format, args...)
+		_, _ = fmt.Fprintf(h.log, "[hf] "+format, args...)
 	}
 }
 
