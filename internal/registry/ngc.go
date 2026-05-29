@@ -36,7 +36,7 @@ func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
 		return nil, err
 	}
 	if n.apiKey != "" {
-		req.Header.Set("Authorization", "ApiKey "+n.apiKey)
+		req.Header.Set("Authorization", "Bearer "+n.apiKey)
 	}
 
 	resp, err := n.client.Do(req)

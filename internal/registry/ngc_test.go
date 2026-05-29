@@ -74,7 +74,7 @@ func TestNimImageRef(t *testing.T) {
 
 func TestNGCSearchWithAPIKey(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "ApiKey test-key", r.Header.Get("Authorization"))
+		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(ngcSearchResponse{}))
 	}))
