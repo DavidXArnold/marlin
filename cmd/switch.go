@@ -14,6 +14,7 @@ import (
 )
 
 var requireRoot = privilege.RequireRoot
+var warnAndRequireRoot = privilege.WarnAndRequireRoot
 
 var switchCmd = &cobra.Command{
 	Use:   "switch [model]",
@@ -82,8 +83,8 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Escalate privilege now — re-execs under sudo if not root.
-	requireRoot()
+	// Warn about system path access and escalate privilege if needed.
+	warnAndRequireRoot(cmd.ErrOrStderr(), cfg.Paths.ModelsDir)
 
 	// Stop old provider if the type is changing.
 	if cur.ActiveModel != "" && cur.ActiveProvider != targetModel.Model.Type {

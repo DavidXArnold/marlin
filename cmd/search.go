@@ -238,12 +238,12 @@ func addFromSearchResult(cfg *config.Config, m registry.ModelInfo, w io.Writer) 
 		return fmt.Errorf("model %q already exists at %s", slug, path)
 	}
 
+	// Warn before writing to directories that require elevated privileges.
+	warnAndRequireRoot(w, cfg.Paths.ModelsDir)
+
 	mc := modelConfigFromInfo(m, cfg.Server.Alias)
 
 	if err := config.SaveModel(path, mc); err != nil {
-		if os.IsPermission(err) {
-			requireRoot() // re-exec as sudo; search TUI repeats under root
-		}
 		return err
 	}
 
