@@ -23,6 +23,7 @@ import (
 	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/registry"
 	"github.com/DavidXArnold/marlin/internal/secrets"
+	"github.com/DavidXArnold/marlin/internal/service"
 	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/ui"
 )
@@ -117,7 +118,10 @@ func buildRootCmd() *cobra.Command {
 
 	configure := &cobra.Command{Use: "configure", Args: cobra.NoArgs, RunE: runConfigure}
 
-	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop, rm, edit, completion, configure)
+	start := &cobra.Command{Use: "start [model]", Args: cobra.MaximumNArgs(1), RunE: runStart}
+	start.Flags().Bool("enable", false, "")
+
+	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop, rm, edit, completion, configure, start)
 	return root
 }
 
@@ -971,6 +975,63 @@ alias = "gn100"
 	assert.Contains(t, out, "provider     : vllm")
 	assert.Contains(t, out, "container    : abcdef123456")
 	assert.Contains(t, out, "api health   : ready")
+}
+
+func injectBootStatus(t *testing.T, enabled bool) {
+	t.Helper()
+	old := newStatusSystemdManager
+	newStatusSystemdManager = func(unit string) *service.SystemdManager {
+		runner := func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+			if enabled {
+				return []byte(""), nil
+			}
+			return []byte("disabled"), &disabledErr{}
+		}
+		return service.NewSystemdManagerWithRunner(unit, runner)
+	}
+	t.Cleanup(func() { newStatusSystemdManager = old })
+}
+
+// disabledErr mimics systemctl exit code 1 (unit disabled).
+type disabledErr struct{}
+
+func (e *disabledErr) Error() string { return "exit status 1" }
+func (e *disabledErr) ExitCode() int { return 1 }
+
+func TestRunStatusBootEnabled(t *testing.T) {
+	cleanup := tempEnv(t, "llama-8b")
+	defer cleanup()
+
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+	require.NoError(t, state.Save(cfg.Paths.StateFile, &state.State{
+		ActiveModel:    "llama-8b",
+		ActiveProvider: config.ProviderVLLM,
+	}))
+
+	injectBootStatus(t, true)
+
+	var buf bytes.Buffer
+	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
+	assert.Contains(t, buf.String(), "boot         : enabled")
+}
+
+func TestRunStatusBootDisabled(t *testing.T) {
+	cleanup := tempEnv(t, "llama-8b")
+	defer cleanup()
+
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+	require.NoError(t, state.Save(cfg.Paths.StateFile, &state.State{
+		ActiveModel:    "llama-8b",
+		ActiveProvider: config.ProviderVLLM,
+	}))
+
+	injectBootStatus(t, false)
+
+	var buf bytes.Buffer
+	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
+	assert.Contains(t, buf.String(), "marlin start --enable")
 }
 
 func TestDiskLabel(t *testing.T) {

@@ -100,3 +100,36 @@ func TestIsActive_Error(t *testing.T) {
 	_, err := m.IsActive(context.Background())
 	assert.Error(t, err)
 }
+
+func TestEnable(t *testing.T) {
+	m := &SystemdManager{unit: "vllm.service", execRunner: successRunner}
+	require.NoError(t, m.Enable(context.Background()))
+}
+
+func TestEnableFail(t *testing.T) {
+	m := &SystemdManager{unit: "vllm.service", execRunner: failRunner}
+	assert.Error(t, m.Enable(context.Background()))
+}
+
+func TestIsEnabled_Enabled(t *testing.T) {
+	m := &SystemdManager{unit: "vllm.service", execRunner: successRunner}
+	enabled, err := m.IsEnabled(context.Background())
+	require.NoError(t, err)
+	assert.True(t, enabled)
+}
+
+func TestIsEnabled_Disabled(t *testing.T) {
+	// exit code 1 → disabled, not an error
+	m := &SystemdManager{unit: "vllm.service", execRunner: inactiveRunner}
+	enabled, err := m.IsEnabled(context.Background())
+	require.NoError(t, err)
+	assert.False(t, enabled)
+}
+
+func TestIsEnabled_Error(t *testing.T) {
+	// failRunner returns exit code 1 via a plain error — treated as disabled
+	m := &SystemdManager{unit: "vllm.service", execRunner: failRunner}
+	// failRunner's error doesn't implement exitCoder so it's a real error
+	_, err := m.IsEnabled(context.Background())
+	assert.Error(t, err)
+}

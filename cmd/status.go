@@ -6,10 +6,15 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/service"
 	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/sysinfo"
 	"github.com/DavidXArnold/marlin/internal/vllm"
 )
+
+// newStatusSystemdManager is injectable for tests.
+var newStatusSystemdManager = service.NewSystemdManager
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
@@ -65,6 +70,20 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		} else {
 			if err := writef("api health   : not ready\n"); err != nil {
 				return err
+			}
+		}
+
+		// Show systemd boot-enable status for vLLM units to surface the feature.
+		if cur.ActiveProvider == config.ProviderVLLM || cur.ActiveProvider == "" {
+			svc := newStatusSystemdManager(cfg.Service.SystemdUnit)
+			if enabled, err := svc.IsEnabled(cmd.Context()); err == nil {
+				bootLine := "enabled"
+				if !enabled {
+					bootLine = "disabled  (run 'marlin start --enable' to start at boot)"
+				}
+				if err := writef("boot         : %s\n", bootLine); err != nil {
+					return err
+				}
 			}
 		}
 	} else {

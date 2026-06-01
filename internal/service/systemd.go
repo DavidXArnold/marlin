@@ -56,6 +56,24 @@ func (s *SystemdManager) IsActive(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// Enable enables the unit to start automatically at boot.
+func (s *SystemdManager) Enable(ctx context.Context) error {
+	return s.systemctl(ctx, "enable")
+}
+
+// IsEnabled reports whether the unit is enabled at boot.
+// Returns false (not an error) for disabled, static, or masked units.
+func (s *SystemdManager) IsEnabled(ctx context.Context) (bool, error) {
+	_, err := s.execRunner(ctx, "systemctl", "is-enabled", "--quiet", s.unit)
+	if err != nil {
+		if ec, ok := err.(exitCoder); ok && ec.ExitCode() > 0 {
+			return false, nil
+		}
+		return false, fmt.Errorf("systemctl is-enabled %s: %w", s.unit, err)
+	}
+	return true, nil
+}
+
 func (s *SystemdManager) systemctl(ctx context.Context, action string) error {
 	out, err := s.execRunner(ctx, "systemctl", action, s.unit)
 	if err != nil {
