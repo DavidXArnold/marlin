@@ -9,6 +9,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+
 type ModelStatus string
 type ProviderType string
 
@@ -60,6 +61,9 @@ func LoadModel(path string) (*ModelConfig, error) {
 }
 
 func SaveModel(path string, m *ModelConfig) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating model directory: %w", err)
+	}
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("creating model config %s: %w", path, err)
@@ -69,6 +73,15 @@ func SaveModel(path string, m *ModelConfig) error {
 		return err
 	}
 	return f.Close()
+}
+
+// ModelConfigToBytes encodes m to TOML and returns the bytes.
+func ModelConfigToBytes(m *ModelConfig) ([]byte, error) {
+	var buf strings.Builder
+	if err := toml.NewEncoder(&buf).Encode(m); err != nil {
+		return nil, err
+	}
+	return []byte(buf.String()), nil
 }
 
 func ListModels(dir string) ([]*ModelConfig, []string, error) {

@@ -5,13 +5,16 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/privilege"
 	"github.com/DavidXArnold/marlin/internal/registry"
 	"github.com/DavidXArnold/marlin/internal/secrets"
 	"github.com/DavidXArnold/marlin/internal/sysinfo"
@@ -224,31 +227,75 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	case ui.SearchActionAdd:
 		return addFromSearchResult(cfg, *selected, w)
+
+	case ui.SearchActionRun:
+		return runFromSearchResult(cmd, cfg, *selected, w)
 	}
 
 	return nil
 }
 
 // addFromSearchResult derives a slug and writes a model TOML to the models dir.
+// If the dir is not user-writable, it warns and prompts before writing via sudo.
 func addFromSearchResult(cfg *config.Config, m registry.ModelInfo, w io.Writer) error {
 	slug := ui.AutoSlug(m.ID)
-	path := filepath.Join(cfg.Paths.ModelsDir, slug+".toml")
+	destDir := cfg.Paths.ModelsDir
+	path := filepath.Join(destDir, slug+".toml")
 
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("model %q already exists at %s", slug, path)
 	}
 
-	// Warn before writing to directories that require elevated privileges.
-	warnAndRequireRoot(w, cfg.Paths.ModelsDir)
-
 	mc := modelConfigFromInfo(m, cfg.Server.Alias)
 
-	if err := config.SaveModel(path, mc); err != nil {
+	data, err := config.ModelConfigToBytes(mc)
+	if err != nil {
 		return err
 	}
 
-	_, err := fmt.Fprintf(w, "created %s\n", path)
+	written, err := privilege.PromptAndWriteFile(w, destDir, path, data)
+	if err != nil {
+		return err
+	}
+	if !written {
+		return nil // user cancelled
+	}
+
+	_, err = fmt.Fprintf(w, "created %s\n", path)
 	return err
+}
+
+// runFromSearchResult builds an in-memory model config from the search result,
+// writes it to a temp dir, and runs the model ad-hoc in the foreground.
+func runFromSearchResult(cmd *cobra.Command, cfg *config.Config, m registry.ModelInfo, w io.Writer) error {
+	slug := ui.AutoSlug(m.ID)
+	mc := modelConfigFromInfo(m, cfg.Server.Alias)
+
+	tmpDir, err := os.MkdirTemp("", "marlin-run-*")
+	if err != nil {
+		return fmt.Errorf("creating temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	if err := config.SaveModel(filepath.Join(tmpDir, slug+".toml"), mc); err != nil {
+		return err
+	}
+
+	tmpCfg := *cfg
+	tmpCfg.Paths.ModelsDir = tmpDir
+
+	runner, err := buildAdhocRunner(&tmpCfg)
+	if err != nil {
+		return fmt.Errorf("initialising runner: %w", err)
+	}
+
+	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	if _, err := fmt.Fprintf(w, "running %s (Ctrl-C to stop and remove)\n", slug); err != nil {
+		return err
+	}
+	return runner.RunForeground(ctx, slug, w)
 }
 
 func modelConfigFromInfo(m registry.ModelInfo, serverAlias string) *config.ModelConfig {

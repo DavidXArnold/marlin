@@ -102,13 +102,16 @@ func TestActionMenuNavigate(t *testing.T) {
 	u2, _ := u1.(actionMenuModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	assert.Equal(t, 2, u2.(actionMenuModel).cursor)
 
-	// can't go past last option
 	u3, _ := u2.(actionMenuModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
-	assert.Equal(t, 2, u3.(actionMenuModel).cursor)
+	assert.Equal(t, 3, u3.(actionMenuModel).cursor)
+
+	// can't go past last option
+	u4, _ := u3.(actionMenuModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	assert.Equal(t, 3, u4.(actionMenuModel).cursor)
 
 	// move back up
-	u4, _ := u3.(actionMenuModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
-	assert.Equal(t, 1, u4.(actionMenuModel).cursor)
+	u5, _ := u4.(actionMenuModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	assert.Equal(t, 2, u5.(actionMenuModel).cursor)
 }
 
 func TestActionMenuSelectBrowse(t *testing.T) {
@@ -124,11 +127,20 @@ func TestActionMenuSelectAdd(t *testing.T) {
 	assert.Equal(t, SearchActionAdd, updated.(actionMenuModel).action)
 }
 
-func TestActionMenuSelectCancel(t *testing.T) {
+func TestActionMenuSelectRun(t *testing.T) {
 	am := newTestActionMenu()
 	u1, _ := am.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	u2, _ := u1.(actionMenuModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}) // cursor→2
 	updated, _ := u2.(actionMenuModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	assert.Equal(t, SearchActionRun, updated.(actionMenuModel).action)
+}
+
+func TestActionMenuSelectCancel(t *testing.T) {
+	am := newTestActionMenu()
+	u1, _ := am.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	u2, _ := u1.(actionMenuModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	u3, _ := u2.(actionMenuModel).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}) // cursor→3
+	updated, _ := u3.(actionMenuModel).Update(tea.KeyMsg{Type: tea.KeyEnter})
 	result := updated.(actionMenuModel)
 	assert.Equal(t, SearchActionNone, result.action)
 	assert.True(t, result.quitting)

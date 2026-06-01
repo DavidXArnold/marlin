@@ -21,6 +21,7 @@ const (
 	SearchActionNone   SearchAction = iota
 	SearchActionBrowse              // open model URL in browser
 	SearchActionAdd                 // create a model profile
+	SearchActionRun                 // run model ad-hoc in a container
 )
 
 // searchResultItem wraps a ModelInfo for the picker list.
@@ -146,7 +147,7 @@ func newActionMenuModel(modelID, url string) actionMenuModel {
 	return actionMenuModel{
 		modelID: modelID,
 		url:     url,
-		options: []string{"Open in browser", "Add as model profile", "Cancel"},
+		options: []string{"Open in browser", "Add as model profile", "Run adhoc", "Cancel"},
 	}
 }
 
@@ -173,6 +174,8 @@ func (a actionMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.action = SearchActionBrowse
 			case 1:
 				a.action = SearchActionAdd
+			case 2:
+				a.action = SearchActionRun
 			default:
 				a.quitting = true
 			}

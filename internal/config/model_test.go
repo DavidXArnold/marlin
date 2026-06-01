@@ -81,11 +81,22 @@ func TestSaveAndReloadModel(t *testing.T) {
 	assert.InDelta(t, original.Serve.GPUMemoryUtilization, loaded.Serve.GPUMemoryUtilization, 0.001)
 }
 
+func TestSaveModelCreatesParentDir(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sub", "dir", "model.toml")
+	require.NoError(t, SaveModel(path, &ModelConfig{}))
+	_, err := os.Stat(path)
+	assert.NoError(t, err)
+}
+
 func TestSaveModelCreateError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "missing", "model.toml")
+	// Put a regular file where the parent dir should be — MkdirAll fails.
+	base := t.TempDir()
+	blocker := filepath.Join(base, "notadir")
+	require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o644))
+
+	path := filepath.Join(blocker, "model.toml")
 	err := SaveModel(path, &ModelConfig{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "creating model config")
 }
 
 func TestListModels(t *testing.T) {

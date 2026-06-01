@@ -1,6 +1,7 @@
 package privilege
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,13 @@ var (
 		cmd := exec.Command("sudo", args...)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+	sudoTeeRun = func(path string, data []byte) error {
+		cmd := exec.Command("sudo", "tee", path)
+		cmd.Stdin = bytes.NewReader(data)
+		cmd.Stdout = io.Discard
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	}
@@ -67,6 +75,47 @@ func NeedsRoot(dir string) bool {
 		}
 		check = parent
 	}
+}
+
+// WriteFileAsSudo creates dir via "sudo mkdir -p" then writes data to path via
+// "sudo tee". The sudo password prompt (if any) is shown on the terminal.
+func WriteFileAsSudo(dir, path string, data []byte) error {
+	if err := sudoRun([]string{"mkdir", "-p", dir}); err != nil {
+		return fmt.Errorf("sudo mkdir -p %s: %w", dir, err)
+	}
+	if err := sudoTeeRun(path, data); err != nil {
+		return fmt.Errorf("sudo tee %s: %w", path, err)
+	}
+	return nil
+}
+
+// PromptAndWriteFile writes data to path in dir. If the dir is user-writable,
+// it creates it with os.MkdirAll and writes directly. If root is required, it
+// prints a warning to w, reads y/yes confirmation from stdin, then writes with
+// sudo. Returns (false, nil) if the user declines (prints "cancelled" itself).
+func PromptAndWriteFile(w io.Writer, dir, path string, data []byte) (bool, error) {
+	if !NeedsRoot(dir) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return false, err
+		}
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	_, _ = fmt.Fprintf(w, "\nwarning: writing to %s requires administrator privileges\n", dir)
+	_, _ = fmt.Fprint(w, "continue with sudo? [y/N] ")
+	buf := make([]byte, 64)
+	n, _ := stdinR.Read(buf)
+	answer := strings.ToLower(strings.TrimSpace(string(buf[:n])))
+	if answer != "y" && answer != "yes" {
+		_, _ = fmt.Fprintln(w, "cancelled")
+		return false, nil
+	}
+	if err := WriteFileAsSudo(dir, path, data); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // WarnAndRequireRoot checks whether targetPath needs root access. If it does,
