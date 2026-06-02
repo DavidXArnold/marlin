@@ -7,7 +7,6 @@ import (
 
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/service"
-	"github.com/DavidXArnold/marlin/internal/state"
 )
 
 var startCmd = &cobra.Command{
@@ -47,37 +46,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	enable, _ := cmd.Flags().GetBool("enable")
-	cur, _ := state.Load(cfg.Paths.StateFile)
 
-	// If no model was requested and we have an active model, try resuming it
-	// without a full switch (avoids unnecessary service restarts).
-	if len(args) == 0 && cur.ActiveModel != "" {
-		p, err := buildProvider(cur.ActiveProvider, cfg)
-		if err != nil {
-			return fmt.Errorf("initialising provider: %w", err)
-		}
-
-		st, err := p.Status(cmd.Context())
-		if err == nil && st.Running {
-			if _, err := fmt.Fprintf(cmd.OutOrStdout(),
-				"already running %s (%s)\n", cur.ActiveModel, cur.ActiveProvider); err != nil {
-				return err
-			}
-			if enable {
-				return enableUnit(cfg)
-			}
-			return nil
-		}
-
-		// Service stopped — restart with the existing active model.
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(),
-			"starting %s (%s)\n", cur.ActiveModel, cur.ActiveProvider); err != nil {
-			return err
-		}
-		args = []string{cur.ActiveModel}
-	}
-
-	// Delegate to switch logic (handles picker, validation, privilege escalation).
+	// Always delegate to switch logic: shows the TUI picker (with the active
+	// model pre-selected and marked ◀) when no model argument is given.
 	if err := runSwitch(cmd, args); err != nil {
 		return err
 	}

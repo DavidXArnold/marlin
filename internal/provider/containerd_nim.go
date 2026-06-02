@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -85,6 +86,11 @@ func (p *ContainerdNIMProvider) Switch(ctx context.Context, modelSlug string) er
 	// Tear down any existing marlin-nim container.
 	if err := p.stopExisting(ctx); err != nil {
 		return err
+	}
+
+	if err := os.MkdirAll(p.cfg.Paths.NIMCache, 0o755); err != nil {
+		return fmt.Errorf("creating NIM cache dir %s: %w\nhint: run 'sudo mkdir -p %s && sudo chown -R $USER %s'",
+			p.cfg.Paths.NIMCache, err, p.cfg.Paths.NIMCache, p.cfg.Paths.NIMCache)
 	}
 
 	args := []string{

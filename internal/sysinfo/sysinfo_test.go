@@ -115,3 +115,17 @@ func TestFormatMB(t *testing.T) {
 	assert.Equal(t, "512 MiB", FormatMB(512))
 	assert.Equal(t, "1 GiB", FormatMB(1024))
 }
+
+func TestLoadAvg1(t *testing.T) {
+	old := readLoadavg
+	defer func() { readLoadavg = old }()
+
+	readLoadavg = func() ([]byte, error) { return []byte("1.25 0.75 0.50 2/400 12345\n"), nil }
+	assert.InDelta(t, 1.25, LoadAvg1(), 0.001)
+
+	readLoadavg = func() ([]byte, error) { return nil, fmt.Errorf("no /proc") }
+	assert.Equal(t, 0.0, LoadAvg1())
+
+	readLoadavg = func() ([]byte, error) { return []byte(""), nil }
+	assert.Equal(t, 0.0, LoadAvg1())
+}

@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
+
+	"github.com/DavidXArnold/marlin/internal/config"
 )
 
 var editCmd = &cobra.Command{
@@ -36,9 +37,8 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	}
 
 	slug := args[0]
-	path := filepath.Join(cfg.Paths.ModelsDir, slug+".toml")
-
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	path, err := config.FindModelPath(slug, effectiveDirs(cfg)...)
+	if err != nil {
 		return fmt.Errorf("model %q not found", slug)
 	}
 

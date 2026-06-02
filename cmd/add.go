@@ -22,6 +22,7 @@ var addCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(addCmd)
+	addCmd.Flags().Bool("global", false, "Install to system models dir ("+"/etc/marlin/models"+")")
 }
 
 func runAdd(cmd *cobra.Command, _ []string) error {
@@ -38,7 +39,8 @@ func runAdd(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	destDir := cfg.Paths.ModelsDir
+	global, _ := cmd.Flags().GetBool("global")
+	destDir := installDir(cfg, global)
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("creating models dir: %w", err)
 	}

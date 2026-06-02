@@ -16,7 +16,7 @@ func TestDefaults(t *testing.T) {
 	assert.False(t, cfg.Behavior.AddAutoDetect)
 	assert.Equal(t, 100, cfg.Behavior.LogTailLines)
 
-	assert.Equal(t, "/etc/marlin/models", cfg.Paths.ModelsDir)
+	assert.Contains(t, cfg.Paths.ModelsDir, "marlin/models") // path varies by $HOME or falls back to /etc
 	assert.Equal(t, "/etc/marlin/model.env", cfg.Paths.ActiveSymlink)
 	assert.Contains(t, cfg.Paths.SecretsEnv, "secrets.env") // path varies by $HOME
 

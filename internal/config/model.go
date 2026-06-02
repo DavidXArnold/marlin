@@ -87,6 +87,9 @@ func ModelConfigToBytes(m *ModelConfig) ([]byte, error) {
 func ListModels(dir string) ([]*ModelConfig, []string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil, nil
+		}
 		return nil, nil, fmt.Errorf("reading models dir %s: %w", dir, err)
 	}
 
@@ -108,4 +111,40 @@ func ListModels(dir string) ([]*ModelConfig, []string, error) {
 	}
 
 	return models, names, nil
+}
+
+// ListModelsFromDirs aggregates models from multiple directories, deduplicating
+// by slug. Earlier dirs take precedence when the same slug appears in multiple dirs.
+func ListModelsFromDirs(dirs ...string) ([]*ModelConfig, []string, error) {
+	seen := make(map[string]bool)
+	var models []*ModelConfig
+	var names []string
+
+	for _, dir := range dirs {
+		cfgs, slugs, err := ListModels(dir)
+		if err != nil {
+			return nil, nil, err
+		}
+		for i, slug := range slugs {
+			if seen[slug] {
+				continue
+			}
+			seen[slug] = true
+			names = append(names, slug)
+			models = append(models, cfgs[i])
+		}
+	}
+	return models, names, nil
+}
+
+// FindModelPath searches for a model TOML file in each directory in order and
+// returns the first path found. Returns an error if the slug is not found in any dir.
+func FindModelPath(slug string, dirs ...string) (string, error) {
+	for _, dir := range dirs {
+		p := filepath.Join(dir, slug+".toml")
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("model %q not found", slug)
 }

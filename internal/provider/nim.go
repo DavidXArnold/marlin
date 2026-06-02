@@ -148,6 +148,11 @@ func (n *NIMProvider) Switch(ctx context.Context, modelSlug string) error {
 		return err
 	}
 
+	if err := os.MkdirAll(n.cfg.Paths.NIMCache, 0o755); err != nil {
+		return fmt.Errorf("creating NIM cache dir %s: %w\nhint: run 'sudo mkdir -p %s && sudo chown -R $USER %s'",
+			n.cfg.Paths.NIMCache, err, n.cfg.Paths.NIMCache, n.cfg.Paths.NIMCache)
+	}
+
 	portSet := nat.PortSet{"8000/tcp": struct{}{}}
 	portBindings := nat.PortMap{"8000/tcp": []nat.PortBinding{{HostPort: "8000"}}}
 

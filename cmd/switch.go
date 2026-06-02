@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -33,22 +32,31 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	models, names, err := config.ListModels(cfg.Paths.ModelsDir)
+	dirs := effectiveDirs(cfg)
+	models, names, err := config.ListModelsFromDirs(dirs...)
 	if err != nil {
 		return fmt.Errorf("listing models: %w", err)
 	}
+
+	// Load current state early so resolveModel can mark the active model.
+	cur, _ := state.Load(cfg.Paths.StateFile)
 
 	query := ""
 	if len(args) > 0 {
 		query = args[0]
 	}
 
-	targetSlug, err := resolveModel(query, names, models)
+	targetSlug, err := resolveModel(query, names, models, cur.ActiveModel)
 	if err != nil {
 		return err
 	}
 
-	targetModel, err := config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, targetSlug+".toml"))
+	modelPath, err := config.FindModelPath(targetSlug, dirs...)
+	if err != nil {
+		return err
+	}
+
+	targetModel, err := config.LoadModel(modelPath)
 	if err != nil {
 		return err
 	}
@@ -63,9 +71,6 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-
-	// Load current state to detect provider type switch.
-	cur, _ := state.Load(cfg.Paths.StateFile)
 
 	if cur.ActiveModel != "" &&
 		cur.ActiveProvider != targetModel.Model.Type &&
@@ -82,6 +87,9 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
+
+	// Warn if system load is high.
+	checkSystemResources(cfg, cmd.ErrOrStderr())
 
 	// Warn about system path access and escalate privilege if needed.
 	warnAndRequireRoot(cmd.ErrOrStderr(), cfg.Paths.ModelsDir)

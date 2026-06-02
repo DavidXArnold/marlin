@@ -11,6 +11,10 @@ import (
 )
 
 // Injectable for tests.
+var readLoadavg = func() ([]byte, error) {
+	return os.ReadFile("/proc/loadavg")
+}
+
 var (
 	runNvidiaSmi = func() ([]byte, error) {
 		return exec.Command("nvidia-smi",
@@ -143,6 +147,23 @@ func diskUsage(path string) (DiskInfo, error) {
 		TotalGB: float64(st.Blocks*blockSize) / gib,
 		FreeGB:  float64(st.Bavail*blockSize) / gib,
 	}, nil
+}
+
+// LoadAvg1 returns the 1-minute load average from /proc/loadavg, or 0 if unavailable.
+func LoadAvg1() float64 {
+	data, err := readLoadavg()
+	if err != nil {
+		return 0
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return 0
+	}
+	v, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return 0
+	}
+	return v
 }
 
 // FormatMB formats a megabyte count as "X GiB" or "X MiB".

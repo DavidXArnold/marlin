@@ -9,7 +9,6 @@ import (
 
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
-	"github.com/DavidXArnold/marlin/internal/state"
 )
 
 // noopEnableUnit disables enableUnit side-effects for the duration of the test.
@@ -20,66 +19,33 @@ func noopEnableUnit(t *testing.T) {
 	t.Cleanup(func() { enableUnit = old })
 }
 
-// TestStartNoActiveModelOpensPicker: no active model → picker (resolveModel
-// returns error when models dir is empty, which is fine to verify the path).
+// TestStartNoActiveModel: no models → error propagates from switch.
 func TestStartNoActiveModel(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
 	noopRequireRoot(t)
 	noopEnableUnit(t)
 
-	// No models → switch returns an error about empty models dir.
 	_ = modelsDir
 	_, err := executeCmd("start")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no models found")
 }
 
-// TestStartAlreadyRunning: active model + service running → no restart.
-func TestStartAlreadyRunning(t *testing.T) {
+// TestStartSingleModel: one model in dir, no arg → picker returns it directly, switch succeeds.
+func TestStartSingleModel(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
 	noopRequireRoot(t)
-
-	cfg, err := globalConfig()
-	require.NoError(t, err)
-	require.NoError(t, state.Save(cfg.Paths.StateFile, &state.State{
-		ActiveModel:    "llama-8b",
-		ActiveProvider: config.ProviderVLLM,
-	}))
-	writeVLLMModel(t, modelsDir, "llama-8b")
-
-	// Provider reports service running.
-	injectProvider(t, &mockProv{statusRunning: true})
-
-	out, err := executeCmd("start")
-	require.NoError(t, err)
-	assert.Contains(t, out, "already running")
-}
-
-// TestStartServiceStopped: active model + service stopped → switches to it.
-func TestStartServiceStopped(t *testing.T) {
-	modelsDir, cleanup := switchEnv(t)
-	defer cleanup()
-	noopRequireRoot(t)
-
-	cfg, err := globalConfig()
-	require.NoError(t, err)
-	require.NoError(t, state.Save(cfg.Paths.StateFile, &state.State{
-		ActiveModel:    "llama-8b",
-		ActiveProvider: config.ProviderVLLM,
-	}))
-	writeVLLMModel(t, modelsDir, "llama-8b")
-
-	// Default mockProv has statusRunning: false → service stopped.
 	injectProvider(t, &mockProv{})
+	writeVLLMModel(t, modelsDir, "llama-8b")
 
 	out, err := executeCmd("start")
 	require.NoError(t, err)
 	assert.Contains(t, out, "switched to")
 }
 
-// TestStartWithModelArg: explicit model arg → switches directly.
+// TestStartWithModelArg: explicit model arg → switches directly without picker.
 func TestStartWithModelArg(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
@@ -93,7 +59,7 @@ func TestStartWithModelArg(t *testing.T) {
 	assert.Contains(t, out, "switched to")
 }
 
-// TestStartWithEnable: --enable calls enableUnit.
+// TestStartWithEnable: --enable calls enableUnit after a successful switch.
 func TestStartWithEnable(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
@@ -111,20 +77,13 @@ func TestStartWithEnable(t *testing.T) {
 	assert.True(t, enabled)
 }
 
-// TestStartEnableAlreadyRunning: --enable still called even when already running.
-func TestStartEnableAlreadyRunning(t *testing.T) {
+// TestStartEnableNoArg: single model + --enable → switches then calls enableUnit.
+func TestStartEnableNoArg(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
 	noopRequireRoot(t)
-
-	cfg, err := globalConfig()
-	require.NoError(t, err)
-	require.NoError(t, state.Save(cfg.Paths.StateFile, &state.State{
-		ActiveModel:    "llama-8b",
-		ActiveProvider: config.ProviderVLLM,
-	}))
+	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")
-	injectProvider(t, &mockProv{statusRunning: true})
 
 	var enabled bool
 	old := enableUnit
@@ -133,7 +92,7 @@ func TestStartEnableAlreadyRunning(t *testing.T) {
 
 	out, err := executeCmd("start", "--enable")
 	require.NoError(t, err)
-	assert.Contains(t, out, "already running")
+	assert.Contains(t, out, "switched to")
 	assert.True(t, enabled)
 }
 
@@ -159,14 +118,7 @@ func TestStartProviderError(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
 	noopRequireRoot(t)
-	_ = modelsDir
-
-	cfg, err := globalConfig()
-	require.NoError(t, err)
-	require.NoError(t, state.Save(cfg.Paths.StateFile, &state.State{
-		ActiveModel:    "llama-8b",
-		ActiveProvider: config.ProviderVLLM,
-	}))
+	writeVLLMModel(t, modelsDir, "llama-8b")
 
 	old := buildProvider
 	buildProvider = func(_ config.ProviderType, _ *config.Config) (provider.Provider, error) {
@@ -174,7 +126,7 @@ func TestStartProviderError(t *testing.T) {
 	}
 	t.Cleanup(func() { buildProvider = old })
 
-	_, err = executeCmd("start")
+	_, err := executeCmd("start", "llama-8b")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "docker not available")
 }

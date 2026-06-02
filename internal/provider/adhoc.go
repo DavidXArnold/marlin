@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/docker/docker/api/types/container"
@@ -259,6 +260,11 @@ func (a *AdhocRunner) buildContainerConfig(slug string, m *config.ModelConfig) (
 			return "", "", nil, nil, fmt.Errorf("model %q has no image set (required for nim provider)", slug)
 		}
 		labels[labelProvider] = "nim"
+
+		if err := os.MkdirAll(a.cfg.Paths.NIMCache, 0o755); err != nil {
+			return "", "", nil, nil, fmt.Errorf("creating NIM cache dir %s: %w\nhint: run 'sudo mkdir -p %s && sudo chown -R $USER %s'",
+				a.cfg.Paths.NIMCache, err, a.cfg.Paths.NIMCache, a.cfg.Paths.NIMCache)
+		}
 
 		sec, _ := secrets.Load(a.cfg.Paths.SecretsEnv)
 		containerCfg = &container.Config{

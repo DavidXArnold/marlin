@@ -138,7 +138,54 @@ func TestListModelsEmptyDir(t *testing.T) {
 }
 
 func TestListModelsMissingDir(t *testing.T) {
-	_, _, err := ListModels("/nonexistent/dir")
+	cfgs, names, err := ListModels("/nonexistent/dir")
+	assert.NoError(t, err)
+	assert.Empty(t, cfgs)
+	assert.Empty(t, names)
+}
+
+func TestListModelsFromDirsDedup(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir1, "llama.toml"), []byte("[model]\nid=\"a\"\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir1, "qwen.toml"), []byte("[model]\nid=\"b\"\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir2, "llama.toml"), []byte("[model]\nid=\"c\"\n"), 0644)) // duplicate
+	require.NoError(t, os.WriteFile(filepath.Join(dir2, "nim.toml"), []byte("[model]\nid=\"d\"\n"), 0644))
+
+	cfgs, names, err := ListModelsFromDirs(dir1, dir2)
+	require.NoError(t, err)
+	assert.Len(t, names, 3) // llama (dir1 wins), qwen, nim
+	assert.Contains(t, names, "llama")
+	assert.Contains(t, names, "qwen")
+	assert.Contains(t, names, "nim")
+	// dir1's llama should win (id="a")
+	for i, n := range names {
+		if n == "llama" {
+			assert.Equal(t, "a", cfgs[i].Model.ID)
+		}
+	}
+}
+
+func TestListModelsFromDirsMissingDir(t *testing.T) {
+	cfgs, names, err := ListModelsFromDirs("/nonexistent", t.TempDir())
+	require.NoError(t, err)
+	assert.Empty(t, cfgs)
+	assert.Empty(t, names)
+}
+
+func TestFindModelPath(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir2, "mymodel.toml"), []byte("[model]\n"), 0644))
+
+	path, err := FindModelPath("mymodel", dir1, dir2)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dir2, "mymodel.toml"), path)
+}
+
+func TestFindModelPathNotFound(t *testing.T) {
+	_, err := FindModelPath("ghost", t.TempDir(), t.TempDir())
 	assert.Error(t, err)
 }
 

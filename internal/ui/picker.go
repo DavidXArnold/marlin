@@ -25,10 +25,17 @@ type modelItem struct {
 	slug     string
 	provider string
 	status   string
+	active   bool
 }
 
-func (m modelItem) Title() string       { return m.slug }
-func (m modelItem) Description() string { return fmt.Sprintf("%s • %s", m.provider, m.status) }
+func (m modelItem) Title() string { return m.slug }
+func (m modelItem) Description() string {
+	s := fmt.Sprintf("%s • %s", m.provider, m.status)
+	if m.active {
+		s += "  ◀ active"
+	}
+	return s
+}
 func (m modelItem) FilterValue() string { return m.slug }
 
 // itemDelegate renders list items with consistent styling.
@@ -109,8 +116,10 @@ func FuzzyMatch(query string, names []string) []string {
 
 // PickModel presents an interactive fuzzy-searchable list of model slugs and
 // returns the user's selection. If names has exactly one entry it is returned
-// directly. prefilter is an optional initial search string.
-func PickModel(names []string, cfgs []*config.ModelConfig, prefilter string) (string, error) {
+// directly. prefilter is an optional initial search string. activeSlug marks
+// the currently-active model with a ◀ indicator and pre-positions the cursor
+// on it (pass "" to skip).
+func PickModel(names []string, cfgs []*config.ModelConfig, prefilter, activeSlug string) (string, error) {
 	if len(names) == 0 {
 		return "", fmt.Errorf("no models found — run 'marlin add' to create one")
 	}
@@ -118,12 +127,17 @@ func PickModel(names []string, cfgs []*config.ModelConfig, prefilter string) (st
 		return names[0], nil
 	}
 
+	initialIndex := 0
 	items := make([]list.Item, len(names))
 	for i, slug := range names {
 		item := modelItem{slug: slug, provider: "vllm", status: "untested"}
 		if i < len(cfgs) && cfgs[i] != nil {
 			item.provider = string(cfgs[i].Model.Type)
 			item.status = string(cfgs[i].Model.Status)
+		}
+		if activeSlug != "" && slug == activeSlug {
+			item.active = true
+			initialIndex = i
 		}
 		items[i] = item
 	}
@@ -133,6 +147,7 @@ func PickModel(names []string, cfgs []*config.ModelConfig, prefilter string) (st
 	l.Styles.Title = titleStyle
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(true)
+	l.Select(initialIndex)
 	if prefilter != "" {
 		l.SetFilterText(prefilter)
 	}

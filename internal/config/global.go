@@ -7,6 +7,14 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+func defaultModelsDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/etc/marlin/models"
+	}
+	return filepath.Join(home, ".config", "marlin", "models")
+}
+
 type Config struct {
 	Behavior   BehaviorConfig   `toml:"behavior"`
 	Paths      PathsConfig      `toml:"paths"`
@@ -16,20 +24,24 @@ type Config struct {
 }
 
 type BehaviorConfig struct {
-	SwitchPrompt            bool `toml:"switch_prompt"`
-	AddAutoDetect           bool `toml:"add_auto_detect"`
-	LogTailLines            int  `toml:"log_tail_lines"`
-	AllowTypeSwitch         bool `toml:"allow_type_switch"`
-	WarnUnmanagedContainers bool `toml:"warn_unmanaged_containers"`
-	CheckUpdates            bool `toml:"check_updates"`
+	SwitchPrompt              bool    `toml:"switch_prompt"`
+	AddAutoDetect             bool    `toml:"add_auto_detect"`
+	LogTailLines              int     `toml:"log_tail_lines"`
+	AllowTypeSwitch           bool    `toml:"allow_type_switch"`
+	WarnUnmanagedContainers   bool    `toml:"warn_unmanaged_containers"`
+	CheckUpdates              bool    `toml:"check_updates"`
+	GlobalInstall             bool    `toml:"global_install"`
+	WarnOnSystemResources     bool    `toml:"warn_on_system_resources"`
+	SystemLoadThreshold       float64 `toml:"system_load_threshold"`
 }
 
 type PathsConfig struct {
-	ModelsDir     string `toml:"models_dir"`
-	ActiveSymlink string `toml:"active_symlink"`
-	SecretsEnv    string `toml:"secrets_env"`
-	StateFile     string `toml:"state_file"`
-	NIMCache      string `toml:"nim_cache"` // host path mounted into NIM containers
+	ModelsDir       string `toml:"models_dir"`
+	GlobalModelsDir string `toml:"global_models_dir"`
+	ActiveSymlink   string `toml:"active_symlink"`
+	SecretsEnv      string `toml:"secrets_env"`
+	StateFile       string `toml:"state_file"`
+	NIMCache        string `toml:"nim_cache"` // host path mounted into NIM containers
 }
 
 type ServiceConfig struct {
@@ -76,13 +88,17 @@ func Defaults() *Config {
 			AllowTypeSwitch:         true,
 			WarnUnmanagedContainers: true,
 			CheckUpdates:            true,
+			GlobalInstall:           false,
+			WarnOnSystemResources:   true,
+			SystemLoadThreshold:     0.8,
 		},
 		Paths: PathsConfig{
-			ModelsDir:     "/etc/marlin/models",
-			ActiveSymlink: "/etc/marlin/model.env",
-			SecretsEnv:    defaultSecretsPath(),
-			StateFile:     "/var/lib/marlin/state.toml",
-			NIMCache:      "/var/cache/nim",
+			ModelsDir:       defaultModelsDir(),
+			GlobalModelsDir: "/etc/marlin/models",
+			ActiveSymlink:   "/etc/marlin/model.env",
+			SecretsEnv:      defaultSecretsPath(),
+			StateFile:       "/var/lib/marlin/state.toml",
+			NIMCache:        "/var/cache/nim",
 		},
 		Service: ServiceConfig{
 			SystemdUnit:     "marlin",

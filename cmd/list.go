@@ -25,7 +25,7 @@ func runList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	models, names, err := config.ListModels(cfg.Paths.ModelsDir)
+	models, names, err := config.ListModelsFromDirs(effectiveDirs(cfg)...)
 	if err != nil {
 		return fmt.Errorf("listing models: %w", err)
 	}

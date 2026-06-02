@@ -113,7 +113,7 @@ func TestPickerModelUpdateWindowSize(t *testing.T) {
 }
 
 func TestPickModelSingleEntry(t *testing.T) {
-	got, err := PickModel([]string{"only-one"}, nil, "")
+	got, err := PickModel([]string{"only-one"}, nil, "", "")
 	assert.NoError(t, err)
 	assert.Equal(t, "only-one", got)
 }
@@ -122,7 +122,7 @@ func TestPickModelWithCfgs(t *testing.T) {
 	cfgs := []*config.ModelConfig{
 		{Model: config.ModelMeta{Type: "vllm", Status: "working"}},
 	}
-	got, err := PickModel([]string{"qwen25-72b"}, cfgs, "")
+	got, err := PickModel([]string{"qwen25-72b"}, cfgs, "", "")
 	assert.NoError(t, err)
 	assert.Equal(t, "qwen25-72b", got)
 }

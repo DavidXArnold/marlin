@@ -32,6 +32,7 @@ func init() {
 	rootCmd.AddCommand(searchCmd)
 	searchCmd.Flags().StringSlice("registry", []string{"huggingface", "ngc"}, "Registries to search")
 	searchCmd.Flags().Bool("plain", false, "Plain table output; skip interactive picker")
+	searchCmd.Flags().Bool("global", false, "Install to system models dir when adding a result")
 }
 
 // stdoutIsTerminal is injectable for tests.
@@ -85,6 +86,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	regs, _ := cmd.Flags().GetStringSlice("registry")
 	plain, _ := cmd.Flags().GetBool("plain")
+	global, _ := cmd.Flags().GetBool("global")
 	query := args[0]
 	w := cmd.OutOrStdout()
 	writef := func(format string, args ...any) error {
@@ -226,7 +228,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		}
 
 	case ui.SearchActionAdd:
-		return addFromSearchResult(cfg, *selected, w)
+		return addFromSearchResult(cfg, *selected, w, global)
 
 	case ui.SearchActionRun:
 		return runFromSearchResult(cmd, cfg, *selected, w)
@@ -237,9 +239,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 // addFromSearchResult derives a slug and writes a model TOML to the models dir.
 // If the dir is not user-writable, it warns and prompts before writing via sudo.
-func addFromSearchResult(cfg *config.Config, m registry.ModelInfo, w io.Writer) error {
+func addFromSearchResult(cfg *config.Config, m registry.ModelInfo, w io.Writer, global bool) error {
 	slug := ui.AutoSlug(m.ID)
-	destDir := cfg.Paths.ModelsDir
+	destDir := installDir(cfg, global)
 	path := filepath.Join(destDir, slug+".toml")
 
 	if _, err := os.Stat(path); err == nil {

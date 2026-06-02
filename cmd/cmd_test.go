@@ -693,7 +693,7 @@ func TestAddFromSearchResultNew(t *testing.T) {
 		Quantization:  "awq",
 		ParamsBillion: 7,
 	}
-	err = addFromSearchResult(cfg, m, io.Discard)
+	err = addFromSearchResult(cfg, m, io.Discard, false)
 	require.NoError(t, err)
 }
 
@@ -706,7 +706,7 @@ func TestAddFromSearchResultAlreadyExists(t *testing.T) {
 	require.NoError(t, err)
 
 	m := registry.ModelInfo{ID: "Qwen/Qwen2.5-7B-Instruct-AWQ", Registry: "huggingface"}
-	err = addFromSearchResult(cfg, m, io.Discard)
+	err = addFromSearchResult(cfg, m, io.Discard, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
 }
@@ -719,7 +719,7 @@ func TestAddFromSearchResultNGC(t *testing.T) {
 	require.NoError(t, err)
 
 	m := registry.ModelInfo{ID: "nvcr.io/nim/meta/llama:latest", Registry: "ngc"}
-	require.NoError(t, addFromSearchResult(cfg, m, io.Discard))
+	require.NoError(t, addFromSearchResult(cfg, m, io.Discard, false))
 
 	slug := ui.AutoSlug(m.ID)
 	saved, err := config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))

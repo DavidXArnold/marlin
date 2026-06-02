@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -28,7 +27,12 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	}
 
 	slug := args[0]
-	m, err := config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
+	modelPath, err := config.FindModelPath(slug, effectiveDirs(cfg)...)
+	if err != nil {
+		return fmt.Errorf("model %q not found", slug)
+	}
+
+	m, err := config.LoadModel(modelPath)
 	if err != nil {
 		return fmt.Errorf("loading model %q: %w", slug, err)
 	}
