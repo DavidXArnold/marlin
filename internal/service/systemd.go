@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 )
 
@@ -13,10 +14,15 @@ type ExecRunner func(ctx context.Context, name string, args ...string) ([]byte, 
 type SystemdManager struct {
 	unit       string
 	execRunner ExecRunner
+	sudo       bool // prefix systemctl with sudo when true
 }
 
 func NewSystemdManager(unit string) *SystemdManager {
-	return &SystemdManager{unit: unit, execRunner: defaultExecRunner}
+	return &SystemdManager{
+		unit:       unit,
+		execRunner: defaultExecRunner,
+		sudo:       os.Getuid() != 0,
+	}
 }
 
 // NewSystemdManagerWithRunner creates a SystemdManager with a custom runner,
@@ -75,7 +81,13 @@ func (s *SystemdManager) IsEnabled(ctx context.Context) (bool, error) {
 }
 
 func (s *SystemdManager) systemctl(ctx context.Context, action string) error {
-	out, err := s.execRunner(ctx, "systemctl", action, s.unit)
+	var out []byte
+	var err error
+	if s.sudo {
+		out, err = s.execRunner(ctx, "sudo", "systemctl", action, s.unit)
+	} else {
+		out, err = s.execRunner(ctx, "systemctl", action, s.unit)
+	}
 	if err != nil {
 		return fmt.Errorf("systemctl %s %s: %w\n%s", action, s.unit, err, out)
 	}

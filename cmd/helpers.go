@@ -37,7 +37,7 @@ func globalConfig() (*config.Config, error) {
 var buildProvider = func(pt config.ProviderType, cfg *config.Config) (provider.Provider, error) {
 	switch pt {
 	case config.ProviderVLLM, "":
-		return provider.NewVLLMProvider(cfg), nil
+		return provider.NewVLLMProvider(cfg, effectiveDirs(cfg)), nil
 	case config.ProviderNIM:
 		sec, err := secrets.Load(cfg.Paths.SecretsEnv)
 		if err != nil {

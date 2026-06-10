@@ -329,3 +329,151 @@ func TestPromptAndWriteFileSudoFails(t *testing.T) {
 	assert.False(t, ok)
 	assert.Error(t, err)
 }
+
+// --- PromptAndRemove ---
+
+func TestPromptAndRemoveSuccess(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "model.toml")
+	require.NoError(t, os.WriteFile(path, []byte("x"), 0644))
+
+	var buf bytes.Buffer
+	require.NoError(t, PromptAndRemove(&buf, path))
+	_, err := os.Stat(path)
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestPromptAndRemoveNotPermission(t *testing.T) {
+	err := PromptAndRemove(os.Stderr, "/nonexistent/model.toml")
+	assert.Error(t, err)
+	assert.NotContains(t, err.Error(), "cancelled")
+}
+
+func TestPromptAndRemoveUserConfirms(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses permission checks")
+	}
+	oldGetuid := getuid
+	oldStdin := stdinR
+	oldSudo := sudoRun
+	getuid = func() int { return 1000 }
+	stdinR = strings.NewReader("y\n")
+	var removedPath string
+	sudoRun = func(args []string) error { removedPath = args[1]; return nil }
+	defer func() { getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo }()
+
+	// Create the file before making the dir non-writable.
+	base := t.TempDir()
+	path := filepath.Join(base, "model.toml")
+	require.NoError(t, os.WriteFile(path, []byte("x"), 0644))
+	require.NoError(t, os.Chmod(base, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(base, 0o755) })
+
+	var buf bytes.Buffer
+	err := PromptAndRemove(&buf, path)
+	require.NoError(t, err)
+	assert.Equal(t, path, removedPath)
+	assert.Contains(t, buf.String(), "warning:")
+}
+
+func TestPromptAndRemoveUserDeclines(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses permission checks")
+	}
+	oldGetuid := getuid
+	oldStdin := stdinR
+	oldSudo := sudoRun
+	getuid = func() int { return 1000 }
+	stdinR = strings.NewReader("n\n")
+	sudoRun = func(_ []string) error { t.Fatal("sudo should not be called"); return nil }
+	defer func() { getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo }()
+
+	base := t.TempDir()
+	path := filepath.Join(base, "model.toml")
+	require.NoError(t, os.WriteFile(path, []byte("x"), 0644))
+	require.NoError(t, os.Chmod(base, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(base, 0o755) })
+
+	var buf bytes.Buffer
+	err := PromptAndRemove(&buf, path)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}
+
+// --- PromptAndSymlink + atomicSymlinkImpl ---
+
+func TestAtomicSymlinkImplSuccess(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.env")
+	dst := filepath.Join(dir, "link.env")
+	require.NoError(t, os.WriteFile(src, []byte("x"), 0644))
+
+	require.NoError(t, atomicSymlinkImpl(src, dst))
+	got, err := os.Readlink(dst)
+	require.NoError(t, err)
+	assert.Equal(t, src, got)
+}
+
+func TestAtomicSymlinkImplReplacesExisting(t *testing.T) {
+	dir := t.TempDir()
+	srcA := filepath.Join(dir, "a.env")
+	srcB := filepath.Join(dir, "b.env")
+	dst := filepath.Join(dir, "link.env")
+	require.NoError(t, os.WriteFile(srcA, []byte("a"), 0644))
+	require.NoError(t, os.WriteFile(srcB, []byte("b"), 0644))
+
+	require.NoError(t, atomicSymlinkImpl(srcA, dst))
+	require.NoError(t, atomicSymlinkImpl(srcB, dst))
+	got, err := os.Readlink(dst)
+	require.NoError(t, err)
+	assert.Equal(t, srcB, got)
+}
+
+func TestPromptAndSymlinkSuccess(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "model.env")
+	dst := filepath.Join(dir, "active.env")
+	require.NoError(t, os.WriteFile(src, []byte("x"), 0644))
+
+	var buf bytes.Buffer
+	require.NoError(t, PromptAndSymlink(&buf, src, dst))
+	got, err := os.Readlink(dst)
+	require.NoError(t, err)
+	assert.Equal(t, src, got)
+}
+
+func TestPromptAndSymlinkUserConfirms(t *testing.T) {
+	oldGetuid := getuid
+	oldStdin := stdinR
+	oldSudo := sudoRun
+	getuid = func() int { return 1000 }
+	stdinR = strings.NewReader("y\n")
+	var lnArgs []string
+	sudoRun = func(args []string) error { lnArgs = args; return nil }
+	defer func() { getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo }()
+
+	dir := nonWritableDir(t)
+	src := filepath.Join(t.TempDir(), "model.env")
+	dst := filepath.Join(dir, "active.env")
+	var buf bytes.Buffer
+	// atomicSymlinkImpl will fail (MkdirAll or Symlink permission denied)
+	err := PromptAndSymlink(&buf, src, dst)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ln", "-sf", src, dst}, lnArgs)
+}
+
+func TestPromptAndSymlinkUserDeclines(t *testing.T) {
+	oldGetuid := getuid
+	oldStdin := stdinR
+	oldSudo := sudoRun
+	getuid = func() int { return 1000 }
+	stdinR = strings.NewReader("n\n")
+	sudoRun = func(_ []string) error { t.Fatal("sudo should not be called"); return nil }
+	defer func() { getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo }()
+
+	dir := nonWritableDir(t)
+	var buf bytes.Buffer
+	err := PromptAndSymlink(&buf, "src.env", filepath.Join(dir, "active.env"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}

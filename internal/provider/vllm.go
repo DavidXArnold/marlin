@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/privilege"
 	"github.com/DavidXArnold/marlin/internal/service"
 	"github.com/DavidXArnold/marlin/pkg/render"
 )
@@ -16,24 +17,31 @@ import (
 //
 // Layout on disk:
 //
-//	/etc/marlin/models/<slug>.env   rendered env file for each model
-//	/etc/marlin/model.env           symlink → active model's .env file
+//	<models_dir>/<slug>.env   rendered env file for each model
+//	<active_symlink>          symlink → active model's .env file
 //
 // On switch: write the new .env, atomically replace the symlink, restart the
-// systemd unit.  The old .env is left in place so the previous model can be
+// systemd unit. The old .env is left in place so the previous model can be
 // switched back without regenerating it.
 type VLLMProvider struct {
 	cfg       *config.Config
 	svc       *service.SystemdManager
+	w         io.Writer // for privilege prompts; defaults to os.Stderr
 	loadModel func(slug string) (*config.ModelConfig, error)
 }
 
-func NewVLLMProvider(cfg *config.Config) *VLLMProvider {
+// NewVLLMProvider builds a VLLMProvider that searches dirs for model configs.
+// dirs should be ordered by preference (user dir first, then global dir).
+func NewVLLMProvider(cfg *config.Config, dirs []string) *VLLMProvider {
 	return &VLLMProvider{
 		cfg: cfg,
 		svc: service.NewSystemdManager(cfg.Service.SystemdUnit),
+		w:   os.Stderr,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
-			path := filepath.Join(cfg.Paths.ModelsDir, slug+".toml")
+			path, err := config.FindModelPath(slug, dirs...)
+			if err != nil {
+				return nil, err
+			}
 			return config.LoadModel(path)
 		},
 	}
@@ -46,11 +54,17 @@ func (v *VLLMProvider) Switch(ctx context.Context, modelSlug string) error {
 	}
 
 	envPath := filepath.Join(v.cfg.Paths.ModelsDir, modelSlug+".env")
-	if err := writeEnvFile(envPath, render.Env(m)); err != nil {
+	envContent := []byte(render.Env(m))
+
+	written, err := privilege.PromptAndWriteFile(v.w, filepath.Dir(envPath), envPath, envContent)
+	if err != nil {
 		return fmt.Errorf("writing env file: %w", err)
 	}
+	if !written {
+		return fmt.Errorf("writing env file: cancelled")
+	}
 
-	if err := atomicSymlink(envPath, v.cfg.Paths.ActiveSymlink); err != nil {
+	if err := privilege.PromptAndSymlink(v.w, envPath, v.cfg.Paths.ActiveSymlink); err != nil {
 		return fmt.Errorf("updating active symlink: %w", err)
 	}
 
@@ -72,7 +86,6 @@ func (v *VLLMProvider) Status(ctx context.Context) (*Status, error) {
 	if active {
 		target, err := os.Readlink(v.cfg.Paths.ActiveSymlink)
 		if err == nil {
-			// Derive model ID from symlink target filename (strip dir + .env)
 			base := filepath.Base(target)
 			if len(base) > 4 {
 				s.ModelID = base[:len(base)-4]
@@ -93,6 +106,7 @@ func (v *VLLMProvider) Logs(ctx context.Context, w io.Writer, follow bool, lines
 }
 
 // writeEnvFile writes content to path, creating parent directories as needed.
+// Used directly in tests; production code uses privilege.PromptAndWriteFile.
 func writeEnvFile(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -102,13 +116,13 @@ func writeEnvFile(path, content string) error {
 
 // atomicSymlink replaces linkPath so it points at target, atomically via a
 // temp symlink + rename to avoid a window where the link doesn't exist.
+// Used directly in tests; production code uses privilege.PromptAndSymlink.
 func atomicSymlink(target, linkPath string) error {
 	if err := os.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
 		return err
 	}
 
 	tmp := linkPath + ".tmp"
-	// Remove stale temp if present
 	_ = os.Remove(tmp)
 
 	if err := os.Symlink(target, tmp); err != nil {

@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/privilege"
 )
 
 var rmCmd = &cobra.Command{
@@ -32,7 +32,7 @@ func runRm(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("model %q not found", slug)
 	}
 
-	if err := os.Remove(path); err != nil {
+	if err := privilege.PromptAndRemove(cmd.OutOrStdout(), path); err != nil {
 		return fmt.Errorf("removing %s: %w", path, err)
 	}
 

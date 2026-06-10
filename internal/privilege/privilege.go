@@ -118,6 +118,65 @@ func PromptAndWriteFile(w io.Writer, dir, path string, data []byte) (bool, error
 	return true, nil
 }
 
+// PromptAndRemove removes path. If the removal fails with a permission error,
+// it warns on w, prompts for y/n confirmation, then retries via sudo rm.
+func PromptAndRemove(w io.Writer, path string) error {
+	if err := os.Remove(path); err == nil {
+		return nil
+	} else if !os.IsPermission(err) {
+		return err
+	}
+	_, _ = fmt.Fprintf(w, "\nwarning: removing %s requires administrator privileges\n", path)
+	_, _ = fmt.Fprint(w, "continue with sudo? [y/N] ")
+	buf := make([]byte, 64)
+	n, _ := stdinR.Read(buf)
+	if strings.ToLower(strings.TrimSpace(string(buf[:n]))) != "y" {
+		_, _ = fmt.Fprintln(w, "cancelled")
+		return fmt.Errorf("cancelled")
+	}
+	return sudoRun([]string{"rm", path})
+}
+
+// PromptAndSymlink creates or atomically replaces dst as a symlink pointing to src.
+// If the target directory requires root, warns on w, prompts for confirmation, then
+// falls back to sudo ln -sf. Returns a non-nil error (including "cancelled") on failure.
+func PromptAndSymlink(w io.Writer, src, dst string) error {
+	err := atomicSymlinkImpl(src, dst)
+	if err == nil {
+		return nil
+	}
+	if !os.IsPermission(err) {
+		return err
+	}
+	_, _ = fmt.Fprintf(w, "\nwarning: updating symlink at %s requires administrator privileges\n", dst)
+	_, _ = fmt.Fprint(w, "continue with sudo? [y/N] ")
+	buf := make([]byte, 64)
+	n, _ := stdinR.Read(buf)
+	if strings.ToLower(strings.TrimSpace(string(buf[:n]))) != "y" {
+		_, _ = fmt.Fprintln(w, "cancelled")
+		return fmt.Errorf("cancelled")
+	}
+	return sudoRun([]string{"ln", "-sf", src, dst})
+}
+
+// atomicSymlinkImpl replaces dst so it points at src, atomically via a
+// temp symlink + rename so the link is never absent during the swap.
+func atomicSymlinkImpl(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	tmp := dst + ".tmp"
+	_ = os.Remove(tmp)
+	if err := os.Symlink(src, tmp); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
 // WarnAndRequireRoot checks whether targetPath needs root access. If it does,
 // it prints a warning, prompts for confirmation on stdin, then re-execs the
 // current process under sudo. If the user declines, it prints "cancelled" and

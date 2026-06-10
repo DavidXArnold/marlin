@@ -44,18 +44,9 @@ func injectProvider(t *testing.T, p provider.Provider) {
 	t.Cleanup(func() { buildProvider = old })
 }
 
-// noopRequireRoot disables privilege escalation for the duration of the test.
-func noopRequireRoot(t *testing.T) {
-	t.Helper()
-	oldReq := requireRoot
-	oldWarn := warnAndRequireRoot
-	requireRoot = func() {}
-	warnAndRequireRoot = func(_ io.Writer, _ string) {}
-	t.Cleanup(func() {
-		requireRoot = oldReq
-		warnAndRequireRoot = oldWarn
-	})
-}
+// noopRequireRoot is a no-op kept for call-site compatibility; privilege
+// escalation is now handled inline by the privilege package.
+func noopRequireRoot(_ *testing.T) {}
 
 // switchEnv creates a temp config with switch_prompt=false and returns the
 // models dir path and cleanup func.

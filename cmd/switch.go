@@ -6,14 +6,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
-	"github.com/DavidXArnold/marlin/internal/privilege"
 	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/ui"
 	"github.com/DavidXArnold/marlin/internal/validate"
 )
-
-var requireRoot = privilege.RequireRoot
-var warnAndRequireRoot = privilege.WarnAndRequireRoot
 
 var switchCmd = &cobra.Command{
 	Use:   "switch [model]",
@@ -90,9 +86,6 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 
 	// Warn if system load is high.
 	checkSystemResources(cfg, cmd.ErrOrStderr())
-
-	// Warn about system path access and escalate privilege if needed.
-	warnAndRequireRoot(cmd.ErrOrStderr(), cfg.Paths.ModelsDir)
 
 	// Stop old provider if the type is changing.
 	if cur.ActiveModel != "" && cur.ActiveProvider != targetModel.Model.Type {

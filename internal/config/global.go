@@ -15,6 +15,14 @@ func defaultModelsDir() string {
 	return filepath.Join(home, ".config", "marlin", "models")
 }
 
+func defaultStateFile() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/var/lib/marlin/state.toml"
+	}
+	return filepath.Join(home, ".local", "share", "marlin", "state.toml")
+}
+
 type Config struct {
 	Behavior   BehaviorConfig   `toml:"behavior"`
 	Paths      PathsConfig      `toml:"paths"`
@@ -97,7 +105,7 @@ func Defaults() *Config {
 			GlobalModelsDir: "/etc/marlin/models",
 			ActiveSymlink:   "/etc/marlin/model.env",
 			SecretsEnv:      defaultSecretsPath(),
-			StateFile:       "/var/lib/marlin/state.toml",
+			StateFile:       defaultStateFile(),
 			NIMCache:        "/var/cache/nim",
 		},
 		Service: ServiceConfig{

@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
-	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
 
+	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/privilege"
 	"github.com/DavidXArnold/marlin/internal/ui"
 )
 
@@ -41,25 +41,26 @@ func runAdd(cmd *cobra.Command, _ []string) error {
 
 	global, _ := cmd.Flags().GetBool("global")
 	destDir := installDir(cfg, global)
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("creating models dir: %w", err)
-	}
-
 	destPath := filepath.Join(destDir, result.Slug+".toml")
-	if _, err := os.Stat(destPath); err == nil {
-		return fmt.Errorf("model %q already exists at %s", result.Slug, destPath)
+
+	if _, statErr := config.FindModelPath(result.Slug, effectiveDirs(cfg)...); statErr == nil {
+		return fmt.Errorf("model %q already exists", result.Slug)
 	}
 
-	f, err := os.Create(destPath)
+	data, err := config.ModelConfigToBytes(result.Cfg)
 	if err != nil {
-		return fmt.Errorf("creating model file: %w", err)
+		return fmt.Errorf("encoding model config: %w", err)
 	}
-	defer func() { _ = f.Close() }()
 
-	if err := toml.NewEncoder(f).Encode(result.Cfg); err != nil {
+	w := cmd.OutOrStdout()
+	written, err := privilege.PromptAndWriteFile(w, destDir, destPath, data)
+	if err != nil {
 		return fmt.Errorf("writing model config: %w", err)
 	}
+	if !written {
+		return nil // cancelled
+	}
 
-	_, err = fmt.Fprintf(cmd.OutOrStdout(), "created %s\n", destPath)
+	_, err = fmt.Fprintf(w, "created %s\n", destPath)
 	return err
 }
