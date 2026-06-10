@@ -20,7 +20,7 @@ func TestIntegrationVLLMProviderSwitch(t *testing.T) {
 	slug := "qwen25-72b-awq"
 	env.addModel(t, slug)
 
-	p := provider.NewVLLMProvider(env.cfg)
+	p := provider.NewVLLMProvider(env.cfg, []string{env.modelsDir})
 	// systemd restart will fail in CI (no daemon / unit doesn't exist). That's
 	// expected and acceptable — we only assert the filesystem work happened.
 	_ = p.Switch(context.Background(), slug)
@@ -40,7 +40,7 @@ func TestIntegrationVLLMProviderSwitchTwice(t *testing.T) {
 	env.addModel(t, "model-a")
 	env.addModel(t, "model-b")
 
-	p := provider.NewVLLMProvider(env.cfg)
+	p := provider.NewVLLMProvider(env.cfg, []string{env.modelsDir})
 	_ = p.Switch(context.Background(), "model-a")
 	_ = p.Switch(context.Background(), "model-b")
 
@@ -55,7 +55,7 @@ func TestIntegrationVLLMProviderSwitchTwice(t *testing.T) {
 
 func TestIntegrationVLLMProviderSwitchMissingModel(t *testing.T) {
 	env := newTestEnv(t)
-	p := provider.NewVLLMProvider(env.cfg)
+	p := provider.NewVLLMProvider(env.cfg, []string{env.modelsDir})
 	err := p.Switch(context.Background(), "does-not-exist")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does-not-exist")

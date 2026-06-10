@@ -36,6 +36,33 @@ func TestModelMissingID(t *testing.T) {
 	assert.True(t, hasError(issues, "model.id is required"))
 }
 
+func TestModelNIMMissingImage(t *testing.T) {
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{Type: config.ProviderNIM},
+		Serve: config.ServeConfig{GPUMemoryUtilization: 0.9},
+	}
+	issues := Model(m, "gn100")
+	assert.True(t, hasError(issues, "model.image is required"))
+}
+
+func TestModelNIMWithImageNoIDRequired(t *testing.T) {
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{
+			Type:  config.ProviderNIM,
+			Image: "nvcr.io/nim/meta/llama:latest",
+		},
+		Serve: config.ServeConfig{
+			GPUMemoryUtilization: 0.9,
+			ServedModelName:      []string{"gn100"},
+		},
+	}
+	issues := Model(m, "gn100")
+	// No error — image satisfies the identity check for NIM
+	for _, iss := range issues {
+		assert.NotEqual(t, LevelError, iss.Level, "unexpected error: %s", iss.Message)
+	}
+}
+
 func TestModelMissingGPUMemory(t *testing.T) {
 	m := validModel()
 	m.Serve.GPUMemoryUtilization = 0

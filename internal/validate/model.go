@@ -37,6 +37,12 @@ func Model(m *config.ModelConfig, serverAlias string) []Issue {
 }
 
 func checkModelID(m *config.ModelConfig) []Issue {
+	if m.Model.Type == config.ProviderNIM {
+		if m.Model.Image == "" {
+			return []Issue{{Level: LevelError, Message: "model.image is required for NIM models"}}
+		}
+		return nil
+	}
 	if m.Model.ID == "" {
 		return []Issue{{Level: LevelError, Message: "model.id is required"}}
 	}
