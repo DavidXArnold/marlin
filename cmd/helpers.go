@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
@@ -76,7 +77,7 @@ func installDir(cfg *config.Config, global bool) string {
 // the query is empty. activeSlug is marked with ◀ in the picker (pass "" to skip).
 // When query is non-empty, an ambiguous fuzzy match is an error — the picker is
 // never shown if the user provided an explicit model identifier.
-func resolveModel(query string, names []string, cfgs []*config.ModelConfig, activeSlug string) (string, error) {
+func resolveModel(query string, names []string, cfgs []*config.ModelConfig, activeSlug string, history map[string]time.Time) (string, error) {
 	if len(names) == 0 {
 		return "", fmt.Errorf("no models found in models directory — run 'marlin add' first")
 	}
@@ -92,7 +93,7 @@ func resolveModel(query string, names []string, cfgs []*config.ModelConfig, acti
 		return "", fmt.Errorf("ambiguous model %q — be more specific (matches: %v)", query, matches)
 	}
 
-	return ui.PickModel(names, cfgs, "", activeSlug)
+	return ui.PickModel(names, cfgs, "", activeSlug, history)
 }
 
 // checkSystemResources warns on stderr if the 1-minute load average exceeds

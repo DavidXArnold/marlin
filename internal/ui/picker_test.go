@@ -109,13 +109,13 @@ func TestConfirmModelEsc(t *testing.T) {
 }
 
 func TestPickModelSingleReturnsDirectly(t *testing.T) {
-	result, err := PickModel([]string{"only-model"}, nil, "", "")
+	result, err := PickModel([]string{"only-model"}, nil, "", "", nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "only-model", result)
 }
 
 func TestPickModelEmpty(t *testing.T) {
-	_, err := PickModel([]string{}, nil, "", "")
+	_, err := PickModel([]string{}, nil, "", "", nil)
 	assert.Error(t, err)
 }
 

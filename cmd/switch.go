@@ -42,7 +42,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		query = args[0]
 	}
 
-	targetSlug, err := resolveModel(query, names, models, cur.ActiveModel)
+	targetSlug, err := resolveModel(query, names, models, cur.ActiveModel, cur.ModelHistory)
 	if err != nil {
 		return err
 	}
@@ -109,14 +109,16 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Persist state.
+	// Persist state, carrying over history and recording this start.
 	newState := &state.State{
 		ActiveModel:    targetSlug,
 		ActiveProvider: targetModel.Model.Type,
+		ModelHistory:   cur.ModelHistory,
 	}
 	if st, err := p.Status(cmd.Context()); err == nil {
 		newState.ContainerID = st.ContainerID
 	}
+	state.RecordStart(newState, targetSlug)
 	if err := state.Save(cfg.Paths.StateFile, newState); err != nil {
 		if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not save state: %v\n", err); writeErr != nil {
 			return writeErr

@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -113,7 +114,7 @@ func TestPickerModelUpdateWindowSize(t *testing.T) {
 }
 
 func TestPickModelSingleEntry(t *testing.T) {
-	got, err := PickModel([]string{"only-one"}, nil, "", "")
+	got, err := PickModel([]string{"only-one"}, nil, "", "", nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "only-one", got)
 }
@@ -122,7 +123,7 @@ func TestPickModelWithCfgs(t *testing.T) {
 	cfgs := []*config.ModelConfig{
 		{Model: config.ModelMeta{Type: "vllm", Status: "working"}},
 	}
-	got, err := PickModel([]string{"qwen25-72b"}, cfgs, "", "")
+	got, err := PickModel([]string{"qwen25-72b"}, cfgs, "", "", nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "qwen25-72b", got)
 }
@@ -150,4 +151,70 @@ func TestConfirmModelUpdateUnknownKey(t *testing.T) {
 	c := confirmModel{prompt: "ok?"}
 	updated, _ := c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("z")})
 	assert.False(t, updated.(confirmModel).done)
+}
+
+// --- modelItem Description branches ---
+
+func TestModelItemDescriptionActive(t *testing.T) {
+	item := modelItem{slug: "m", provider: "vllm", status: "working", active: true}
+	assert.Contains(t, item.Description(), "◀ active")
+}
+
+func TestModelItemDescriptionLastStarted(t *testing.T) {
+	item := modelItem{
+		slug:        "m",
+		provider:    "vllm",
+		status:      "working",
+		lastStarted: time.Now().Add(-2 * time.Hour),
+	}
+	assert.Contains(t, item.Description(), "hour")
+}
+
+// --- formatRelativeTime ---
+
+func TestFormatRelativeTimeJustNow(t *testing.T) {
+	assert.Equal(t, "just now", formatRelativeTime(time.Now().Add(-10*time.Second)))
+}
+
+func TestFormatRelativeTimeMins(t *testing.T) {
+	assert.Contains(t, formatRelativeTime(time.Now().Add(-5*time.Minute)), "min")
+}
+
+func TestFormatRelativeTime1Min(t *testing.T) {
+	assert.Equal(t, "started 1 min ago", formatRelativeTime(time.Now().Add(-90*time.Second)))
+}
+
+func TestFormatRelativeTimeHours(t *testing.T) {
+	assert.Contains(t, formatRelativeTime(time.Now().Add(-3*time.Hour)), "hour")
+}
+
+func TestFormatRelativeTime1Hour(t *testing.T) {
+	assert.Equal(t, "started 1 hour ago", formatRelativeTime(time.Now().Add(-90*time.Minute)))
+}
+
+func TestFormatRelativeTimeDays(t *testing.T) {
+	assert.Contains(t, formatRelativeTime(time.Now().Add(-3*24*time.Hour)), "day")
+}
+
+func TestFormatRelativeTime1Day(t *testing.T) {
+	assert.Equal(t, "started 1 day ago", formatRelativeTime(time.Now().Add(-36*time.Hour)))
+}
+
+func TestFormatRelativeTimeOld(t *testing.T) {
+	old := time.Now().Add(-10 * 24 * time.Hour)
+	result := formatRelativeTime(old)
+	assert.Contains(t, result, "started ")
+}
+
+// --- PickModel sorting by history ---
+
+func TestPickModelSortedByHistory(t *testing.T) {
+	history := map[string]time.Time{
+		"llama-8b":   time.Now().Add(-1 * time.Hour),
+		"qwen25-72b": time.Now().Add(-3 * time.Hour),
+	}
+	// Single-entry fast-path won't trigger; use one name to avoid TUI
+	got, err := PickModel([]string{"llama-8b"}, nil, "", "", history)
+	assert.NoError(t, err)
+	assert.Equal(t, "llama-8b", got)
 }

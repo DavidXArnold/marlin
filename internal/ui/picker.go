@@ -3,7 +3,9 @@ package ui
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,10 +24,11 @@ var (
 
 // modelItem is a single entry in the model picker list.
 type modelItem struct {
-	slug     string
-	provider string
-	status   string
-	active   bool
+	slug        string
+	provider    string
+	status      string
+	active      bool
+	lastStarted time.Time
 }
 
 func (m modelItem) Title() string { return m.slug }
@@ -33,6 +36,9 @@ func (m modelItem) Description() string {
 	s := fmt.Sprintf("%s • %s", m.provider, m.status)
 	if m.active {
 		s += "  ◀ active"
+	}
+	if !m.lastStarted.IsZero() {
+		s += "  • " + formatRelativeTime(m.lastStarted)
 	}
 	return s
 }
@@ -118,8 +124,9 @@ func FuzzyMatch(query string, names []string) []string {
 // returns the user's selection. If names has exactly one entry it is returned
 // directly. prefilter is an optional initial search string. activeSlug marks
 // the currently-active model with a ◀ indicator and pre-positions the cursor
-// on it (pass "" to skip).
-func PickModel(names []string, cfgs []*config.ModelConfig, prefilter, activeSlug string) (string, error) {
+// on it (pass "" to skip). history maps slug → last started time; models are
+// sorted most-recently-used first, then alphabetically.
+func PickModel(names []string, cfgs []*config.ModelConfig, prefilter, activeSlug string, history map[string]time.Time) (string, error) {
 	if len(names) == 0 {
 		return "", fmt.Errorf("no models found — run 'marlin add' to create one")
 	}
@@ -127,8 +134,8 @@ func PickModel(names []string, cfgs []*config.ModelConfig, prefilter, activeSlug
 		return names[0], nil
 	}
 
-	initialIndex := 0
-	items := make([]list.Item, len(names))
+	// Build items with history metadata.
+	items := make([]modelItem, len(names))
 	for i, slug := range names {
 		item := modelItem{slug: slug, provider: "vllm", status: "untested"}
 		if i < len(cfgs) && cfgs[i] != nil {
@@ -137,12 +144,41 @@ func PickModel(names []string, cfgs []*config.ModelConfig, prefilter, activeSlug
 		}
 		if activeSlug != "" && slug == activeSlug {
 			item.active = true
-			initialIndex = i
+		}
+		if history != nil {
+			item.lastStarted = history[slug]
 		}
 		items[i] = item
 	}
 
-	l := list.New(items, itemDelegate{}, 60, 20)
+	// Sort: most recently used first, then alphabetical.
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		aZero, bZero := a.lastStarted.IsZero(), b.lastStarted.IsZero()
+		if aZero != bZero {
+			return bZero // items with history come before items without
+		}
+		if !aZero {
+			return a.lastStarted.After(b.lastStarted)
+		}
+		return a.slug < b.slug
+	})
+
+	// Find the initial cursor position (active or most-recent-used).
+	initialIndex := 0
+	for i, item := range items {
+		if item.active || (activeSlug == "" && i == 0) {
+			initialIndex = i
+			break
+		}
+	}
+
+	listItems := make([]list.Item, len(items))
+	for i, item := range items {
+		listItems[i] = item
+	}
+
+	l := list.New(listItems, itemDelegate{}, 60, 20)
 	l.Title = "Select a model"
 	l.Styles.Title = titleStyle
 	l.SetShowStatusBar(false)
@@ -202,4 +238,33 @@ func (c confirmModel) View() string {
 		return ""
 	}
 	return lipgloss.NewStyle().Margin(1, 2).Render(c.prompt + " [y/n] ")
+}
+
+// formatRelativeTime returns a human-readable relative time string.
+func formatRelativeTime(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		mins := int(d.Minutes())
+		if mins == 1 {
+			return "started 1 min ago"
+		}
+		return fmt.Sprintf("started %d mins ago", mins)
+	case d < 24*time.Hour:
+		hrs := int(d.Hours())
+		if hrs == 1 {
+			return "started 1 hour ago"
+		}
+		return fmt.Sprintf("started %d hours ago", hrs)
+	case d < 7*24*time.Hour:
+		days := int(d.Hours() / 24)
+		if days == 1 {
+			return "started 1 day ago"
+		}
+		return fmt.Sprintf("started %d days ago", days)
+	default:
+		return "started " + t.Format("Jan 2")
+	}
 }

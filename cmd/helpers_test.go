@@ -87,35 +87,35 @@ func TestBuildProviderUnknown(t *testing.T) {
 // --- resolveModel ---
 
 func TestResolveModelNoModels(t *testing.T) {
-	_, err := resolveModel("qwen", nil, nil, "")
+	_, err := resolveModel("qwen", nil, nil, "", nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no models found")
 }
 
 func TestResolveModelExactMatch(t *testing.T) {
 	names := []string{"qwen25-72b", "llama-8b"}
-	got, err := resolveModel("qwen25-72b", names, nil, "")
+	got, err := resolveModel("qwen25-72b", names, nil, "", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "qwen25-72b", got)
 }
 
 func TestResolveModelFuzzySingle(t *testing.T) {
 	names := []string{"qwen25-72b", "llama-8b"}
-	got, err := resolveModel("llama", names, nil, "")
+	got, err := resolveModel("llama", names, nil, "", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "llama-8b", got)
 }
 
 func TestResolveModelFuzzyNoMatch(t *testing.T) {
 	names := []string{"qwen25-72b", "llama-8b"}
-	_, err := resolveModel("gpt9000", names, nil, "")
+	_, err := resolveModel("gpt9000", names, nil, "", nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no model matching")
 }
 
 func TestResolveModelSingleWithNoQuery(t *testing.T) {
 	// Single model, no query → PickModel returns it directly (no TTY needed).
-	got, err := resolveModel("", []string{"only-model"}, nil, "")
+	got, err := resolveModel("", []string{"only-model"}, nil, "", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "only-model", got)
 }
