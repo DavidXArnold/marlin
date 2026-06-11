@@ -6,6 +6,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestDisplayName(t *testing.T) {
+	cases := []struct {
+		info ModelInfo
+		want string
+	}{
+		{ModelInfo{ID: "meta/llama-3.1-8b-instruct", Registry: "huggingface"}, "meta/llama-3.1-8b-instruct"},
+		{ModelInfo{ID: "nvcr.io/nim/nvidia/llama-3.3-70b-instruct:latest", Registry: "ngc"}, "nvidia/llama-3.3-70b-instruct"},
+		{ModelInfo{ID: "nvcr.io/nim/meta/llama-3.1-8b-instruct:1.8", Registry: "ngc"}, "meta/llama-3.1-8b-instruct"},
+		{ModelInfo{ID: "nvcr.io/nim/nvidia/llama-3.1-nemotron-ultra-253b-v1:latest", Registry: "ngc"}, "nvidia/llama-3.1-nemotron-ultra-253b-v1"},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, c.info.DisplayName(), "id: %q", c.info.ID)
+	}
+}
+
 func TestModelInfoEstimatedVRAMMB(t *testing.T) {
 	cases := []struct {
 		name         string

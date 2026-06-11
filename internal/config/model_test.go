@@ -189,6 +189,16 @@ func TestFindModelPathNotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestModelConfigToBytes(t *testing.T) {
+	m := &ModelConfig{
+		Model: ModelMeta{Type: ProviderVLLM, ID: "meta/llama-3.1-8b", Status: StatusUntested},
+		Serve: ServeConfig{GPUMemoryUtilization: 0.9},
+	}
+	b, err := ModelConfigToBytes(m)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "meta/llama-3.1-8b")
+}
+
 func writeTempModelFile(t *testing.T, name, content string) string {
 	t.Helper()
 	dir := t.TempDir()

@@ -44,6 +44,7 @@ type AdhocRunner struct {
 	loadModel    func(slug string) (*config.ModelConfig, error)
 	w            io.Writer                    // for privilege prompts; defaults to os.Stderr
 	prepareCache func(io.Writer, string) error // injectable for tests
+	refreshPerms func(string) error            // injectable for tests
 }
 
 func NewAdhocRunner(cfg *config.Config) (*AdhocRunner, error) {
@@ -81,6 +82,7 @@ func newAdhocRunnerWithClient(cfg *config.Config, docker dockerClient) *AdhocRun
 		docker:       docker,
 		w:            os.Stderr,
 		prepareCache: privilege.PromptAndPrepareNIMCache,
+		refreshPerms: privilege.RefreshNIMCachePerms,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
 			return config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
 		},
@@ -268,6 +270,9 @@ func (a *AdhocRunner) buildContainerConfig(slug string, m *config.ModelConfig) (
 
 		if err := a.prepareCache(a.w, a.cfg.Paths.NIMCache); err != nil {
 			return "", "", nil, nil, fmt.Errorf("preparing NIM cache dir %s: %w", a.cfg.Paths.NIMCache, err)
+		}
+		if err := a.refreshPerms(a.cfg.Paths.NIMCache); err != nil {
+			_, _ = fmt.Fprintf(a.w, "warning: could not refresh NIM cache permissions: %v\n", err)
 		}
 
 		sec, _ := secrets.Load(a.cfg.Paths.SecretsEnv)

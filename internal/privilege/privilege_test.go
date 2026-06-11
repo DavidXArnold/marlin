@@ -600,3 +600,9 @@ func TestPromptAndPrepareNIMCacheUserDeclines(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cancelled")
 }
+
+func TestRefreshNIMCachePermsDirNotExist(t *testing.T) {
+	// When the directory does not exist, RefreshNIMCachePerms is a no-op.
+	err := RefreshNIMCachePerms(filepath.Join(t.TempDir(), "nonexistent"))
+	assert.NoError(t, err)
+}

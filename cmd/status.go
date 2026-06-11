@@ -101,9 +101,15 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			if cur.ActiveProvider == config.ProviderNIM {
 				if p, err := buildProvider(cur.ActiveProvider, cfg); err == nil {
 					var logBuf bytes.Buffer
-					if err := p.Logs(cmd.Context(), &logBuf, false, 3); err == nil {
-						if last := lastNonEmptyLine(logBuf.String()); last != "" {
+					if err := p.Logs(cmd.Context(), &logBuf, false, 5); err == nil {
+						logs := logBuf.String()
+						if last := lastNonEmptyLine(logs); last != "" {
 							if err := writef("last log     : %s\n", last); err != nil {
+								return err
+							}
+						}
+						if hint := nimHint(logs); hint != "" {
+							if err := writef("hint         : %s\n", hint); err != nil {
 								return err
 							}
 						}
@@ -224,6 +230,17 @@ func min12(n int) int {
 		return n
 	}
 	return 12
+}
+
+func nimHint(logs string) string {
+	lower := strings.ToLower(logs)
+	if strings.Contains(lower, "uma device detected") || strings.Contains(lower, "no available memory") {
+		return `UMA/unified memory detected — try: extra_env = ["NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9"]`
+	}
+	if strings.Contains(lower, "out of memory") || strings.Contains(lower, "cuda out of memory") {
+		return `GPU OOM — try reducing load: extra_env = ["NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.7"]`
+	}
+	return ""
 }
 
 func lastNonEmptyLine(s string) string {

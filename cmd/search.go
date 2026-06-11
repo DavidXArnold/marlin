@@ -185,7 +185,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 				desc = desc[:37] + "..."
 			}
 			if err := writef("%-52s %-12s %-9s %-4s  %s\n",
-				m.ID,
+				m.DisplayName(),
 				formatUpdated(m.LastUpdated),
 				formatVRAM(m.EstimatedVRAMMB()),
 				fitLabel(m.EstimatedVRAMMB(), freeVRAM),
@@ -351,7 +351,7 @@ func buildRegistries(names []string, sec map[string]string) []registry.Registry 
 
 func formatUpdated(t time.Time) string {
 	if t.IsZero() {
-		return "unknown"
+		return "-"
 	}
 	days := int(time.Since(t).Hours() / 24)
 	switch {
@@ -370,7 +370,7 @@ func formatUpdated(t time.Time) string {
 
 func formatVRAM(mb uint64) string {
 	if mb == 0 {
-		return "unknown"
+		return "-"
 	}
 	return sysinfo.FormatMB(mb)
 }

@@ -31,7 +31,7 @@ type searchResultItem struct {
 }
 
 func newSearchResultItem(m registry.ModelInfo, freeVRAM uint64) searchResultItem {
-	vram := "unknown"
+	vram := "-"
 	if mb := m.EstimatedVRAMMB(); mb > 0 {
 		vram = sysinfo.FormatMB(mb)
 	}
@@ -41,7 +41,7 @@ func newSearchResultItem(m registry.ModelInfo, freeVRAM uint64) searchResultItem
 	return searchResultItem{info: m, desc: desc}
 }
 
-func (s searchResultItem) Title() string       { return s.info.ID }
+func (s searchResultItem) Title() string       { return s.info.DisplayName() }
 func (s searchResultItem) Description() string { return s.desc }
 func (s searchResultItem) FilterValue() string { return s.info.ID }
 
@@ -250,7 +250,7 @@ func srFitLabel(estimatedMB, freeVRAMMB uint64) string {
 
 func srFormatUpdated(t time.Time) string {
 	if t.IsZero() {
-		return "unknown"
+		return "-"
 	}
 	days := int(time.Since(t).Hours() / 24)
 	switch {

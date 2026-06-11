@@ -68,6 +68,7 @@ type NIMProvider struct {
 	loadModel    func(slug string) (*config.ModelConfig, error)
 	w            io.Writer                    // for privilege prompts; defaults to os.Stderr
 	prepareCache func(io.Writer, string) error // injectable for tests
+	refreshPerms func(string) error            // injectable for tests
 }
 
 func NewNIMProvider(cfg *config.Config, ngcKey string) (*NIMProvider, error) {
@@ -117,6 +118,7 @@ func newNIMProviderWithClient(cfg *config.Config, ngcKey string, docker dockerCl
 		docker:       docker,
 		w:            os.Stderr,
 		prepareCache: privilege.PromptAndPrepareNIMCache,
+		refreshPerms: privilege.RefreshNIMCachePerms,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
 			return config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
 		},
@@ -155,6 +157,9 @@ func (n *NIMProvider) Switch(ctx context.Context, modelSlug string) error {
 
 	if err := n.prepareCache(n.w, n.cfg.Paths.NIMCache); err != nil {
 		return fmt.Errorf("preparing NIM cache dir %s: %w", n.cfg.Paths.NIMCache, err)
+	}
+	if err := n.refreshPerms(n.cfg.Paths.NIMCache); err != nil {
+		_, _ = fmt.Fprintf(n.w, "warning: could not refresh NIM cache permissions: %v\n", err)
 	}
 
 	portSet := nat.PortSet{"8000/tcp": struct{}{}}

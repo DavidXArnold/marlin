@@ -71,6 +71,7 @@ func testNIMProvider(t *testing.T, d *stubDocker) (*NIMProvider, string) {
 
 	p := newNIMProviderWithClient(cfg, "test-ngc-key", d)
 	p.prepareCache = func(_ io.Writer, _ string) error { return nil }
+	p.refreshPerms = func(_ string) error { return nil }
 	return p, dir
 }
 

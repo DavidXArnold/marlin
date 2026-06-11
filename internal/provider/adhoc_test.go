@@ -28,6 +28,7 @@ func testAdhocRunner(t *testing.T, d *stubDocker) (*AdhocRunner, string) {
 
 	a := newAdhocRunnerWithClient(cfg, d)
 	a.prepareCache = func(_ io.Writer, _ string) error { return nil }
+	a.refreshPerms = func(_ string) error { return nil }
 	return a, dir
 }
 

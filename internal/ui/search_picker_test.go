@@ -167,7 +167,7 @@ func TestModelURL(t *testing.T) {
 // --- srFormatUpdated ---
 
 func TestSrFormatUpdated(t *testing.T) {
-	assert.Equal(t, "unknown", srFormatUpdated(time.Time{}))
+	assert.Equal(t, "-", srFormatUpdated(time.Time{}))
 	assert.Equal(t, "today", srFormatUpdated(time.Now()))
 	assert.Contains(t, srFormatUpdated(time.Now().AddDate(0, 0, -3)), "d ago")
 	assert.Contains(t, srFormatUpdated(time.Now().AddDate(0, 0, -14)), "w ago")

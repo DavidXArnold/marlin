@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -134,10 +136,24 @@ type nimModel struct {
 // we treat anything before this as unknown rather than showing bogus dates.
 const nimEpoch = int64(1640995200)
 
+// paramBillionRE matches patterns like "8b", "70b", "253b" in a model name.
+var paramBillionRE = regexp.MustCompile(`(\d+(?:\.\d+)?)[bB]`)
+
+func parseParamsBillion(id string) float64 {
+	m := paramBillionRE.FindStringSubmatch(id)
+	if m == nil {
+		return 0
+	}
+	v, _ := strconv.ParseFloat(m[1], 64)
+	return v
+}
+
 func (m nimModel) toModelInfo() ModelInfo {
+	imageRef := nimImageRef(m.ID, "")
 	info := ModelInfo{
-		ID:       nimImageRef(m.ID, ""),
-		Registry: "ngc",
+		ID:            imageRef,
+		Registry:      "ngc",
+		ParamsBillion: parseParamsBillion(m.ID),
 	}
 	if m.Created >= nimEpoch {
 		info.LastUpdated = time.Unix(m.Created, 0)

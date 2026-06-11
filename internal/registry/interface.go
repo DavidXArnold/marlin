@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"strings"
 	"time"
 )
 
@@ -38,6 +39,19 @@ func (m ModelInfo) EstimatedVRAMMB() uint64 {
 	// Add ~20% overhead for KV cache and activations.
 	totalBytes := params * bytesPerParam * 1.2
 	return uint64(totalBytes / (1024 * 1024))
+}
+
+// DisplayName returns a short human-friendly name. For NGC models it strips the
+// "nvcr.io/nim/" prefix and ":tag" suffix; for others it returns ID unchanged.
+func (m ModelInfo) DisplayName() string {
+	if m.Registry != "ngc" {
+		return m.ID
+	}
+	name := strings.TrimPrefix(m.ID, "nvcr.io/nim/")
+	if idx := strings.LastIndex(name, ":"); idx >= 0 {
+		name = name[:idx]
+	}
+	return name
 }
 
 // Registry is the interface all model registries implement.

@@ -575,7 +575,7 @@ func TestRunSearchNGCWithConfiguredKey(t *testing.T) {
 
 	require.NoError(t, runSearch(cmd, []string{"llama"}))
 	assert.Contains(t, buf.String(), "[ngc]")
-	assert.Contains(t, buf.String(), "nvcr.io/nim/meta/llama:latest")
+	assert.Contains(t, buf.String(), "meta/llama")
 }
 
 func TestRunSearchInteractiveBrowseOpensURL(t *testing.T) {
@@ -863,7 +863,7 @@ func TestBuildRegistriesIncludesNGCWhenKeySet(t *testing.T) {
 // --- search helpers ---
 
 func TestFormatUpdated(t *testing.T) {
-	assert.Equal(t, "unknown", formatUpdated(time.Time{}))
+	assert.Equal(t, "-", formatUpdated(time.Time{}))
 	assert.Equal(t, "today", formatUpdated(time.Now()))
 	assert.Contains(t, formatUpdated(time.Now().AddDate(0, 0, -3)), "d ago")
 	assert.Contains(t, formatUpdated(time.Now().AddDate(0, 0, -14)), "w ago")
@@ -880,7 +880,7 @@ func TestFitLabel(t *testing.T) {
 }
 
 func TestFormatVRAM(t *testing.T) {
-	assert.Equal(t, "unknown", formatVRAM(0))
+	assert.Equal(t, "-", formatVRAM(0))
 	assert.NotEmpty(t, formatVRAM(8192))
 }
 

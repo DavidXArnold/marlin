@@ -25,6 +25,7 @@ type ContainerdNIMProvider struct {
 	ngcKey       string
 	w            io.Writer                    // for privilege prompts; defaults to os.Stderr
 	prepareCache func(io.Writer, string) error // injectable for tests
+	refreshPerms func(string) error            // injectable for tests
 	// cmdOutput runs a nerdctl sub-command and returns its combined output.
 	// Replaceable in tests without a real container runtime.
 	cmdOutput func(ctx context.Context, args ...string) ([]byte, error)
@@ -49,6 +50,7 @@ func newContainerdNIMProviderWithRunner(cfg *config.Config, ngcKey string, runne
 		ngcKey:       ngcKey,
 		w:            os.Stderr,
 		prepareCache: privilege.PromptAndPrepareNIMCache,
+		refreshPerms: privilege.RefreshNIMCachePerms,
 		cmdOutput:    runner,
 		loginFunc:    nerdctlLogin,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
@@ -95,6 +97,9 @@ func (p *ContainerdNIMProvider) Switch(ctx context.Context, modelSlug string) er
 
 	if err := p.prepareCache(p.w, p.cfg.Paths.NIMCache); err != nil {
 		return fmt.Errorf("preparing NIM cache dir %s: %w", p.cfg.Paths.NIMCache, err)
+	}
+	if err := p.refreshPerms(p.cfg.Paths.NIMCache); err != nil {
+		_, _ = fmt.Fprintf(p.w, "warning: could not refresh NIM cache permissions: %v\n", err)
 	}
 
 	args := []string{

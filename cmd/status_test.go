@@ -181,6 +181,54 @@ func TestRunStatusNIMContainerNotFound(t *testing.T) {
 	assert.Contains(t, out, "not found")
 }
 
+// --- nimHint ---
+
+func TestNimHint(t *testing.T) {
+	cases := []struct {
+		logs string
+		want string
+	}{
+		{"", ""},
+		{"normal startup log", ""},
+		{"UMA device detected: using unified memory", "UMA"},
+		{"No available memory for model", "UMA"},
+		{"CUDA out of memory", "OOM"},
+		{"RuntimeError: out of memory", "OOM"},
+	}
+	for _, tc := range cases {
+		hint := nimHint(tc.logs)
+		if tc.want == "" {
+			assert.Empty(t, hint, "logs: %q", tc.logs)
+		} else {
+			assert.NotEmpty(t, hint, "logs: %q", tc.logs)
+		}
+	}
+}
+
+func TestRunStatusNIMShowsHintOnUMALog(t *testing.T) {
+	_, cleanup := nimStatusEnv(t)
+	defer cleanup()
+
+	fakeProvider := &fakeNIMProvider{
+		status: &provider.Status{
+			Running:        false,
+			ContainerState: "exited",
+		},
+		logLine: "UMA device detected: using unified memory",
+	}
+	oldBuild := buildProvider
+	buildProvider = func(_ config.ProviderType, _ *config.Config) (provider.Provider, error) {
+		return fakeProvider, nil
+	}
+	defer func() { buildProvider = oldBuild }()
+
+	var buf bytes.Buffer
+	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
+	out := buf.String()
+	assert.Contains(t, out, "hint")
+	assert.Contains(t, out, "NIM_PASSTHROUGH_ARGS")
+}
+
 func TestRunStatusNIMBuildProviderError(t *testing.T) {
 	cid, cleanup := nimStatusEnv(t)
 	defer cleanup()

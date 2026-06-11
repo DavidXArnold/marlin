@@ -295,7 +295,7 @@ func TestWizardAdvanceExtraEnv(t *testing.T) {
 	w.step = stepExtraEnv
 	w.providerType = config.ProviderNIM
 	updated, _ := w.advance()
-	assert.Equal(t, stepNotes, updated.(wizardModel).step)
+	assert.Equal(t, stepExtraVolumes, updated.(wizardModel).step)
 }
 
 func TestWizardBuildResultNIMWithExtraEnv(t *testing.T) {
@@ -337,5 +337,5 @@ func TestAutoSlugWithColon(t *testing.T) {
 func TestWizardCurrentPromptExtraEnv(t *testing.T) {
 	w := newWizard()
 	w.step = stepExtraEnv
-	assert.Contains(t, w.currentPrompt(), "Extra container env vars")
+	assert.Contains(t, w.currentPrompt(), "Extra NIM env vars")
 }

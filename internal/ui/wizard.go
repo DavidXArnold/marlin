@@ -27,6 +27,7 @@ const (
 	stepImage
 	stepSlug
 	stepExtraEnv
+	stepExtraVolumes
 	stepQuantization
 	stepGPUMem
 	stepMaxLen
@@ -74,7 +75,8 @@ func newWizard() wizardModel {
 		stepModelID:      mkInput("Qwen/Qwen2.5-72B-Instruct-AWQ"),
 		stepImage:        mkInput("nvcr.io/nim/meta/llama-3.1-8b-instruct:latest"),
 		stepSlug:         mkInput("qwen25-72b"),
-		stepExtraEnv:     mkInput("KEY=VALUE,KEY2=VALUE2  (leave blank to omit)"),
+		stepExtraEnv:     mkInput("NIM_TENSOR_PARALLEL_SIZE=2,NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9"),
+		stepExtraVolumes: mkInput("/host/path:/container/path  (leave blank to omit)"),
 		stepQuantization: mkInput("awq_marlin  (leave blank to omit)"),
 		stepGPUMem:       mkInput("0.90"),
 		stepMaxLen:       mkInput("0  (0 = auto)"),
@@ -115,7 +117,9 @@ func (w wizardModel) currentPrompt() string {
 	case stepToolParser:
 		return "Tool call parser (hermes, llama3_json…):"
 	case stepExtraEnv:
-		return "Extra container env vars (comma-separated KEY=VALUE, leave blank to omit):"
+		return "Extra NIM env vars (comma-separated KEY=VALUE):\n  Common: NIM_TENSOR_PARALLEL_SIZE=2 • NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9\n          NIM_MAX_MODEL_LEN=8192 • NIM_KVCACHE_PERCENT=0.8"
+	case stepExtraVolumes:
+		return "Extra volume mounts (comma-separated /host:/container, leave blank to omit):"
 	case stepNotes:
 		return "Notes (optional):"
 	case stepConfirmWizard:
@@ -235,6 +239,10 @@ func (w wizardModel) advance() (tea.Model, tea.Cmd) {
 		w.focusCurrent()
 
 	case stepExtraEnv:
+		w.step = stepExtraVolumes
+		w.focusCurrent()
+
+	case stepExtraVolumes:
 		w.step = stepNotes
 		w.focusCurrent()
 
@@ -344,7 +352,13 @@ func (w wizardModel) buildResult() *WizardResult {
 				extraEnv = append(extraEnv, t)
 			}
 		}
-		m.Serve = config.ServeConfig{ExtraEnv: extraEnv}
+		var extraVolumes []string
+		for _, s := range strings.Split(w.inputs[stepExtraVolumes].Value(), ",") {
+			if t := strings.TrimSpace(s); t != "" && strings.Contains(t, ":") {
+				extraVolumes = append(extraVolumes, t)
+			}
+		}
+		m.Serve = config.ServeConfig{ExtraEnv: extraEnv, ExtraVolumes: extraVolumes}
 	}
 
 	return &WizardResult{Slug: slug, Cfg: m}

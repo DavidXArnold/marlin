@@ -176,6 +176,32 @@ func TestNGCSearchNetworkError(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestParseParamsBillion(t *testing.T) {
+	cases := []struct {
+		id   string
+		want float64
+	}{
+		{"nvidia/llama-3.1-8b-instruct", 8},
+		{"nvidia/llama-3.3-70b-instruct", 70},
+		{"nvidia/llama-3.1-nemotron-ultra-253b-v1", 253},
+		{"qwen/qwen2.5-72b-instruct", 72},
+		{"deepseek-ai/deepseek-r1-distill-llama-70b", 70},
+		{"google/gemma-3-27b-it", 27},
+		{"meta/llama-3.2-1b-instruct", 1},
+		{"nv-embedqa-e5-v5", 0},
+		{"some-model-no-params", 0},
+	}
+	for _, c := range cases {
+		assert.InDelta(t, c.want, parseParamsBillion(c.id), 0.01, "id: %q", c.id)
+	}
+}
+
+func TestNGCModelToModelInfoParamsParsed(t *testing.T) {
+	info := nimModel{ID: "nvidia/llama-3.3-70b-instruct", Created: 1704153600}.toModelInfo()
+	assert.Equal(t, 70.0, info.ParamsBillion)
+	assert.Positive(t, info.EstimatedVRAMMB())
+}
+
 func newNGCWithBase(apiKey, base string) *NGC {
 	n := NewNGC(apiKey)
 	n.base = base
