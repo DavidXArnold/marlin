@@ -20,6 +20,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/privilege"
 )
 
 const nimContainerName = "marlin-nim"
@@ -65,6 +66,7 @@ type NIMProvider struct {
 	ngcKey    string
 	docker    dockerClient
 	loadModel func(slug string) (*config.ModelConfig, error)
+	w         io.Writer // for privilege prompts; defaults to os.Stderr
 }
 
 func NewNIMProvider(cfg *config.Config, ngcKey string) (*NIMProvider, error) {
@@ -112,6 +114,7 @@ func newNIMProviderWithClient(cfg *config.Config, ngcKey string, docker dockerCl
 		cfg:    cfg,
 		ngcKey: ngcKey,
 		docker: docker,
+		w:      os.Stderr,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
 			return config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
 		},
@@ -148,23 +151,25 @@ func (n *NIMProvider) Switch(ctx context.Context, modelSlug string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(n.cfg.Paths.NIMCache, 0o755); err != nil {
-		return fmt.Errorf("creating NIM cache dir %s: %w\nhint: run 'sudo mkdir -p %s && sudo chown -R $USER %s'",
-			n.cfg.Paths.NIMCache, err, n.cfg.Paths.NIMCache, n.cfg.Paths.NIMCache)
+	if err := privilege.PromptAndMkdirAll(n.w, n.cfg.Paths.NIMCache); err != nil {
+		return fmt.Errorf("creating NIM cache dir %s: %w", n.cfg.Paths.NIMCache, err)
 	}
 
 	portSet := nat.PortSet{"8000/tcp": struct{}{}}
 	portBindings := nat.PortMap{"8000/tcp": []nat.PortBinding{{HostPort: "8000"}}}
 
+	env := append([]string{"NGC_API_KEY=" + n.ngcKey}, m.Serve.ExtraEnv...)
+	binds := append([]string{n.cfg.Paths.NIMCache + ":/opt/nim/.cache"}, m.Serve.ExtraVolumes...)
+
 	resp, err := n.docker.ContainerCreate(ctx,
 		&container.Config{
 			Image:        m.Model.Image,
 			ExposedPorts: portSet,
-			Env:          []string{"NGC_API_KEY=" + n.ngcKey},
+			Env:          env,
 		},
 		&container.HostConfig{
 			PortBindings: portBindings,
-			Binds:        []string{n.cfg.Paths.NIMCache + ":/opt/nim/.cache"},
+			Binds:        binds,
 			Resources: container.Resources{
 				DeviceRequests: []container.DeviceRequest{
 					{Driver: "nvidia", Count: -1, Capabilities: [][]string{{"gpu"}}},
@@ -197,14 +202,15 @@ func (n *NIMProvider) Status(ctx context.Context) (*Status, error) {
 	}
 
 	if len(containers) == 0 {
-		return &Status{Running: false}, nil
+		return &Status{Running: false, ContainerState: "not found"}, nil
 	}
 
 	c := containers[0]
 	return &Status{
-		Running:     c.State == "running",
-		ContainerID: c.ID,
-		ModelID:     imageToModelID(c.Image),
+		Running:        c.State == "running",
+		ContainerID:    c.ID,
+		ModelID:        imageToModelID(c.Image),
+		ContainerState: c.State,
 	}, nil
 }
 

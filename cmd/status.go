@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/service"
 	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/sysinfo"
@@ -51,25 +53,56 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		if err := writef("provider     : %s\n", cur.ActiveProvider); err != nil {
 			return err
 		}
-		if cur.ContainerID != "" {
+
+		// Live container state for NIM providers.
+		var liveStatus *provider.Status
+		if cur.ActiveProvider == config.ProviderNIM {
+			if p, err := buildProvider(cur.ActiveProvider, cfg); err == nil {
+				liveStatus, _ = p.Status(cmd.Context())
+			}
+		}
+
+		if liveStatus != nil {
+			id := liveStatus.ContainerID
+			if len(id) > 12 {
+				id = id[:12]
+			}
+			if err := writef("container    : %s  (%s)\n", id, liveStatus.ContainerState); err != nil {
+				return err
+			}
+		} else if cur.ContainerID != "" {
 			if err := writef("container    : %s\n", cur.ContainerID[:min12(len(cur.ContainerID))]); err != nil {
 				return err
 			}
 		}
 
 		client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "")
-		health, err := client.Health(cmd.Context())
-		if err != nil {
-			if err := writef("api health   : error (%v)\n", err); err != nil {
+		health, healthErr := client.Health(cmd.Context())
+		apiReady := healthErr == nil && health.Ready
+		if healthErr != nil {
+			if err := writef("api health   : error (%v)\n", healthErr); err != nil {
 				return err
 			}
-		} else if health.Ready {
+		} else if apiReady {
 			if err := writef("api health   : ready at http://%s:%d/v1\n", cfg.Server.Host, cfg.Server.Port); err != nil {
 				return err
 			}
 		} else {
 			if err := writef("api health   : not ready\n"); err != nil {
 				return err
+			}
+			// For container providers, show the last log line to explain why.
+			if cur.ActiveProvider == config.ProviderNIM {
+				if p, err := buildProvider(cur.ActiveProvider, cfg); err == nil {
+					var logBuf bytes.Buffer
+					if err := p.Logs(cmd.Context(), &logBuf, false, 3); err == nil {
+						if last := lastNonEmptyLine(logBuf.String()); last != "" {
+							if err := writef("last log     : %s\n", last); err != nil {
+								return err
+							}
+						}
+					}
+				}
 			}
 		}
 
@@ -179,4 +212,14 @@ func min12(n int) int {
 		return n
 	}
 	return 12
+}
+
+func lastNonEmptyLine(s string) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if t := strings.TrimSpace(lines[i]); t != "" {
+			return t
+		}
+	}
+	return ""
 }

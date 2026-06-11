@@ -7,9 +7,10 @@ import (
 
 // Status is a snapshot of what the active inference server is doing.
 type Status struct {
-	Running     bool
-	ModelID     string // model ID currently loaded, empty if not running
-	ContainerID string // populated for NIM providers
+	Running        bool
+	ModelID        string // model ID currently loaded, empty if not running
+	ContainerID    string // populated for NIM providers
+	ContainerState string // "running", "exited", "not found", etc. (NIM providers)
 }
 
 // Provider controls a single inference backend (vLLM or NIM).

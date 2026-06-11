@@ -118,6 +118,23 @@ func PromptAndWriteFile(w io.Writer, dir, path string, data []byte) (bool, error
 	return true, nil
 }
 
+// PromptAndMkdirAll creates dir and all parents. If root is required, warns on w,
+// prompts for y/n confirmation, then creates via sudo mkdir -p.
+func PromptAndMkdirAll(w io.Writer, dir string) error {
+	if !NeedsRoot(dir) {
+		return os.MkdirAll(dir, 0o755)
+	}
+	_, _ = fmt.Fprintf(w, "\nwarning: creating %s requires administrator privileges\n", dir)
+	_, _ = fmt.Fprint(w, "continue with sudo? [y/N] ")
+	buf := make([]byte, 64)
+	n, _ := stdinR.Read(buf)
+	if strings.ToLower(strings.TrimSpace(string(buf[:n]))) != "y" {
+		_, _ = fmt.Fprintln(w, "cancelled")
+		return fmt.Errorf("cancelled")
+	}
+	return sudoRun([]string{"mkdir", "-p", dir})
+}
+
 // PromptAndRemove removes path. If the removal fails with a permission error,
 // it warns on w, prompts for y/n confirmation, then retries via sudo rm.
 func PromptAndRemove(w io.Writer, path string) error {

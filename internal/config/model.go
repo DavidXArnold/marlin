@@ -42,7 +42,9 @@ type ServeConfig struct {
 	ServedModelName      []string `toml:"served_model_name"`
 	GPUMemoryUtilization float64  `toml:"gpu_memory_utilization"`
 	MaxModelLen          int      `toml:"max_model_len"`
-	ExtraFlags           []string `toml:"extra_flags"`
+	ExtraFlags           []string `toml:"extra_flags"`   // vLLM: extra CLI flags passed to vllm serve
+	ExtraEnv             []string `toml:"extra_env"`     // NIM: extra KEY=VALUE env vars for the container
+	ExtraVolumes         []string `toml:"extra_volumes"` // NIM: extra /host:/container volume mounts
 }
 
 func LoadModel(path string) (*ModelConfig, error) {

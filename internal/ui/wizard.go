@@ -26,6 +26,7 @@ const (
 	stepModelID
 	stepImage
 	stepSlug
+	stepExtraEnv
 	stepQuantization
 	stepGPUMem
 	stepMaxLen
@@ -73,6 +74,7 @@ func newWizard() wizardModel {
 		stepModelID:      mkInput("Qwen/Qwen2.5-72B-Instruct-AWQ"),
 		stepImage:        mkInput("nvcr.io/nim/meta/llama-3.1-8b-instruct:latest"),
 		stepSlug:         mkInput("qwen25-72b"),
+		stepExtraEnv:     mkInput("KEY=VALUE,KEY2=VALUE2  (leave blank to omit)"),
 		stepQuantization: mkInput("awq_marlin  (leave blank to omit)"),
 		stepGPUMem:       mkInput("0.90"),
 		stepMaxLen:       mkInput("0  (0 = auto)"),
@@ -112,6 +114,8 @@ func (w wizardModel) currentPrompt() string {
 		return "Served model names (comma-separated):"
 	case stepToolParser:
 		return "Tool call parser (hermes, llama3_json…):"
+	case stepExtraEnv:
+		return "Extra container env vars (comma-separated KEY=VALUE, leave blank to omit):"
 	case stepNotes:
 		return "Notes (optional):"
 	case stepConfirmWizard:
@@ -224,10 +228,14 @@ func (w wizardModel) advance() (tea.Model, tea.Cmd) {
 		}
 		w.err = ""
 		if w.providerType == config.ProviderNIM {
-			w.step = stepNotes
+			w.step = stepExtraEnv
 		} else {
 			w.step = stepQuantization
 		}
+		w.focusCurrent()
+
+	case stepExtraEnv:
+		w.step = stepNotes
 		w.focusCurrent()
 
 	case stepQuantization:
@@ -320,7 +328,8 @@ func (w wizardModel) buildResult() *WizardResult {
 		},
 	}
 
-	if w.providerType == config.ProviderVLLM {
+	switch w.providerType {
+	case config.ProviderVLLM:
 		m.Serve = config.ServeConfig{
 			Quantization:         strings.TrimSpace(w.inputs[stepQuantization].Value()),
 			GPUMemoryUtilization: gpuMem,
@@ -328,6 +337,14 @@ func (w wizardModel) buildResult() *WizardResult {
 			ServedModelName:      servedNames,
 			ToolCallParser:       strings.TrimSpace(w.inputs[stepToolParser].Value()),
 		}
+	case config.ProviderNIM:
+		var extraEnv []string
+		for _, s := range strings.Split(w.inputs[stepExtraEnv].Value(), ",") {
+			if t := strings.TrimSpace(s); t != "" && strings.Contains(t, "=") {
+				extraEnv = append(extraEnv, t)
+			}
+		}
+		m.Serve = config.ServeConfig{ExtraEnv: extraEnv}
 	}
 
 	return &WizardResult{Slug: slug, Cfg: m}

@@ -5,6 +5,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/DavidXArnold/marlin/internal/config"
 )
 
 // --- typeItem ---
@@ -175,7 +178,7 @@ func TestWizardAdvanceSlugNIM(t *testing.T) {
 	w.providerType = "nim"
 	setInput(&w, stepSlug, "my-nim")
 	updated, _ := w.advance()
-	assert.Equal(t, stepNotes, updated.(wizardModel).step)
+	assert.Equal(t, stepExtraEnv, updated.(wizardModel).step)
 }
 
 func TestWizardAdvanceQuantization(t *testing.T) {
@@ -285,4 +288,54 @@ func TestWizardUpdateBackspace(t *testing.T) {
 	setInput(&w, stepSlug, "abc")
 	updated, _ := w.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	_ = updated.(wizardModel).inputs[stepSlug].Value() // confirm no panic
+}
+
+func TestWizardAdvanceExtraEnv(t *testing.T) {
+	w := newWizard()
+	w.step = stepExtraEnv
+	w.providerType = config.ProviderNIM
+	updated, _ := w.advance()
+	assert.Equal(t, stepNotes, updated.(wizardModel).step)
+}
+
+func TestWizardBuildResultNIMWithExtraEnv(t *testing.T) {
+	w := newWizard()
+	w.providerType = config.ProviderNIM
+	setInput(&w, stepSlug, "nim-test")
+	setInput(&w, stepImage, "nvcr.io/nim/meta/llama:latest")
+	setInput(&w, stepExtraEnv, "FOO=bar, BAZ=qux, invalid, KEY=val")
+	setInput(&w, stepGPUMem, "0.90")
+
+	result := w.buildResult()
+	require.NotNil(t, result)
+	assert.Equal(t, "nim-test", result.Slug)
+	assert.Equal(t, config.ProviderNIM, result.Cfg.Model.Type)
+	assert.Equal(t, []string{"FOO=bar", "BAZ=qux", "KEY=val"}, result.Cfg.Serve.ExtraEnv)
+}
+
+func TestWizardBuildResultNIMEmptyExtraEnv(t *testing.T) {
+	w := newWizard()
+	w.providerType = config.ProviderNIM
+	setInput(&w, stepSlug, "nim-test")
+	setInput(&w, stepImage, "nvcr.io/nim/meta/llama:latest")
+	setInput(&w, stepExtraEnv, "")
+	setInput(&w, stepGPUMem, "0.90")
+
+	result := w.buildResult()
+	require.NotNil(t, result)
+	assert.Nil(t, result.Cfg.Serve.ExtraEnv)
+}
+
+func TestAutoSlugNoSlash(t *testing.T) {
+	assert.Equal(t, "llama", AutoSlug("llama"))
+}
+
+func TestAutoSlugWithColon(t *testing.T) {
+	assert.Equal(t, "llama", AutoSlug("llama:latest"))
+}
+
+func TestWizardCurrentPromptExtraEnv(t *testing.T) {
+	w := newWizard()
+	w.step = stepExtraEnv
+	assert.Contains(t, w.currentPrompt(), "Extra container env vars")
 }

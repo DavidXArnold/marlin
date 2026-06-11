@@ -15,6 +15,7 @@ import (
 	"github.com/docker/go-connections/nat"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/privilege"
 	"github.com/DavidXArnold/marlin/internal/secrets"
 )
 
@@ -41,6 +42,7 @@ type AdhocRunner struct {
 	cfg       *config.Config
 	docker    dockerClient
 	loadModel func(slug string) (*config.ModelConfig, error)
+	w         io.Writer // for privilege prompts; defaults to os.Stderr
 }
 
 func NewAdhocRunner(cfg *config.Config) (*AdhocRunner, error) {
@@ -76,6 +78,7 @@ func newAdhocRunnerWithClient(cfg *config.Config, docker dockerClient) *AdhocRun
 	return &AdhocRunner{
 		cfg:    cfg,
 		docker: docker,
+		w:      os.Stderr,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
 			return config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
 		},
@@ -261,21 +264,22 @@ func (a *AdhocRunner) buildContainerConfig(slug string, m *config.ModelConfig) (
 		}
 		labels[labelProvider] = "nim"
 
-		if err := os.MkdirAll(a.cfg.Paths.NIMCache, 0o755); err != nil {
-			return "", "", nil, nil, fmt.Errorf("creating NIM cache dir %s: %w\nhint: run 'sudo mkdir -p %s && sudo chown -R $USER %s'",
-				a.cfg.Paths.NIMCache, err, a.cfg.Paths.NIMCache, a.cfg.Paths.NIMCache)
+		if err := privilege.PromptAndMkdirAll(a.w, a.cfg.Paths.NIMCache); err != nil {
+			return "", "", nil, nil, fmt.Errorf("creating NIM cache dir %s: %w", a.cfg.Paths.NIMCache, err)
 		}
 
 		sec, _ := secrets.Load(a.cfg.Paths.SecretsEnv)
+		env := append([]string{"NGC_API_KEY=" + sec["NGC_API_KEY"]}, m.Serve.ExtraEnv...)
+		binds := append([]string{a.cfg.Paths.NIMCache + ":/opt/nim/.cache"}, m.Serve.ExtraVolumes...)
 		containerCfg = &container.Config{
 			Image:        image,
 			ExposedPorts: portSet,
 			Labels:       labels,
-			Env:          []string{"NGC_API_KEY=" + sec["NGC_API_KEY"]},
+			Env:          env,
 		}
 		hostCfg = &container.HostConfig{
 			PortBindings: portBindings,
-			Binds:        []string{a.cfg.Paths.NIMCache + ":/opt/nim/.cache"},
+			Binds:        binds,
 			Resources:    container.Resources{DeviceRequests: gpuReq},
 		}
 

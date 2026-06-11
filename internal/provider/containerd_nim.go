@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/privilege"
 )
 
 // ContainerdNIMProvider runs NIM containers via nerdctl, the Docker-compatible
@@ -22,6 +23,7 @@ import (
 type ContainerdNIMProvider struct {
 	cfg    *config.Config
 	ngcKey string
+	w      io.Writer // for privilege prompts; defaults to os.Stderr
 	// cmdOutput runs a nerdctl sub-command and returns its combined output.
 	// Replaceable in tests without a real container runtime.
 	cmdOutput func(ctx context.Context, args ...string) ([]byte, error)
@@ -44,6 +46,7 @@ func newContainerdNIMProviderWithRunner(cfg *config.Config, ngcKey string, runne
 	return &ContainerdNIMProvider{
 		cfg:       cfg,
 		ngcKey:    ngcKey,
+		w:         os.Stderr,
 		cmdOutput: runner,
 		loginFunc: nerdctlLogin,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
@@ -88,9 +91,8 @@ func (p *ContainerdNIMProvider) Switch(ctx context.Context, modelSlug string) er
 		return err
 	}
 
-	if err := os.MkdirAll(p.cfg.Paths.NIMCache, 0o755); err != nil {
-		return fmt.Errorf("creating NIM cache dir %s: %w\nhint: run 'sudo mkdir -p %s && sudo chown -R $USER %s'",
-			p.cfg.Paths.NIMCache, err, p.cfg.Paths.NIMCache, p.cfg.Paths.NIMCache)
+	if err := privilege.PromptAndMkdirAll(p.w, p.cfg.Paths.NIMCache); err != nil {
+		return fmt.Errorf("creating NIM cache dir %s: %w", p.cfg.Paths.NIMCache, err)
 	}
 
 	args := []string{
@@ -100,8 +102,14 @@ func (p *ContainerdNIMProvider) Switch(ctx context.Context, modelSlug string) er
 		"-p", "8000:8000",
 		"-e", "NGC_API_KEY=" + p.ngcKey,
 		"-v", p.cfg.Paths.NIMCache + ":/opt/nim/.cache",
-		m.Model.Image,
 	}
+	for _, e := range m.Serve.ExtraEnv {
+		args = append(args, "-e", e)
+	}
+	for _, v := range m.Serve.ExtraVolumes {
+		args = append(args, "-v", v)
+	}
+	args = append(args, m.Model.Image)
 	if out, err := p.cmdOutput(ctx, args...); err != nil {
 		return fmt.Errorf("starting NIM container: %w\n%s", err, out)
 	}
@@ -132,9 +140,10 @@ func (p *ContainerdNIMProvider) Status(ctx context.Context) (*Status, error) {
 
 	c := containers[0]
 	return &Status{
-		Running:     c.State.Status == "running",
-		ContainerID: c.ID,
-		ModelID:     imageToModelID(c.Image),
+		Running:        c.State.Status == "running",
+		ContainerID:    c.ID,
+		ModelID:        imageToModelID(c.Image),
+		ContainerState: c.State.Status,
 	}, nil
 }
 

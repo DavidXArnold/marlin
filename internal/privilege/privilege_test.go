@@ -477,3 +477,52 @@ func TestPromptAndSymlinkUserDeclines(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cancelled")
 }
+
+// --- PromptAndMkdirAll ---
+
+func TestPromptAndMkdirAllWritable(t *testing.T) {
+	old := getuid
+	getuid = func() int { return 1000 }
+	defer func() { getuid = old }()
+
+	base := t.TempDir()
+	dir := filepath.Join(base, "sub", "dir")
+	var buf bytes.Buffer
+	require.NoError(t, PromptAndMkdirAll(&buf, dir))
+	assert.DirExists(t, dir)
+	assert.Empty(t, buf.String())
+}
+
+func TestPromptAndMkdirAllUserConfirms(t *testing.T) {
+	oldGetuid := getuid
+	oldStdin := stdinR
+	oldSudo := sudoRun
+	getuid = func() int { return 1000 }
+	stdinR = strings.NewReader("y\n")
+	var mkArgs []string
+	sudoRun = func(args []string) error { mkArgs = args; return nil }
+	defer func() { getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo }()
+
+	dir := nonWritableDir(t)
+	target := filepath.Join(dir, "nim-cache")
+	var buf bytes.Buffer
+	require.NoError(t, PromptAndMkdirAll(&buf, target))
+	assert.Contains(t, buf.String(), "warning:")
+	assert.Equal(t, []string{"mkdir", "-p", target}, mkArgs)
+}
+
+func TestPromptAndMkdirAllUserDeclines(t *testing.T) {
+	oldGetuid := getuid
+	oldStdin := stdinR
+	oldSudo := sudoRun
+	getuid = func() int { return 1000 }
+	stdinR = strings.NewReader("n\n")
+	sudoRun = func(_ []string) error { t.Fatal("sudo should not be called"); return nil }
+	defer func() { getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo }()
+
+	dir := nonWritableDir(t)
+	var buf bytes.Buffer
+	err := PromptAndMkdirAll(&buf, filepath.Join(dir, "nim-cache"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}
