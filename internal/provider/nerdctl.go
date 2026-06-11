@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/docker/docker/api/types/container"
 	dimage "github.com/docker/docker/api/types/image"
@@ -232,6 +233,7 @@ func (c *nerdctlClient) ContainerLogs(ctx context.Context, id string, opts conta
 			return
 		}
 
+		var mu sync.Mutex
 		done := make(chan struct{}, 2)
 		mux := func(streamType byte, r io.Reader) {
 			defer func() { done <- struct{}{} }()
@@ -239,13 +241,12 @@ func (c *nerdctlClient) ContainerLogs(ctx context.Context, id string, opts conta
 			for {
 				n, err := r.Read(buf)
 				if n > 0 {
-					hdr := [8]byte{streamType}
-					hdr[4] = byte(n >> 24)
-					hdr[5] = byte(n >> 16)
-					hdr[6] = byte(n >> 8)
-					hdr[7] = byte(n)
+					hdr := [8]byte{streamType, 0, 0, 0,
+						byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}
+					mu.Lock()
 					_, _ = pw.Write(hdr[:])
 					_, _ = pw.Write(buf[:n])
+					mu.Unlock()
 				}
 				if err != nil {
 					return
