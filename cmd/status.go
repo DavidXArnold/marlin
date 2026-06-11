@@ -151,10 +151,17 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	} else {
+		nimActive := cur.ActiveProvider == config.ProviderNIM
+		var sawUMA bool
 		for _, g := range si.GPUs {
 			var gpuLine string
-			if g.VRAMTotalMB == 0 {
-				gpuLine = fmt.Sprintf("gpu[%d]       : %s  unified memory (see RAM)\n", g.Index, g.Name)
+			if g.IsUMA {
+				sawUMA = true
+				cc := ""
+				if g.ComputeCap != "" {
+					cc = "  sm_" + strings.ReplaceAll(g.ComputeCap, ".", "")
+				}
+				gpuLine = fmt.Sprintf("gpu[%d]       : %s  unified memory (see RAM)%s\n", g.Index, g.Name, cc)
 			} else {
 				gpuLine = fmt.Sprintf("gpu[%d]       : %s  vram %s free / %s total\n",
 					g.Index, g.Name,
@@ -162,6 +169,11 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 					sysinfo.FormatMB(g.VRAMTotalMB))
 			}
 			if err := writef("%s", gpuLine); err != nil {
+				return err
+			}
+		}
+		if sawUMA && nimActive {
+			if err := writef("               hint: add extra_env = [\"NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9\"] if model OOMs\n"); err != nil {
 				return err
 			}
 		}

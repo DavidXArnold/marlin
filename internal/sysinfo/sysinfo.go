@@ -18,7 +18,7 @@ var readLoadavg = func() ([]byte, error) {
 var (
 	runNvidiaSmi = func() ([]byte, error) {
 		return exec.Command("nvidia-smi",
-			"--query-gpu=index,name,memory.total,memory.free",
+			"--query-gpu=index,name,memory.total,memory.free,compute_cap",
 			"--format=csv,noheader,nounits").Output()
 	}
 	readMeminfo = func() ([]byte, error) {
@@ -44,6 +44,27 @@ type GPUInfo struct {
 	Name        string
 	VRAMTotalMB uint64
 	VRAMFreeMB  uint64
+	ComputeCap  string // e.g. "12.1", "10.0", "9.0" — empty if unavailable
+	IsUMA       bool   // true for unified-memory architectures (GB10, GH200, GB200, GB300)
+}
+
+// umaGPUNames lists GPU model strings that use unified CPU+GPU memory.
+// nvidia-smi reports memory.total as N/A for these, causing VRAMTotalMB==0,
+// but name-matching lets us detect them even if a future driver fixes that.
+var umaGPUNames = []string{"GB10", "GH200", "GB200", "GB300"}
+
+// isUMAGPU returns true when the GPU uses a unified memory architecture.
+func isUMAGPU(name string, vramTotal uint64) bool {
+	if vramTotal == 0 {
+		return true
+	}
+	upper := strings.ToUpper(name)
+	for _, n := range umaGPUNames {
+		if strings.Contains(upper, n) {
+			return true
+		}
+	}
+	return false
 }
 
 // DiskInfo holds disk space for a single path.
@@ -98,19 +119,29 @@ func detectGPUs() []GPUInfo {
 			continue
 		}
 		parts := strings.Split(line, ", ")
-		if len(parts) != 4 {
+		if len(parts) < 4 {
 			continue
 		}
 		idx, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
 		name := strings.TrimSpace(parts[1])
 		total, _ := strconv.ParseUint(strings.TrimSpace(parts[2]), 10, 64)
 		free, _ := strconv.ParseUint(strings.TrimSpace(parts[3]), 10, 64)
-		gpus = append(gpus, GPUInfo{
+		var cc string
+		if len(parts) >= 5 {
+			cc = strings.TrimSpace(parts[4])
+			if cc == "[N/A]" || cc == "N/A" || cc == "" {
+				cc = ""
+			}
+		}
+		g := GPUInfo{
 			Index:       idx,
 			Name:        name,
 			VRAMTotalMB: total,
 			VRAMFreeMB:  free,
-		})
+			ComputeCap:  cc,
+		}
+		g.IsUMA = isUMAGPU(g.Name, g.VRAMTotalMB)
+		gpus = append(gpus, g)
 	}
 	return gpus
 }
@@ -164,6 +195,14 @@ func LoadAvg1() float64 {
 		return 0
 	}
 	return v
+}
+
+// SetRunNvidiaSmiForTest replaces the nvidia-smi runner for tests and returns
+// a restore function. Only call from test code.
+func SetRunNvidiaSmiForTest(fn func() ([]byte, error)) func() {
+	old := runNvidiaSmi
+	runNvidiaSmi = fn
+	return func() { runNvidiaSmi = old }
 }
 
 // FormatMB formats a megabyte count as "X GiB" or "X MiB".

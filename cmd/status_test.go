@@ -15,6 +15,7 @@ import (
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/state"
+	"github.com/DavidXArnold/marlin/internal/sysinfo"
 )
 
 // --- lastNonEmptyLine ---
@@ -225,6 +226,34 @@ func TestRunStatusNIMShowsHintOnUMALog(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
 	out := buf.String()
+	assert.Contains(t, out, "hint")
+	assert.Contains(t, out, "NIM_PASSTHROUGH_ARGS")
+}
+
+func TestRunStatusUMAHintShownForNIM(t *testing.T) {
+	_, cleanup := nimStatusEnv(t)
+	defer cleanup()
+
+	fakeProvider := &fakeNIMProvider{
+		status: &provider.Status{Running: false, ContainerState: "not found"},
+	}
+	oldBuild := buildProvider
+	buildProvider = func(_ config.ProviderType, _ *config.Config) (provider.Provider, error) {
+		return fakeProvider, nil
+	}
+	defer func() { buildProvider = oldBuild }()
+
+	// Inject a GB10 (UMA) GPU via the sysinfo mock.
+	oldNvidiaSmi := sysinfo.SetRunNvidiaSmiForTest(func() ([]byte, error) {
+		return []byte("0, NVIDIA GB10, 0, 0, 12.1\n"), nil
+	})
+	defer oldNvidiaSmi()
+
+	var buf bytes.Buffer
+	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
+	out := buf.String()
+	assert.Contains(t, out, "unified memory")
+	assert.Contains(t, out, "sm_121")
 	assert.Contains(t, out, "hint")
 	assert.Contains(t, out, "NIM_PASSTHROUGH_ARGS")
 }

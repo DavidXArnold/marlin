@@ -12,7 +12,7 @@ import (
 func TestDetectGPUsSuccess(t *testing.T) {
 	old := runNvidiaSmi
 	runNvidiaSmi = func() ([]byte, error) {
-		return []byte("0, NVIDIA A100-SXM4-80GB, 81920, 75000\n1, NVIDIA A100-SXM4-80GB, 81920, 70000\n"), nil
+		return []byte("0, NVIDIA A100-SXM4-80GB, 81920, 75000, 8.0\n1, NVIDIA A100-SXM4-80GB, 81920, 70000, 8.0\n"), nil
 	}
 	defer func() { runNvidiaSmi = old }()
 
@@ -22,7 +22,64 @@ func TestDetectGPUsSuccess(t *testing.T) {
 	assert.Equal(t, "NVIDIA A100-SXM4-80GB", gpus[0].Name)
 	assert.Equal(t, uint64(81920), gpus[0].VRAMTotalMB)
 	assert.Equal(t, uint64(75000), gpus[0].VRAMFreeMB)
+	assert.Equal(t, "8.0", gpus[0].ComputeCap)
+	assert.False(t, gpus[0].IsUMA)
 	assert.Equal(t, 1, gpus[1].Index)
+}
+
+func TestDetectGPUsLegacyFourFields(t *testing.T) {
+	// Older drivers that don't emit compute_cap — should still parse cleanly.
+	old := runNvidiaSmi
+	runNvidiaSmi = func() ([]byte, error) {
+		return []byte("0, NVIDIA A100-SXM4-80GB, 81920, 75000\n"), nil
+	}
+	defer func() { runNvidiaSmi = old }()
+
+	gpus := detectGPUs()
+	require.Len(t, gpus, 1)
+	assert.Equal(t, "NVIDIA A100-SXM4-80GB", gpus[0].Name)
+	assert.Empty(t, gpus[0].ComputeCap)
+	assert.False(t, gpus[0].IsUMA)
+}
+
+func TestDetectGPUsUMA_ZeroVRAM(t *testing.T) {
+	// GB10 nvidia-smi reports N/A for memory, which our parser leaves as 0.
+	old := runNvidiaSmi
+	runNvidiaSmi = func() ([]byte, error) {
+		return []byte("0, NVIDIA GB10, 0, 0, 12.1\n"), nil
+	}
+	defer func() { runNvidiaSmi = old }()
+
+	gpus := detectGPUs()
+	require.Len(t, gpus, 1)
+	assert.True(t, gpus[0].IsUMA)
+	assert.Equal(t, "12.1", gpus[0].ComputeCap)
+}
+
+func TestDetectGPUsUMA_NameMatch(t *testing.T) {
+	// GH200 reports VRAM, but should still be flagged UMA by name.
+	old := runNvidiaSmi
+	runNvidiaSmi = func() ([]byte, error) {
+		return []byte("0, NVIDIA GH200 96GB, 98304, 90000, 9.0\n"), nil
+	}
+	defer func() { runNvidiaSmi = old }()
+
+	gpus := detectGPUs()
+	require.Len(t, gpus, 1)
+	assert.True(t, gpus[0].IsUMA)
+}
+
+func TestDetectGPUsComputeCapNA(t *testing.T) {
+	// Driver returns [N/A] for compute_cap — should be stored as empty string.
+	old := runNvidiaSmi
+	runNvidiaSmi = func() ([]byte, error) {
+		return []byte("0, NVIDIA A100, 81920, 75000, [N/A]\n"), nil
+	}
+	defer func() { runNvidiaSmi = old }()
+
+	gpus := detectGPUs()
+	require.Len(t, gpus, 1)
+	assert.Empty(t, gpus[0].ComputeCap)
 }
 
 func TestDetectGPUsNotFound(t *testing.T) {
@@ -44,6 +101,27 @@ func TestDetectGPUsMalformedLine(t *testing.T) {
 	gpus := detectGPUs()
 	require.Len(t, gpus, 1)
 	assert.Equal(t, "A100", gpus[0].Name)
+}
+
+func TestIsUMAGPU(t *testing.T) {
+	cases := []struct {
+		name  string
+		vram  uint64
+		want  bool
+	}{
+		{"NVIDIA A100-SXM4-80GB", 81920, false},
+		{"NVIDIA H100 80GB HBM3", 81920, false},
+		{"NVIDIA B200", 192512, false}, // discrete Blackwell, not UMA
+		{"NVIDIA GB10", 0, true},       // DGX Spark: VRAMTotal=0
+		{"NVIDIA GB10", 128000, true},  // GB10 by name even if driver reports VRAM
+		{"NVIDIA GH200 96GB", 98304, true},
+		{"NVIDIA GB200", 0, true},
+		{"NVIDIA GB300", 0, true},
+		{"SomeGPU", 0, true},           // zero VRAM without name → still UMA
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, isUMAGPU(c.name, c.vram), "name=%q vram=%d", c.name, c.vram)
+	}
 }
 
 func TestDetectRAM(t *testing.T) {
