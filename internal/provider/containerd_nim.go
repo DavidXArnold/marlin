@@ -21,9 +21,10 @@ import (
 //   - containerd with the NVIDIA container runtime configured
 //   - nerdctl installed and on PATH
 type ContainerdNIMProvider struct {
-	cfg    *config.Config
-	ngcKey string
-	w      io.Writer // for privilege prompts; defaults to os.Stderr
+	cfg          *config.Config
+	ngcKey       string
+	w            io.Writer                    // for privilege prompts; defaults to os.Stderr
+	prepareCache func(io.Writer, string) error // injectable for tests
 	// cmdOutput runs a nerdctl sub-command and returns its combined output.
 	// Replaceable in tests without a real container runtime.
 	cmdOutput func(ctx context.Context, args ...string) ([]byte, error)
@@ -44,11 +45,12 @@ func NewContainerdNIMProvider(cfg *config.Config, ngcKey string) (*ContainerdNIM
 
 func newContainerdNIMProviderWithRunner(cfg *config.Config, ngcKey string, runner func(context.Context, ...string) ([]byte, error)) *ContainerdNIMProvider {
 	return &ContainerdNIMProvider{
-		cfg:       cfg,
-		ngcKey:    ngcKey,
-		w:         os.Stderr,
-		cmdOutput: runner,
-		loginFunc: nerdctlLogin,
+		cfg:          cfg,
+		ngcKey:       ngcKey,
+		w:            os.Stderr,
+		prepareCache: privilege.PromptAndPrepareNIMCache,
+		cmdOutput:    runner,
+		loginFunc:    nerdctlLogin,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
 			return config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
 		},
@@ -91,8 +93,8 @@ func (p *ContainerdNIMProvider) Switch(ctx context.Context, modelSlug string) er
 		return err
 	}
 
-	if err := privilege.PromptAndMkdirAll(p.w, p.cfg.Paths.NIMCache); err != nil {
-		return fmt.Errorf("creating NIM cache dir %s: %w", p.cfg.Paths.NIMCache, err)
+	if err := p.prepareCache(p.w, p.cfg.Paths.NIMCache); err != nil {
+		return fmt.Errorf("preparing NIM cache dir %s: %w", p.cfg.Paths.NIMCache, err)
 	}
 
 	args := []string{

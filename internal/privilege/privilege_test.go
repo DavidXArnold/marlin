@@ -526,3 +526,77 @@ func TestPromptAndMkdirAllUserDeclines(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cancelled")
 }
+
+// --- PromptAndPrepareNIMCache ---
+
+func TestPromptAndPrepareNIMCacheAlreadyReady(t *testing.T) {
+	// Create a dir owned by the current user's primary group with rwx.
+	// nimCacheReady checks GID=0 specifically, so this won't be "ready" unless
+	// running as root. We test the ready=false → prompt path via the user-confirms
+	// and user-declines tests below. Here we just verify the ready path returns nil
+	// by directly calling nimCacheReady on a dir that satisfies the check.
+	// Since we can't reliably create a GID=0 dir in tests, we verify the negative:
+	// a plain temp dir is not ready (GID != 0 unless running as root).
+	dir := t.TempDir()
+	if nimCacheReady(dir) {
+		t.Skip("running as root or GID=0 — skip not-ready assertion")
+	}
+	assert.False(t, nimCacheReady(dir))
+}
+
+func TestPromptAndPrepareNIMCacheWritableUserConfirms(t *testing.T) {
+	oldGetuid := getuid
+	oldStdin := stdinR
+	oldSudo := sudoRun
+	getuid = func() int { return 1000 }
+	stdinR = strings.NewReader("y\n")
+	var calls [][]string
+	sudoRun = func(args []string) error { calls = append(calls, args); return nil }
+	defer func() { getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo }()
+
+	base := t.TempDir()
+	dir := filepath.Join(base, "nim-cache")
+	var buf bytes.Buffer
+	require.NoError(t, PromptAndPrepareNIMCache(&buf, dir))
+	assert.Contains(t, buf.String(), "warning:")
+	// Should have run chgrp and chmod (mkdir skipped — writable dir).
+	require.Len(t, calls, 2)
+	assert.Equal(t, []string{"chgrp", "-R", "0", dir}, calls[0])
+	assert.Equal(t, []string{"chmod", "-R", "g+rwX", dir}, calls[1])
+}
+
+func TestPromptAndPrepareNIMCacheNeedsRootUserConfirms(t *testing.T) {
+	oldGetuid := getuid
+	oldStdin := stdinR
+	oldSudo := sudoRun
+	getuid = func() int { return 1000 }
+	stdinR = strings.NewReader("y\n")
+	var calls [][]string
+	sudoRun = func(args []string) error { calls = append(calls, args); return nil }
+	defer func() { getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo }()
+
+	nonWritable := nonWritableDir(t)
+	target := filepath.Join(nonWritable, "nim-cache")
+	var buf bytes.Buffer
+	require.NoError(t, PromptAndPrepareNIMCache(&buf, target))
+	require.Len(t, calls, 3)
+	assert.Equal(t, []string{"mkdir", "-p", target}, calls[0])
+	assert.Equal(t, []string{"chgrp", "-R", "0", target}, calls[1])
+	assert.Equal(t, []string{"chmod", "-R", "g+rwX", target}, calls[2])
+}
+
+func TestPromptAndPrepareNIMCacheUserDeclines(t *testing.T) {
+	oldGetuid := getuid
+	oldStdin := stdinR
+	oldSudo := sudoRun
+	getuid = func() int { return 1000 }
+	stdinR = strings.NewReader("n\n")
+	sudoRun = func(_ []string) error { t.Fatal("sudo should not be called"); return nil }
+	defer func() { getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo }()
+
+	dir := nonWritableDir(t)
+	var buf bytes.Buffer
+	err := PromptAndPrepareNIMCache(&buf, filepath.Join(dir, "nim-cache"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cancelled")
+}

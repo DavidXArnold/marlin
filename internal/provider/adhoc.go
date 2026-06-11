@@ -39,10 +39,11 @@ type AdhocInfo struct {
 // Containers are labelled so they can be listed and cleaned up independently
 // of the managed (switched) provider.
 type AdhocRunner struct {
-	cfg       *config.Config
-	docker    dockerClient
-	loadModel func(slug string) (*config.ModelConfig, error)
-	w         io.Writer // for privilege prompts; defaults to os.Stderr
+	cfg          *config.Config
+	docker       dockerClient
+	loadModel    func(slug string) (*config.ModelConfig, error)
+	w            io.Writer                    // for privilege prompts; defaults to os.Stderr
+	prepareCache func(io.Writer, string) error // injectable for tests
 }
 
 func NewAdhocRunner(cfg *config.Config) (*AdhocRunner, error) {
@@ -76,9 +77,10 @@ func NewAdhocRunner(cfg *config.Config) (*AdhocRunner, error) {
 
 func newAdhocRunnerWithClient(cfg *config.Config, docker dockerClient) *AdhocRunner {
 	return &AdhocRunner{
-		cfg:    cfg,
-		docker: docker,
-		w:      os.Stderr,
+		cfg:          cfg,
+		docker:       docker,
+		w:            os.Stderr,
+		prepareCache: privilege.PromptAndPrepareNIMCache,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
 			return config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
 		},
@@ -264,8 +266,8 @@ func (a *AdhocRunner) buildContainerConfig(slug string, m *config.ModelConfig) (
 		}
 		labels[labelProvider] = "nim"
 
-		if err := privilege.PromptAndMkdirAll(a.w, a.cfg.Paths.NIMCache); err != nil {
-			return "", "", nil, nil, fmt.Errorf("creating NIM cache dir %s: %w", a.cfg.Paths.NIMCache, err)
+		if err := a.prepareCache(a.w, a.cfg.Paths.NIMCache); err != nil {
+			return "", "", nil, nil, fmt.Errorf("preparing NIM cache dir %s: %w", a.cfg.Paths.NIMCache, err)
 		}
 
 		sec, _ := secrets.Load(a.cfg.Paths.SecretsEnv)

@@ -26,7 +26,9 @@ func testAdhocRunner(t *testing.T, d *stubDocker) (*AdhocRunner, string) {
 	cfg.Paths.ModelsDir = modelsDir
 	cfg.Paths.NIMCache = filepath.Join(dir, "nim-cache")
 
-	return newAdhocRunnerWithClient(cfg, d), dir
+	a := newAdhocRunnerWithClient(cfg, d)
+	a.prepareCache = func(_ io.Writer, _ string) error { return nil }
+	return a, dir
 }
 
 func writeAdhocVLLMModel(t *testing.T, dir, slug, modelID string) {

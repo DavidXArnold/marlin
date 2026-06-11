@@ -62,11 +62,12 @@ type dockerClient interface {
 // container downloads weights and compiles TRT engines (can be minutes).
 // Future enhancement: front port 8000 with a reverse proxy for zero-downtime switching.
 type NIMProvider struct {
-	cfg       *config.Config
-	ngcKey    string
-	docker    dockerClient
-	loadModel func(slug string) (*config.ModelConfig, error)
-	w         io.Writer // for privilege prompts; defaults to os.Stderr
+	cfg          *config.Config
+	ngcKey       string
+	docker       dockerClient
+	loadModel    func(slug string) (*config.ModelConfig, error)
+	w            io.Writer                    // for privilege prompts; defaults to os.Stderr
+	prepareCache func(io.Writer, string) error // injectable for tests
 }
 
 func NewNIMProvider(cfg *config.Config, ngcKey string) (*NIMProvider, error) {
@@ -111,10 +112,11 @@ func defaultPodmanSocket() string {
 
 func newNIMProviderWithClient(cfg *config.Config, ngcKey string, docker dockerClient) *NIMProvider {
 	return &NIMProvider{
-		cfg:    cfg,
-		ngcKey: ngcKey,
-		docker: docker,
-		w:      os.Stderr,
+		cfg:          cfg,
+		ngcKey:       ngcKey,
+		docker:       docker,
+		w:            os.Stderr,
+		prepareCache: privilege.PromptAndPrepareNIMCache,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
 			return config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
 		},
@@ -151,8 +153,8 @@ func (n *NIMProvider) Switch(ctx context.Context, modelSlug string) error {
 		return err
 	}
 
-	if err := privilege.PromptAndMkdirAll(n.w, n.cfg.Paths.NIMCache); err != nil {
-		return fmt.Errorf("creating NIM cache dir %s: %w", n.cfg.Paths.NIMCache, err)
+	if err := n.prepareCache(n.w, n.cfg.Paths.NIMCache); err != nil {
+		return fmt.Errorf("preparing NIM cache dir %s: %w", n.cfg.Paths.NIMCache, err)
 	}
 
 	portSet := nat.PortSet{"8000/tcp": struct{}{}}

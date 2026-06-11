@@ -70,6 +70,7 @@ func testNIMProvider(t *testing.T, d *stubDocker) (*NIMProvider, string) {
 	cfg.Paths.NIMCache = filepath.Join(dir, "nim-cache")
 
 	p := newNIMProviderWithClient(cfg, "test-ngc-key", d)
+	p.prepareCache = func(_ io.Writer, _ string) error { return nil }
 	return p, dir
 }
 

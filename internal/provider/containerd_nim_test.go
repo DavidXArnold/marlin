@@ -32,7 +32,9 @@ func newContainerdProviderWithStub(t *testing.T, stub *stubRunner) *ContainerdNI
 	cfg := config.Defaults()
 	cfg.Paths.ModelsDir = t.TempDir()
 	cfg.Paths.NIMCache = t.TempDir()
-	return newContainerdNIMProviderWithRunner(cfg, "test-key", stub.run)
+	p := newContainerdNIMProviderWithRunner(cfg, "test-key", stub.run)
+	p.prepareCache = func(_ io.Writer, _ string) error { return nil }
+	return p
 }
 
 func writeNIMModelFixture(t *testing.T, modelsDir, slug string) {
@@ -109,6 +111,7 @@ func TestContainerdNIMProviderSwitchRunError(t *testing.T) {
 		}
 		return nil, nil
 	})
+	p.prepareCache = func(_ io.Writer, _ string) error { return nil }
 
 	writeNIMModelFixture(t, p.cfg.Paths.ModelsDir, "llama-8b")
 	err := p.Switch(context.Background(), "llama-8b")

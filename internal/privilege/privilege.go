@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // injectable for tests
@@ -133,6 +134,50 @@ func PromptAndMkdirAll(w io.Writer, dir string) error {
 		return fmt.Errorf("cancelled")
 	}
 	return sudoRun([]string{"mkdir", "-p", dir})
+}
+
+// PromptAndPrepareNIMCache creates dir and sets GID-0 group write permissions
+// required by NIM containers (which run as UID=1000, GID=0). If the directory
+// already exists with the correct group and permissions this is a no-op.
+// Otherwise it warns on w and prompts once before running all three steps via sudo.
+func PromptAndPrepareNIMCache(w io.Writer, dir string) error {
+	if nimCacheReady(dir) {
+		return nil
+	}
+	needsRoot := NeedsRoot(dir)
+	_, _ = fmt.Fprintf(w, "\nwarning: NIM cache setup for %s requires administrator privileges\n", dir)
+	_, _ = fmt.Fprintf(w, "  will run: mkdir -p, chgrp -R 0, chmod -R g+rwX\n")
+	_, _ = fmt.Fprint(w, "continue with sudo? [y/N] ")
+	buf := make([]byte, 64)
+	n, _ := stdinR.Read(buf)
+	if strings.ToLower(strings.TrimSpace(string(buf[:n]))) != "y" {
+		_, _ = fmt.Fprintln(w, "cancelled")
+		return fmt.Errorf("cancelled")
+	}
+	if needsRoot {
+		if err := sudoRun([]string{"mkdir", "-p", dir}); err != nil {
+			return err
+		}
+	} else if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := sudoRun([]string{"chgrp", "-R", "0", dir}); err != nil {
+		return err
+	}
+	return sudoRun([]string{"chmod", "-R", "g+rwX", dir})
+}
+
+// nimCacheReady reports whether dir exists, is owned by GID 0, and has group rwx.
+func nimCacheReady(dir string) bool {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return false
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return false
+	}
+	return st.Gid == 0 && info.Mode()&0o070 == 0o070
 }
 
 // PromptAndRemove removes path. If the removal fails with a permission error,
