@@ -41,7 +41,7 @@ jobs:
           cache: true
 
       - name: Run tests with race detector
-        run: go test -race -count=1 ./...
+        run: make test
 
   coverage:
     name: Coverage gate
@@ -54,18 +54,8 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Generate coverage profile
-        run: go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./...
-
-      # 85% gate — cmd and internal/ui are TTY/root-bound and cannot reach 90%
       - name: Check coverage threshold (85%)
-        run: |
-          COVERAGE=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
-          echo "Total coverage: ${COVERAGE}%"
-          if awk "BEGIN {exit !($COVERAGE < 85.0)}"; then
-            echo "FAIL: coverage ${COVERAGE}% is below 85%"
-            exit 1
-          fi
+        run: make coverage
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -86,4 +76,4 @@ jobs:
           cache: true
 
       - name: Run integration tests (embedded mock vLLM server)
-        run: go test -tags integration -v -count=1 -timeout=120s ./test/integration/
+        run: make integration

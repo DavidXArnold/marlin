@@ -5,14 +5,19 @@ COVERAGE_HTML := coverage.html
 # 85% gate — cmd and internal/ui are TTY/root-bound and cannot reach 90%
 MIN_COVERAGE  := 85.0
 
-.PHONY: all build test coverage lint clean install check \
+.PHONY: all build build-check test coverage lint clean install check \
         test-race test-verbose test-short coverage-html \
         integration e2e
 
-all: lint test build
+all: build-check lint coverage integration build
 
 build:
 	go build -o bin/$(BINARY) $(CMD)
+
+# build-check compiles all packages including integration tests.
+# Catches signature mismatches in test/integration/ that plain go build misses.
+build-check:
+	go build -tags integration ./...
 
 test:
 	go test ./... -race -count=1
@@ -47,15 +52,15 @@ clean:
 install:
 	go install $(CMD)
 
-# check runs lint + coverage (used in CI)
-check: lint coverage
+# check: full pre-push gate identical to CI (build-check + lint + coverage + integration)
+check: build-check lint coverage integration
 
 tidy:
 	go mod tidy
 
 # integration: filesystem + API tests using an embedded mock vLLM server.
 # Set MARLIN_TEST_HOST to run against a real inference server instead.
-integration:
+integration: build-check
 	go test -tags integration -v -count=1 -timeout=120s ./test/integration/
 
 # e2e: binary smoke tests against a real server.

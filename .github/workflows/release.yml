@@ -40,18 +40,8 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Run tests with coverage
-        run: |
-          go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic
-
-      - name: Check coverage threshold
-        run: |
-          COVERAGE=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
-          echo "Total coverage: ${COVERAGE}%"
-          if awk "BEGIN {exit !($COVERAGE < 85.0)}"; then
-            echo "FAIL: coverage ${COVERAGE}% is below 85%"
-            exit 1
-          fi
+      - name: Run tests with coverage gate
+        run: make coverage
 
   integration:
     name: Integration tests
@@ -65,7 +55,7 @@ jobs:
           cache: true
 
       - name: Run integration tests (embedded mock vLLM server)
-        run: go test -tags integration -v -count=1 -timeout=120s ./test/integration/
+        run: make integration
 
   release:
     name: Release
