@@ -119,7 +119,7 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		newState.ContainerID = st.ContainerID
 	}
 	state.RecordStart(newState, targetSlug)
-	if err := state.Save(cfg.Paths.StateFile, newState); err != nil {
+	if err := state.SavePrivileged(cmd.ErrOrStderr(), cfg.Paths.StateFile, newState); err != nil {
 		if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not save state: %v\n", err); writeErr != nil {
 			return writeErr
 		}

@@ -1,13 +1,16 @@
 package state
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/privilege"
 )
 
 // State tracks which model and provider are currently active on this machine.
@@ -66,6 +69,23 @@ func Save(path string, s *State) error {
 		return fmt.Errorf("closing state file %s: %w", path, err)
 	}
 
+	return nil
+}
+
+// SavePrivileged encodes state and writes it to path. If the directory requires
+// elevated privileges it prompts w for confirmation then writes via sudo tee.
+func SavePrivileged(w io.Writer, path string, s *State) error {
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(s); err != nil {
+		return fmt.Errorf("encoding state: %w", err)
+	}
+	ok, err := privilege.PromptAndWriteFile(w, filepath.Dir(path), path, buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("writing state file %s: %w", path, err)
+	}
+	if !ok {
+		return fmt.Errorf("cancelled")
+	}
 	return nil
 }
 

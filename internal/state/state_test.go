@@ -1,6 +1,7 @@
 package state
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -138,6 +139,26 @@ func TestLoadEnsuresModelHistory(t *testing.T) {
 	s, err := Load(path)
 	require.NoError(t, err)
 	assert.NotNil(t, s.ModelHistory)
+}
+
+func TestSavePrivilegedWritable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.toml")
+	s := &State{ActiveModel: "qwen25-72b", ActiveProvider: config.ProviderVLLM}
+	require.NoError(t, SavePrivileged(io.Discard, path, s))
+	loaded, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, "qwen25-72b", loaded.ActiveModel)
+}
+
+func TestSavePrivilegedEncoderError(t *testing.T) {
+	// A nil state causes the TOML encoder to panic/error — use a path in a
+	// non-writable parent to exercise the failure branch instead.
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses file permissions")
+	}
+	err := SavePrivileged(io.Discard, "/proc/marlin/state.toml", &State{ActiveModel: "x"})
+	assert.Error(t, err)
 }
 
 func TestLoadPermissionDenied(t *testing.T) {
