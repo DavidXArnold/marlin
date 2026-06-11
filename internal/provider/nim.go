@@ -197,6 +197,7 @@ func (n *NIMProvider) Stop(ctx context.Context) error {
 
 func (n *NIMProvider) Status(ctx context.Context) (*Status, error) {
 	containers, err := n.docker.ContainerList(ctx, container.ListOptions{
+		All:     true,
 		Filters: filters.NewArgs(filters.Arg("name", nimContainerName)),
 	})
 	if err != nil {

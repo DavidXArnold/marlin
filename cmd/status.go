@@ -67,7 +67,13 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			if len(id) > 12 {
 				id = id[:12]
 			}
-			if err := writef("container    : %s  (%s)\n", id, liveStatus.ContainerState); err != nil {
+			var containerLine string
+			if id != "" {
+				containerLine = fmt.Sprintf("%s  (%s)", id, liveStatus.ContainerState)
+			} else {
+				containerLine = liveStatus.ContainerState
+			}
+			if err := writef("container    : %s\n", containerLine); err != nil {
 				return err
 			}
 		} else if cur.ContainerID != "" {
@@ -140,10 +146,16 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		}
 	} else {
 		for _, g := range si.GPUs {
-			if err := writef("gpu[%d]       : %s  vram %s free / %s total\n",
-				g.Index, g.Name,
-				sysinfo.FormatMB(g.VRAMFreeMB),
-				sysinfo.FormatMB(g.VRAMTotalMB)); err != nil {
+			var gpuLine string
+			if g.VRAMTotalMB == 0 {
+				gpuLine = fmt.Sprintf("gpu[%d]       : %s  unified memory (see RAM)\n", g.Index, g.Name)
+			} else {
+				gpuLine = fmt.Sprintf("gpu[%d]       : %s  vram %s free / %s total\n",
+					g.Index, g.Name,
+					sysinfo.FormatMB(g.VRAMFreeMB),
+					sysinfo.FormatMB(g.VRAMTotalMB))
+			}
+			if err := writef("%s", gpuLine); err != nil {
 				return err
 			}
 		}

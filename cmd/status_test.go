@@ -178,7 +178,7 @@ func TestRunStatusNIMContainerNotFound(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
 	out := buf.String()
-	assert.Contains(t, out, "(not found)")
+	assert.Contains(t, out, "not found")
 }
 
 func TestRunStatusNIMBuildProviderError(t *testing.T) {
