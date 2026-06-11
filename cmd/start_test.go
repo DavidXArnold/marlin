@@ -1,9 +1,17 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -17,6 +25,15 @@ func noopEnableUnit(t *testing.T) {
 	old := enableUnit
 	enableUnit = func(_ *config.Config) error { return nil }
 	t.Cleanup(func() { enableUnit = old })
+}
+
+// noopWaitForReady bypasses the post-switch health-polling loop for tests that
+// don't have a live API server.
+func noopWaitForReady(t *testing.T) {
+	t.Helper()
+	old := startWaitForReadyFunc
+	startWaitForReadyFunc = func(_ *cobra.Command, _ *config.Config, _ string, _ provider.Provider) {}
+	t.Cleanup(func() { startWaitForReadyFunc = old })
 }
 
 // TestStartNoActiveModel: no models → error propagates from switch.
@@ -37,6 +54,7 @@ func TestStartSingleModel(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
 	noopRequireRoot(t)
+	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")
 
@@ -50,6 +68,7 @@ func TestStartWithModelArg(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
 	noopRequireRoot(t)
+	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 
 	writeVLLMModel(t, modelsDir, "llama-8b")
@@ -64,6 +83,7 @@ func TestStartWithEnable(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
 	noopRequireRoot(t)
+	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")
 
@@ -82,6 +102,7 @@ func TestStartEnableNoArg(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
 	noopRequireRoot(t)
+	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")
 
@@ -101,6 +122,7 @@ func TestStartEnableFails(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
 	noopRequireRoot(t)
+	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")
 
@@ -129,4 +151,106 @@ func TestStartProviderError(t *testing.T) {
 	_, err := executeCmd("start", "llama-8b")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "docker not available")
+}
+
+// --- waitForReady unit tests ---
+
+// makeReadyServer returns an httptest.Server whose /health always responds 200.
+func makeReadyServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// cfgWithServer returns a config whose Server.Host/Port points at the given test server.
+func cfgWithServer(t *testing.T, srv *httptest.Server) *config.Config {
+	t.Helper()
+	cfg, _ := config.Load("")
+	host, portStr, err := net.SplitHostPort(srv.Listener.Addr().String())
+	require.NoError(t, err)
+	port, err := strconv.Atoi(portStr)
+	require.NoError(t, err)
+	cfg.Server.Host = host
+	cfg.Server.Port = port
+	return cfg
+}
+
+func TestWaitForReadyAlreadyReady(t *testing.T) {
+	srv := makeReadyServer(t)
+	cfg := cfgWithServer(t, srv)
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().BoolP("logs", "l", false, "")
+
+	waitForReady(cmd, cfg, "test-model", &mockProv{})
+	assert.Contains(t, buf.String(), "ready")
+}
+
+func TestWaitForReadyEventuallyReady(t *testing.T) {
+	var ready atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			if ready.Load() {
+				w.WriteHeader(http.StatusOK)
+			} else {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+	cfg := cfgWithServer(t, srv)
+
+	go func() {
+		time.Sleep(3 * time.Second)
+		ready.Store(true)
+	}()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().BoolP("logs", "l", false, "")
+
+	waitForReady(cmd, cfg, "test-model", &mockProv{})
+	assert.Contains(t, buf.String(), "ready")
+	assert.Contains(t, buf.String(), "test-model")
+}
+
+func TestWaitForReadyLogsFlag(t *testing.T) {
+	srv := makeReadyServer(t)
+	cfg := cfgWithServer(t, srv)
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().BoolP("logs", "l", false, "")
+	require.NoError(t, cmd.Flags().Set("logs", "true"))
+
+	waitForReady(cmd, cfg, "nim-model", &mockProv{})
+	// Already ready → should print ready immediately; logs goroutine is cancelled.
+	assert.Contains(t, buf.String(), "ready")
+}
+
+func TestWaitForReadyTimeout(t *testing.T) {
+	// Server that never becomes ready.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	cfg := cfgWithServer(t, srv)
+
+	// Shorten the timeout so the test finishes quickly.
+	old := startWaitTimeout
+	startWaitTimeout = 3 * time.Second
+	defer func() { startWaitTimeout = old }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().BoolP("logs", "l", false, "")
+
+	waitForReady(cmd, cfg, "slow-model", &mockProv{})
+	assert.Contains(t, buf.String(), "timed out")
 }
