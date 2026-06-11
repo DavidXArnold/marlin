@@ -47,7 +47,7 @@ func (h *HuggingFace) logf(level int, format string, args ...any) {
 func (h *HuggingFace) Name() string { return "huggingface" }
 
 func (h *HuggingFace) Search(ctx context.Context, query string) ([]ModelInfo, error) {
-	endpoint := fmt.Sprintf("%s/models?search=%s&limit=20&full=true", h.base, url.QueryEscape(query))
+	endpoint := fmt.Sprintf("%s/models?search=%s&limit=50&full=true", h.base, url.QueryEscape(query))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {

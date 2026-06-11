@@ -35,8 +35,8 @@ func newSearchResultItem(m registry.ModelInfo, freeVRAM uint64) searchResultItem
 	if mb := m.EstimatedVRAMMB(); mb > 0 {
 		vram = sysinfo.FormatMB(mb)
 	}
-	fit := srFitLabel(m.EstimatedVRAMMB(), freeVRAM)
-	upd := srFormatUpdated(m.LastUpdated)
+	fit := FitLabel(m.EstimatedVRAMMB(), freeVRAM)
+	upd := FormatUpdated(m.LastUpdated)
 	desc := fmt.Sprintf("[%s] VRAM: %s %s  %s", m.Registry, vram, fit, upd)
 	return searchResultItem{info: m, desc: desc}
 }
@@ -233,7 +233,8 @@ func ModelURL(m registry.ModelInfo) string {
 	return ""
 }
 
-func srFitLabel(estimatedMB, freeVRAMMB uint64) string {
+// FitLabel returns ✓, ~, ✗, or ? based on whether the model fits in free VRAM.
+func FitLabel(estimatedMB, freeVRAMMB uint64) string {
 	if estimatedMB == 0 || freeVRAMMB == 0 {
 		return "?"
 	}
@@ -248,7 +249,8 @@ func srFitLabel(estimatedMB, freeVRAMMB uint64) string {
 	}
 }
 
-func srFormatUpdated(t time.Time) string {
+// FormatUpdated formats a time.Time as a human-readable relative string.
+func FormatUpdated(t time.Time) string {
 	if t.IsZero() {
 		return "-"
 	}

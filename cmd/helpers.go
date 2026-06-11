@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/DavidXArnold/marlin/internal/config"
@@ -94,6 +95,43 @@ func resolveModel(query string, names []string, cfgs []*config.ModelConfig, acti
 	}
 
 	return ui.PickModel(names, cfgs, "", activeSlug, history)
+}
+
+// umaHintConfirmFunc is injectable for tests.
+var umaHintConfirmFunc = ui.Confirm
+
+// maybeOfferUMAHint checks if any detected GPU uses a unified memory architecture
+// and the model is a NIM profile without NIM_PASSTHROUGH_ARGS already set. If so,
+// it prompts the user to add the env var to the model config before it is written.
+func maybeOfferUMAHint(mc *config.ModelConfig, w io.Writer) {
+	if mc.Model.Type != config.ProviderNIM {
+		return
+	}
+	for _, env := range mc.Serve.ExtraEnv {
+		if strings.Contains(env, "NIM_PASSTHROUGH_ARGS") {
+			return
+		}
+	}
+	si, err := sysinfo.Detect()
+	if err != nil {
+		return
+	}
+	var hasUMA bool
+	for _, g := range si.GPUs {
+		if g.IsUMA {
+			hasUMA = true
+			break
+		}
+	}
+	if !hasUMA {
+		return
+	}
+	_, _ = fmt.Fprintln(w, "hint: UMA/unified-memory GPU detected — NIM may need a higher gpu_memory_utilization")
+	ok, err := umaHintConfirmFunc(`Add extra_env = ["NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9"] to this profile?`)
+	if err != nil || !ok {
+		return
+	}
+	mc.Serve.ExtraEnv = append(mc.Serve.ExtraEnv, "NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9")
 }
 
 // checkSystemResources warns on stderr if the 1-minute load average exceeds

@@ -47,12 +47,13 @@ func runAdd(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("model %q already exists", result.Slug)
 	}
 
+	w := cmd.OutOrStdout()
+	maybeOfferUMAHint(result.Cfg, w)
+
 	data, err := config.ModelConfigToBytes(result.Cfg)
 	if err != nil {
 		return fmt.Errorf("encoding model config: %w", err)
 	}
-
-	w := cmd.OutOrStdout()
 	written, err := privilege.PromptAndWriteFile(w, destDir, destPath, data)
 	if err != nil {
 		return fmt.Errorf("writing model config: %w", err)

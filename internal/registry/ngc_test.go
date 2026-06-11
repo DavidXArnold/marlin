@@ -41,8 +41,8 @@ func TestNGCSearch(t *testing.T) {
 	assert.Equal(t, "ngc", results[0].Registry)
 }
 
-func TestNGCSearchReturnsUpTo20(t *testing.T) {
-	models := make([]nimModel, 30)
+func TestNGCSearchReturnsUpTo50(t *testing.T) {
+	models := make([]nimModel, 60)
 	for i := range models {
 		models[i] = nimModel{ID: "nvidia/llama-match", Created: 1700000000 + int64(i), OwnedBy: "nvidia"}
 	}
@@ -57,7 +57,7 @@ func TestNGCSearchReturnsUpTo20(t *testing.T) {
 	n := newNGCWithBase("", srv.URL)
 	results, err := n.Search(context.Background(), "llama")
 	require.NoError(t, err)
-	assert.Len(t, results, 20)
+	assert.Len(t, results, 50)
 }
 
 func TestNGCModelToModelInfo(t *testing.T) {

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/state"
+	"github.com/DavidXArnold/marlin/internal/sysinfo"
 )
 
 // --- globalConfig ---
@@ -305,4 +307,87 @@ func TestRunLogsDirectWithFollowAndLines(t *testing.T) {
 	require.NoError(t, cmd.Flags().Set("follow", "true"))
 	require.NoError(t, cmd.Flags().Set("lines", "50"))
 	require.NoError(t, runLogs(cmd, nil))
+}
+
+// --- maybeOfferUMAHint ---
+
+func TestMaybeOfferUMAHintNotNIM(t *testing.T) {
+	mc := &config.ModelConfig{Model: config.ModelMeta{Type: config.ProviderVLLM}}
+	old := umaHintConfirmFunc
+	umaHintConfirmFunc = func(string) (bool, error) {
+		t.Fatal("confirm should not be called for non-NIM profile")
+		return false, nil
+	}
+	defer func() { umaHintConfirmFunc = old }()
+	var buf bytes.Buffer
+	maybeOfferUMAHint(mc, &buf)
+	assert.Empty(t, mc.Serve.ExtraEnv)
+}
+
+func TestMaybeOfferUMAHintAlreadySet(t *testing.T) {
+	mc := &config.ModelConfig{
+		Model: config.ModelMeta{Type: config.ProviderNIM},
+		Serve: config.ServeConfig{ExtraEnv: []string{"NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.5"}},
+	}
+	old := umaHintConfirmFunc
+	umaHintConfirmFunc = func(string) (bool, error) {
+		t.Fatal("confirm should not be called when already set")
+		return false, nil
+	}
+	defer func() { umaHintConfirmFunc = old }()
+	var buf bytes.Buffer
+	maybeOfferUMAHint(mc, &buf)
+	assert.Len(t, mc.Serve.ExtraEnv, 1) // unchanged
+}
+
+func TestMaybeOfferUMAHintNoUMA(t *testing.T) {
+	restore := sysinfo.SetRunNvidiaSmiForTest(func() ([]byte, error) {
+		return []byte("0, NVIDIA A100-SXM4-80GB, 81920, 75000, 8.0\n"), nil
+	})
+	defer restore()
+
+	mc := &config.ModelConfig{Model: config.ModelMeta{Type: config.ProviderNIM}}
+	old := umaHintConfirmFunc
+	umaHintConfirmFunc = func(string) (bool, error) {
+		t.Fatal("confirm should not be called when no UMA GPU")
+		return false, nil
+	}
+	defer func() { umaHintConfirmFunc = old }()
+	var buf bytes.Buffer
+	maybeOfferUMAHint(mc, &buf)
+	assert.Empty(t, mc.Serve.ExtraEnv)
+}
+
+func TestMaybeOfferUMAHintUMAConfirmYes(t *testing.T) {
+	restore := sysinfo.SetRunNvidiaSmiForTest(func() ([]byte, error) {
+		return []byte("0, NVIDIA GB10, 0, 0, 12.1\n"), nil
+	})
+	defer restore()
+
+	mc := &config.ModelConfig{Model: config.ModelMeta{Type: config.ProviderNIM}}
+	old := umaHintConfirmFunc
+	umaHintConfirmFunc = func(string) (bool, error) { return true, nil }
+	defer func() { umaHintConfirmFunc = old }()
+
+	var buf bytes.Buffer
+	maybeOfferUMAHint(mc, &buf)
+	require.Len(t, mc.Serve.ExtraEnv, 1)
+	assert.Contains(t, mc.Serve.ExtraEnv[0], "NIM_PASSTHROUGH_ARGS")
+	assert.Contains(t, buf.String(), "UMA")
+}
+
+func TestMaybeOfferUMAHintUMAConfirmNo(t *testing.T) {
+	restore := sysinfo.SetRunNvidiaSmiForTest(func() ([]byte, error) {
+		return []byte("0, NVIDIA GB10, 0, 0, 12.1\n"), nil
+	})
+	defer restore()
+
+	mc := &config.ModelConfig{Model: config.ModelMeta{Type: config.ProviderNIM}}
+	old := umaHintConfirmFunc
+	umaHintConfirmFunc = func(string) (bool, error) { return false, nil }
+	defer func() { umaHintConfirmFunc = old }()
+
+	var buf bytes.Buffer
+	maybeOfferUMAHint(mc, &buf)
+	assert.Empty(t, mc.Serve.ExtraEnv) // not added when user declines
 }

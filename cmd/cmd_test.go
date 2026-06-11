@@ -478,6 +478,30 @@ func TestRunSearchDirect(t *testing.T) {
 	require.NoError(t, runSearch(cmd, []string{"llama"}))
 }
 
+func TestRunSearchDiscoveryNoArgs(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	oldHF := newHuggingFaceRegistry
+	newHuggingFaceRegistry = func(string) registry.Registry {
+		return fakeRegistry{
+			name: "huggingface",
+			results: []registry.ModelInfo{
+				{ID: "meta-llama/Llama-3.1-8B-Instruct", Registry: "huggingface", ParamsBillion: 8},
+			},
+		}
+	}
+	defer func() { newHuggingFaceRegistry = oldHF }()
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().StringSlice("registry", []string{"huggingface"}, "")
+	cmd.Flags().Bool("plain", true, "")
+
+	require.NoError(t, runSearch(cmd, nil)) // no args = discovery mode
+	assert.Contains(t, buf.String(), "meta-llama")
+}
+
 func TestRunSearchPlainTableWithResults(t *testing.T) {
 	cleanup := tempEnv(t)
 	defer cleanup()
@@ -863,20 +887,20 @@ func TestBuildRegistriesIncludesNGCWhenKeySet(t *testing.T) {
 // --- search helpers ---
 
 func TestFormatUpdated(t *testing.T) {
-	assert.Equal(t, "-", formatUpdated(time.Time{}))
-	assert.Equal(t, "today", formatUpdated(time.Now()))
-	assert.Contains(t, formatUpdated(time.Now().AddDate(0, 0, -3)), "d ago")
-	assert.Contains(t, formatUpdated(time.Now().AddDate(0, 0, -14)), "w ago")
-	assert.Contains(t, formatUpdated(time.Now().AddDate(0, -2, 0)), "mo ago")
-	assert.Contains(t, formatUpdated(time.Now().AddDate(-2, 0, 0)), "y ago")
+	assert.Equal(t, "-", ui.FormatUpdated(time.Time{}))
+	assert.Equal(t, "today", ui.FormatUpdated(time.Now()))
+	assert.Contains(t, ui.FormatUpdated(time.Now().AddDate(0, 0, -3)), "d ago")
+	assert.Contains(t, ui.FormatUpdated(time.Now().AddDate(0, 0, -14)), "w ago")
+	assert.Contains(t, ui.FormatUpdated(time.Now().AddDate(0, -2, 0)), "mo ago")
+	assert.Contains(t, ui.FormatUpdated(time.Now().AddDate(-2, 0, 0)), "y ago")
 }
 
 func TestFitLabel(t *testing.T) {
-	assert.Equal(t, "?", fitLabel(0, 1000))
-	assert.Equal(t, "?", fitLabel(1000, 0))
-	assert.Equal(t, "✓", fitLabel(800, 1000))
-	assert.Equal(t, "~", fitLabel(900, 1000))
-	assert.Equal(t, "✗", fitLabel(1100, 1000))
+	assert.Equal(t, "?", ui.FitLabel(0, 1000))
+	assert.Equal(t, "?", ui.FitLabel(1000, 0))
+	assert.Equal(t, "✓", ui.FitLabel(800, 1000))
+	assert.Equal(t, "~", ui.FitLabel(900, 1000))
+	assert.Equal(t, "✗", ui.FitLabel(1100, 1000))
 }
 
 func TestFormatVRAM(t *testing.T) {
@@ -1095,11 +1119,27 @@ func TestRmNotFound(t *testing.T) {
 }
 
 func TestRmExistingModel(t *testing.T) {
+	old := rmConfirmFunc
+	rmConfirmFunc = func(string) (bool, error) { return true, nil }
+	defer func() { rmConfirmFunc = old }()
+
 	cleanup := tempEnv(t, "qwen25-72b")
 	defer cleanup()
 	out, err := executeCmd("rm", "qwen25-72b")
 	require.NoError(t, err)
 	assert.Contains(t, out, "removed")
+}
+
+func TestRmCancelled(t *testing.T) {
+	old := rmConfirmFunc
+	rmConfirmFunc = func(string) (bool, error) { return false, nil }
+	defer func() { rmConfirmFunc = old }()
+
+	cleanup := tempEnv(t, "qwen25-72b")
+	defer cleanup()
+	var buf bytes.Buffer
+	require.NoError(t, runRm(cmdWithContext(&buf), []string{"qwen25-72b"}))
+	assert.Contains(t, buf.String(), "cancelled")
 }
 
 func TestRmMissingArg(t *testing.T) {
@@ -1108,6 +1148,10 @@ func TestRmMissingArg(t *testing.T) {
 }
 
 func TestRunRmDirect(t *testing.T) {
+	old := rmConfirmFunc
+	rmConfirmFunc = func(string) (bool, error) { return true, nil }
+	defer func() { rmConfirmFunc = old }()
+
 	cleanup := tempEnv(t, "llama-8b")
 	defer cleanup()
 	require.NoError(t, runRm(cmdWithContext(io.Discard), []string{"llama-8b"}))

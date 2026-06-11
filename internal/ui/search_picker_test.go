@@ -164,25 +164,25 @@ func TestModelURL(t *testing.T) {
 	assert.Equal(t, "", ModelURL(unknown))
 }
 
-// --- srFormatUpdated ---
+// --- FormatUpdated ---
 
-func TestSrFormatUpdated(t *testing.T) {
-	assert.Equal(t, "-", srFormatUpdated(time.Time{}))
-	assert.Equal(t, "today", srFormatUpdated(time.Now()))
-	assert.Contains(t, srFormatUpdated(time.Now().AddDate(0, 0, -3)), "d ago")
-	assert.Contains(t, srFormatUpdated(time.Now().AddDate(0, 0, -14)), "w ago")
-	assert.Contains(t, srFormatUpdated(time.Now().AddDate(0, -2, 0)), "mo ago")
-	assert.Contains(t, srFormatUpdated(time.Now().AddDate(-2, 0, 0)), "y ago")
+func TestFormatUpdatedUI(t *testing.T) {
+	assert.Equal(t, "-", FormatUpdated(time.Time{}))
+	assert.Equal(t, "today", FormatUpdated(time.Now()))
+	assert.Contains(t, FormatUpdated(time.Now().AddDate(0, 0, -3)), "d ago")
+	assert.Contains(t, FormatUpdated(time.Now().AddDate(0, 0, -14)), "w ago")
+	assert.Contains(t, FormatUpdated(time.Now().AddDate(0, -2, 0)), "mo ago")
+	assert.Contains(t, FormatUpdated(time.Now().AddDate(-2, 0, 0)), "y ago")
 }
 
-// --- srFitLabel ---
+// --- FitLabel ---
 
-func TestSrFitLabel(t *testing.T) {
-	assert.Equal(t, "?", srFitLabel(0, 1000))
-	assert.Equal(t, "?", srFitLabel(1000, 0))
-	assert.Equal(t, "✓", srFitLabel(800, 1000))
-	assert.Equal(t, "~", srFitLabel(900, 1000))
-	assert.Equal(t, "✗", srFitLabel(1100, 1000))
+func TestFitLabelUI(t *testing.T) {
+	assert.Equal(t, "?", FitLabel(0, 1000))
+	assert.Equal(t, "?", FitLabel(1000, 0))
+	assert.Equal(t, "✓", FitLabel(800, 1000))
+	assert.Equal(t, "~", FitLabel(900, 1000))
+	assert.Equal(t, "✗", FitLabel(1100, 1000))
 }
 
 // --- Init methods ---

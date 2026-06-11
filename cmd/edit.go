@@ -8,12 +8,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/state"
 )
 
 var editCmd = &cobra.Command{
-	Use:   "edit <model>",
+	Use:   "edit [model]",
 	Short: "Open a model profile in $EDITOR",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE:  runEdit,
 }
 
@@ -36,8 +37,25 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	slug := args[0]
-	path, err := config.FindModelPath(slug, effectiveDirs(cfg)...)
+	dirs := effectiveDirs(cfg)
+	models, names, err := config.ListModelsFromDirs(dirs...)
+	if err != nil {
+		return fmt.Errorf("listing models: %w", err)
+	}
+
+	cur, _ := state.Load(cfg.Paths.StateFile)
+
+	query := ""
+	if len(args) > 0 {
+		query = args[0]
+	}
+
+	slug, err := resolveModel(query, names, models, cur.ActiveModel, cur.ModelHistory)
+	if err != nil {
+		return err
+	}
+
+	path, err := config.FindModelPath(slug, dirs...)
 	if err != nil {
 		return fmt.Errorf("model %q not found", slug)
 	}

@@ -7,12 +7,17 @@ import (
 
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/privilege"
+	"github.com/DavidXArnold/marlin/internal/state"
+	"github.com/DavidXArnold/marlin/internal/ui"
 )
 
+// rmConfirmFunc is injectable for tests.
+var rmConfirmFunc = ui.Confirm
+
 var rmCmd = &cobra.Command{
-	Use:   "rm <model>",
+	Use:   "rm [model]",
 	Short: "Remove a model profile",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE:  runRm,
 }
 
@@ -26,10 +31,36 @@ func runRm(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	slug := args[0]
-	path, err := config.FindModelPath(slug, effectiveDirs(cfg)...)
+	dirs := effectiveDirs(cfg)
+	models, names, err := config.ListModelsFromDirs(dirs...)
+	if err != nil {
+		return fmt.Errorf("listing models: %w", err)
+	}
+
+	cur, _ := state.Load(cfg.Paths.StateFile)
+
+	query := ""
+	if len(args) > 0 {
+		query = args[0]
+	}
+
+	slug, err := resolveModel(query, names, models, cur.ActiveModel, cur.ModelHistory)
+	if err != nil {
+		return err
+	}
+
+	path, err := config.FindModelPath(slug, dirs...)
 	if err != nil {
 		return fmt.Errorf("model %q not found", slug)
+	}
+
+	ok, err := rmConfirmFunc(fmt.Sprintf("Remove %q (%s)?", slug, path))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), "cancelled")
+		return err
 	}
 
 	if err := privilege.PromptAndRemove(cmd.OutOrStdout(), path); err != nil {

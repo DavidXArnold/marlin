@@ -109,7 +109,7 @@ func (n *NGC) Search(ctx context.Context, query string) ([]ModelInfo, error) {
 		if strings.Contains(strings.ToLower(m.ID), lower) {
 			results = append(results, m.toModelInfo())
 		}
-		if len(results) == 20 {
+		if len(results) == 50 {
 			break
 		}
 	}

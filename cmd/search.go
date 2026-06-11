@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"syscall"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -22,9 +21,9 @@ import (
 )
 
 var searchCmd = &cobra.Command{
-	Use:   "search <query>",
+	Use:   "search [query]",
 	Short: "Search model registries (HuggingFace, NGC)",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE:  runSearch,
 }
 
@@ -87,7 +86,10 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	regs, _ := cmd.Flags().GetStringSlice("registry")
 	plain, _ := cmd.Flags().GetBool("plain")
 	global, _ := cmd.Flags().GetBool("global")
-	query := args[0]
+	query := ""
+	if len(args) > 0 {
+		query = args[0]
+	}
 	w := cmd.OutOrStdout()
 	writef := func(format string, args ...any) error {
 		_, err := fmt.Fprintf(w, format, args...)
@@ -186,9 +188,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 			}
 			if err := writef("%-52s %-12s %-9s %-4s  %s\n",
 				m.DisplayName(),
-				formatUpdated(m.LastUpdated),
+				ui.FormatUpdated(m.LastUpdated),
 				formatVRAM(m.EstimatedVRAMMB()),
-				fitLabel(m.EstimatedVRAMMB(), freeVRAM),
+				ui.FitLabel(m.EstimatedVRAMMB(), freeVRAM),
 				desc,
 			); err != nil {
 				return err
@@ -249,6 +251,7 @@ func addFromSearchResult(cfg *config.Config, m registry.ModelInfo, w io.Writer, 
 	}
 
 	mc := modelConfigFromInfo(m, cfg.Server.Alias)
+	maybeOfferUMAHint(mc, w)
 
 	data, err := config.ModelConfigToBytes(mc)
 	if err != nil {
@@ -349,25 +352,6 @@ func buildRegistries(names []string, sec map[string]string) []registry.Registry 
 	return out
 }
 
-func formatUpdated(t time.Time) string {
-	if t.IsZero() {
-		return "-"
-	}
-	days := int(time.Since(t).Hours() / 24)
-	switch {
-	case days == 0:
-		return "today"
-	case days < 7:
-		return fmt.Sprintf("%dd ago", days)
-	case days < 30:
-		return fmt.Sprintf("%dw ago", days/7)
-	case days < 365:
-		return fmt.Sprintf("%dmo ago", days/30)
-	default:
-		return fmt.Sprintf("%dy ago", days/365)
-	}
-}
-
 func formatVRAM(mb uint64) string {
 	if mb == 0 {
 		return "-"
@@ -375,18 +359,3 @@ func formatVRAM(mb uint64) string {
 	return sysinfo.FormatMB(mb)
 }
 
-// fitLabel returns ✓, ~, ✗, or ? based on whether the model fits in free VRAM.
-func fitLabel(estimatedMB, freeVRAMMB uint64) string {
-	if estimatedMB == 0 || freeVRAMMB == 0 {
-		return "?"
-	}
-	ratio := float64(estimatedMB) / float64(freeVRAMMB)
-	switch {
-	case ratio <= 0.80:
-		return "✓"
-	case ratio <= 1.0:
-		return "~"
-	default:
-		return "✗"
-	}
-}
