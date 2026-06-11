@@ -50,6 +50,10 @@ func checkModelID(m *config.ModelConfig) []Issue {
 }
 
 func checkGPUMemory(m *config.ModelConfig) []Issue {
+	// NIM containers manage GPU memory internally — this field is not applicable.
+	if m.Model.Type == config.ProviderNIM {
+		return nil
+	}
 	if m.Serve.GPUMemoryUtilization <= 0 {
 		return []Issue{{Level: LevelError, Message: "serve.gpu_memory_utilization must be set"}}
 	}
@@ -60,6 +64,10 @@ func checkGPUMemory(m *config.ModelConfig) []Issue {
 }
 
 func checkServedModelName(m *config.ModelConfig, requiredAlias string) []Issue {
+	// NIM exposes its own model names; served_model_name is not used.
+	if m.Model.Type == config.ProviderNIM {
+		return nil
+	}
 	for _, name := range m.Serve.ServedModelName {
 		if name == requiredAlias {
 			return nil
@@ -76,6 +84,10 @@ var knownQuantizations = map[string]string{
 }
 
 func checkQuantization(m *config.ModelConfig) []Issue {
+	// NIM handles quantization internally; model.id is not set for NIM.
+	if m.Model.Type == config.ProviderNIM {
+		return nil
+	}
 	idUpper := strings.ToUpper(m.Model.ID)
 	for suffix, expected := range knownQuantizations {
 		if strings.Contains(idUpper, suffix) {
@@ -98,6 +110,10 @@ var parserByFamily = map[string]string{
 }
 
 func checkToolCallParser(m *config.ModelConfig) []Issue {
+	// NIM exposes its own tool-call handling; model.id is not set for NIM.
+	if m.Model.Type == config.ProviderNIM {
+		return nil
+	}
 	if m.Serve.ToolCallParser == "" {
 		return nil
 	}

@@ -45,22 +45,50 @@ func TestModelNIMMissingImage(t *testing.T) {
 	assert.True(t, hasError(issues, "model.image is required"))
 }
 
-func TestModelNIMWithImageNoIDRequired(t *testing.T) {
-	m := &config.ModelConfig{
+func validNIMModel() *config.ModelConfig {
+	return &config.ModelConfig{
 		Model: config.ModelMeta{
 			Type:  config.ProviderNIM,
 			Image: "nvcr.io/nim/meta/llama:latest",
 		},
-		Serve: config.ServeConfig{
-			GPUMemoryUtilization: 0.9,
-			ServedModelName:      []string{"gn100"},
-		},
 	}
-	issues := Model(m, "gn100")
-	// No error — image satisfies the identity check for NIM
+}
+
+func TestModelNIMValidNoIssues(t *testing.T) {
+	// A minimal NIM config — no gpu_memory, served_model_name, id — should have no errors.
+	issues := Model(validNIMModel(), "gn100")
 	for _, iss := range issues {
 		assert.NotEqual(t, LevelError, iss.Level, "unexpected error: %s", iss.Message)
 	}
+}
+
+func TestModelNIMSkipsGPUMemory(t *testing.T) {
+	m := validNIMModel()
+	m.Serve.GPUMemoryUtilization = 0 // would error for vllm
+	issues := Model(m, "gn100")
+	assert.False(t, hasError(issues, "gpu_memory_utilization"), "NIM should skip GPU memory check")
+}
+
+func TestModelNIMSkipsServedModelName(t *testing.T) {
+	m := validNIMModel()
+	m.Serve.ServedModelName = nil // would warn for vllm
+	issues := Model(m, "gn100")
+	assert.False(t, hasWarn(issues, "served_model_name"), "NIM should skip served_model_name check")
+}
+
+func TestModelNIMSkipsQuantization(t *testing.T) {
+	m := validNIMModel()
+	m.Model.Image = "nvcr.io/nim/meta/llama-AWQ:latest"
+	m.Serve.Quantization = "wrong"
+	issues := Model(m, "gn100")
+	assert.False(t, hasWarn(issues, "quantization"), "NIM should skip quantization check")
+}
+
+func TestModelNIMSkipsToolCallParser(t *testing.T) {
+	m := validNIMModel()
+	m.Serve.ToolCallParser = "openai"
+	issues := Model(m, "gn100")
+	assert.False(t, hasWarn(issues, "parser"), "NIM should skip tool-call parser check")
 }
 
 func TestModelMissingGPUMemory(t *testing.T) {
