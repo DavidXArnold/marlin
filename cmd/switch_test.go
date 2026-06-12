@@ -21,12 +21,16 @@ type mockProv struct {
 	switchErr     error
 	stopErr       error
 	stopCalled    bool
+	stopFn        func()
 	statusRunning bool // if true, Status returns Running: true
 }
 
 func (m *mockProv) Switch(_ context.Context, _ string) error { return m.switchErr }
 func (m *mockProv) Stop(_ context.Context) error {
 	m.stopCalled = true
+	if m.stopFn != nil {
+		m.stopFn()
+	}
 	return m.stopErr
 }
 func (m *mockProv) Status(_ context.Context) (*provider.Status, error) {

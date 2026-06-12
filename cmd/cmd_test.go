@@ -100,6 +100,7 @@ func buildRootCmd() *cobra.Command {
 
 	run := &cobra.Command{Use: "run <model>", Args: cobra.ExactArgs(1), RunE: runRun}
 	run.Flags().BoolP("detach", "d", false, "")
+	run.Flags().String("max-runtime", "", "")
 
 	ps := &cobra.Command{Use: "ps", RunE: runPs}
 
@@ -120,6 +121,8 @@ func buildRootCmd() *cobra.Command {
 
 	start := &cobra.Command{Use: "start [model]", Args: cobra.MaximumNArgs(1), RunE: runStart}
 	start.Flags().Bool("enable", false, "")
+	start.Flags().BoolP("logs", "l", false, "")
+	start.Flags().String("max-runtime", "", "")
 
 	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop, rm, edit, completion, configure, start)
 	return root
@@ -1315,4 +1318,97 @@ active_symlink = %q
 	old := cfgFile
 	cfgFile = cfgPath
 	return func() { cfgFile = old }
+}
+
+// --- mockAdhocRunner ---
+
+type mockAdhocRunner struct {
+	startID  string
+	startErr error
+	runErr   error
+}
+
+func (m *mockAdhocRunner) Start(_ context.Context, _ string) (string, error) {
+	return m.startID, m.startErr
+}
+func (m *mockAdhocRunner) RunForeground(ctx context.Context, _ string, _ io.Writer) error {
+	<-ctx.Done()
+	return m.runErr
+}
+func (m *mockAdhocRunner) List(_ context.Context) ([]provider.AdhocInfo, error) { return nil, nil }
+func (m *mockAdhocRunner) Stop(_ context.Context, _ string) error               { return nil }
+func (m *mockAdhocRunner) StopAll(_ context.Context) error                      { return nil }
+func (m *mockAdhocRunner) DetectUnmanaged(_ context.Context) ([]provider.UnmanagedContainer, error) {
+	return nil, nil
+}
+
+// --- --max-runtime tests ---
+
+func TestRunMaxRuntimeDetachWarns(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	old := buildAdhocRunner
+	buildAdhocRunner = func(_ *config.Config) (adhocRunner, error) {
+		return &mockAdhocRunner{startID: "abc123def456"}, nil
+	}
+	defer func() { buildAdhocRunner = old }()
+
+	out, err := executeCmd("run", "--detach", "--max-runtime", "15m", "qwen25-7b")
+	require.NoError(t, err)
+	assert.Contains(t, out, "warning: --max-runtime is not supported in detach mode")
+}
+
+func TestRunMaxRuntimeForegroundExits(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	old := buildAdhocRunner
+	buildAdhocRunner = func(_ *config.Config) (adhocRunner, error) {
+		return &mockAdhocRunner{}, nil
+	}
+	defer func() { buildAdhocRunner = old }()
+
+	out, _ := executeCmd("run", "--max-runtime", "100ms", "qwen25-7b")
+	assert.Contains(t, out, "max-runtime: container will stop after")
+}
+
+func TestStartMaxRuntimeTimerCalled(t *testing.T) {
+	modelsDir, cleanup := switchEnv(t)
+	defer cleanup()
+	noopRequireRoot(t)
+	noopWaitForReady(t)
+	injectProvider(t, &mockProv{})
+	writeVLLMModel(t, modelsDir, "llama-8b")
+
+	var gotDuration time.Duration
+	old := startMaxRuntimeTimerFunc
+	startMaxRuntimeTimerFunc = func(_ *cobra.Command, _ *config.Config, _ string, _ provider.Provider, d time.Duration) {
+		gotDuration = d
+	}
+	defer func() { startMaxRuntimeTimerFunc = old }()
+
+	_, err := executeCmd("start", "--max-runtime", "30m", "llama-8b")
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Minute, gotDuration)
+}
+
+func TestStartMaxRuntimeNotCalledWhenZero(t *testing.T) {
+	modelsDir, cleanup := switchEnv(t)
+	defer cleanup()
+	noopRequireRoot(t)
+	noopWaitForReady(t)
+	injectProvider(t, &mockProv{})
+	writeVLLMModel(t, modelsDir, "llama-8b")
+
+	called := false
+	old := startMaxRuntimeTimerFunc
+	startMaxRuntimeTimerFunc = func(_ *cobra.Command, _ *config.Config, _ string, _ provider.Provider, _ time.Duration) {
+		called = true
+	}
+	defer func() { startMaxRuntimeTimerFunc = old }()
+
+	_, err := executeCmd("start", "llama-8b")
+	require.NoError(t, err)
+	assert.False(t, called)
 }

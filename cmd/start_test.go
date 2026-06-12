@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -232,6 +233,36 @@ func TestWaitForReadyLogsFlag(t *testing.T) {
 	waitForReady(cmd, cfg, "nim-model", &mockProv{})
 	// Already ready → should print ready immediately; logs goroutine is cancelled.
 	assert.Contains(t, buf.String(), "ready")
+}
+
+func TestMaxRuntimeTimerStopsProvider(t *testing.T) {
+	var stopped bool
+	p := &mockProv{stopFn: func() { stopped = true }}
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+
+	maxRuntimeTimer(cmd, nil, "llama-8b", p, 50*time.Millisecond)
+
+	assert.True(t, stopped)
+	assert.Contains(t, buf.String(), "max-runtime reached")
+}
+
+func TestMaxRuntimeTimerCancelledByContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := &cobra.Command{SilenceUsage: true}
+	cmd.SetContext(ctx)
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+
+	var stopped bool
+	p := &mockProv{stopFn: func() { stopped = true }}
+
+	cancel() // cancel immediately — timer should not fire
+	maxRuntimeTimer(cmd, nil, "llama-8b", p, 10*time.Minute)
+
+	assert.False(t, stopped)
 }
 
 func TestWaitForReadyTimeout(t *testing.T) {

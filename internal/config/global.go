@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -41,6 +42,16 @@ type BehaviorConfig struct {
 	GlobalInstall             bool    `toml:"global_install"`
 	WarnOnSystemResources     bool    `toml:"warn_on_system_resources"`
 	SystemLoadThreshold       float64 `toml:"system_load_threshold"`
+	MaxRuntime                string  `toml:"max_runtime"` // e.g. "15m", "1h", "" = disabled
+}
+
+// MaxRuntimeDuration parses MaxRuntime as a Go duration. Returns 0 if unset or invalid.
+func (b BehaviorConfig) MaxRuntimeDuration() time.Duration {
+	if b.MaxRuntime == "" {
+		return 0
+	}
+	d, _ := time.ParseDuration(b.MaxRuntime)
+	return d
 }
 
 type PathsConfig struct {

@@ -14,6 +14,25 @@ import (
 	"github.com/DavidXArnold/marlin/internal/vllm"
 )
 
+// startMaxRuntimeTimerFunc is injectable for tests.
+var startMaxRuntimeTimerFunc = maxRuntimeTimer
+
+// maxRuntimeTimer blocks until d elapses or the command context is cancelled,
+// then calls p.Stop to shut down the running model.
+func maxRuntimeTimer(cmd *cobra.Command, _ *config.Config, slug string, p provider.Provider, d time.Duration) {
+	w := cmd.OutOrStdout()
+	_, _ = fmt.Fprintf(w, "max-runtime: %s will stop automatically in %s\n", slug, d)
+	select {
+	case <-cmd.Context().Done():
+		return
+	case <-time.After(d):
+	}
+	_, _ = fmt.Fprintf(w, "max-runtime reached — stopping %s\n", slug)
+	if err := p.Stop(cmd.Context()); err != nil {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "error stopping %s: %v\n", slug, err)
+	}
+}
+
 var startCmd = &cobra.Command{
 	Use:   "start [model]",
 	Short: "Start the inference service, optionally selecting a model",
@@ -54,6 +73,7 @@ func init() {
 	rootCmd.AddCommand(startCmd)
 	startCmd.Flags().Bool("enable", false, "Also enable the systemd unit to start at boot")
 	startCmd.Flags().BoolP("logs", "l", false, "Stream container/service logs while waiting for the API")
+	startCmd.Flags().String("max-runtime", "", "Stop the model after this duration (e.g. 15m, 1h); 0 = disabled")
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
@@ -71,13 +91,24 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Post-switch: wait for the API to become ready, showing progress.
 	cur, _ := state.Load(cfg.Paths.StateFile)
-	if p, buildErr := buildProvider(cur.ActiveProvider, cfg); buildErr == nil {
+	p, buildErr := buildProvider(cur.ActiveProvider, cfg)
+	if buildErr == nil {
 		startWaitForReadyFunc(cmd, cfg, cur.ActiveModel, p)
 	}
 
 	if enable {
-		return enableUnit(cfg)
+		if err := enableUnit(cfg); err != nil {
+			return err
+		}
 	}
+
+	// Block and auto-stop if --max-runtime / behavior.max_runtime is set.
+	if buildErr == nil {
+		if maxRT := effectiveMaxRuntime(cmd, cfg); maxRT > 0 {
+			startMaxRuntimeTimerFunc(cmd, cfg, cur.ActiveModel, p, maxRT)
+		}
+	}
+
 	return nil
 }
 

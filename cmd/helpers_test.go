@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -390,4 +391,37 @@ func TestMaybeOfferUMAHintUMAConfirmNo(t *testing.T) {
 	var buf bytes.Buffer
 	maybeOfferUMAHint(mc, &buf)
 	assert.Empty(t, mc.Serve.ExtraEnv) // not added when user declines
+}
+
+// --- effectiveMaxRuntime ---
+
+func TestEffectiveMaxRuntimeFromFlag(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Behavior.MaxRuntime = "5m"
+
+	cmd := cmdWithContext(io.Discard)
+	cmd.Flags().String("max-runtime", "", "")
+	require.NoError(t, cmd.Flags().Set("max-runtime", "30s"))
+
+	// Flag takes precedence over config.
+	d := effectiveMaxRuntime(cmd, cfg)
+	assert.Equal(t, 30*time.Second, d)
+}
+
+func TestEffectiveMaxRuntimeFromConfig(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Behavior.MaxRuntime = "15m"
+
+	cmd := cmdWithContext(io.Discard)
+	cmd.Flags().String("max-runtime", "", "")
+	// Flag not set → falls back to config.
+	d := effectiveMaxRuntime(cmd, cfg)
+	assert.Equal(t, 15*time.Minute, d)
+}
+
+func TestEffectiveMaxRuntimeZeroWhenUnset(t *testing.T) {
+	cfg := config.Defaults() // MaxRuntime == ""
+	cmd := cmdWithContext(io.Discard)
+	cmd.Flags().String("max-runtime", "", "")
+	assert.Equal(t, time.Duration(0), effectiveMaxRuntime(cmd, cfg))
 }

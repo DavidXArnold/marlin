@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/secrets"
@@ -132,6 +134,17 @@ func maybeOfferUMAHint(mc *config.ModelConfig, w io.Writer) {
 		return
 	}
 	mc.Serve.ExtraEnv = append(mc.Serve.ExtraEnv, "NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9")
+}
+
+// effectiveMaxRuntime returns the active max-runtime duration: the --max-runtime
+// flag takes precedence over behavior.max_runtime in config. Returns 0 if disabled.
+func effectiveMaxRuntime(cmd *cobra.Command, cfg *config.Config) time.Duration {
+	if f := cmd.Flags().Lookup("max-runtime"); f != nil && f.Changed {
+		s, _ := cmd.Flags().GetString("max-runtime")
+		d, _ := time.ParseDuration(s)
+		return d
+	}
+	return cfg.Behavior.MaxRuntimeDuration()
 }
 
 // checkSystemResources warns on stderr if the 1-minute load average exceeds

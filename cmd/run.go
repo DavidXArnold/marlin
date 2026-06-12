@@ -45,6 +45,7 @@ Use --detach to start in the background and manage with marlin ps / marlin stop.
 func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.Flags().BoolP("detach", "d", false, "Start in background and return immediately")
+	runCmd.Flags().String("max-runtime", "", "Stop the container after this duration (e.g. 15m, 1h); 0 = disabled")
 }
 
 func runRun(cmd *cobra.Command, args []string) error {
@@ -55,6 +56,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 
 	slug := args[0]
 	detach, _ := cmd.Flags().GetBool("detach")
+	maxRT := effectiveMaxRuntime(cmd, cfg)
 
 	runner, err := buildAdhocRunner(cfg)
 	if err != nil {
@@ -64,6 +66,9 @@ func runRun(cmd *cobra.Command, args []string) error {
 	w := cmd.OutOrStdout()
 
 	if detach {
+		if maxRT > 0 {
+			_, _ = fmt.Fprintf(w, "warning: --max-runtime is not supported in detach mode\n")
+		}
 		id, err := runner.Start(cmd.Context(), slug)
 		if err != nil {
 			return err
@@ -85,6 +90,13 @@ func runRun(cmd *cobra.Command, args []string) error {
 	// Foreground: catch interrupt so cleanup deferred in RunForeground fires.
 	ctx, cancel := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+
+	if maxRT > 0 {
+		var rtCancel context.CancelFunc
+		ctx, rtCancel = context.WithTimeout(ctx, maxRT)
+		defer rtCancel()
+		_, _ = fmt.Fprintf(w, "max-runtime: container will stop after %s\n", maxRT)
+	}
 
 	if _, err := fmt.Fprintf(w, "running %s (Ctrl-C to stop and remove)\n", slug); err != nil {
 		return err

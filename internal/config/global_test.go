@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,6 +73,21 @@ func TestLoadInvalidTOML(t *testing.T) {
 	path := writeTempFile(t, "bad.toml", "this is not [ valid toml %%")
 	_, err := Load(path)
 	assert.Error(t, err)
+}
+
+func TestMaxRuntimeDuration(t *testing.T) {
+	b := BehaviorConfig{MaxRuntime: "15m"}
+	assert.Equal(t, 15*time.Minute, b.MaxRuntimeDuration())
+}
+
+func TestMaxRuntimeDurationEmpty(t *testing.T) {
+	b := BehaviorConfig{}
+	assert.Equal(t, time.Duration(0), b.MaxRuntimeDuration())
+}
+
+func TestMaxRuntimeDurationInvalid(t *testing.T) {
+	b := BehaviorConfig{MaxRuntime: "notaduration"}
+	assert.Equal(t, time.Duration(0), b.MaxRuntimeDuration())
 }
 
 func writeTempFile(t *testing.T, name, content string) string {
