@@ -45,6 +45,9 @@ func (s *stubAdhoc) StopAll(_ context.Context) error {
 	s.stopAllCalled = true
 	return s.stopAllErr
 }
+func (s *stubAdhoc) LogsFor(_ context.Context, _ string, _ io.Writer, _ bool, _ int) error {
+	return nil
+}
 func (s *stubAdhoc) DetectUnmanaged(_ context.Context) ([]provider.UnmanagedContainer, error) {
 	return s.unmanagedResult, s.unmanagedErr
 }

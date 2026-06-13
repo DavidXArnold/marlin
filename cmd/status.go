@@ -137,6 +137,32 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Ad-hoc containers section — show marlin-managed containers started via marlin run.
+	if adhocR, err := buildAdhocRunner(cfg); err == nil {
+		if infos, err := adhocR.List(cmd.Context()); err == nil && len(infos) > 0 {
+			if err := writeln(); err != nil {
+				return err
+			}
+			if err := writeln("ad-hoc containers:"); err != nil {
+				return err
+			}
+			for _, info := range infos {
+				portStr := ""
+				if info.Port != "" {
+					portStr = "  :" + info.Port
+				}
+				id := info.ID
+				if len(id) > 12 {
+					id = id[:12]
+				}
+				if err := writef("  %-20s  %s%s  (%s)  run 'marlin logs %s' to inspect\n",
+					info.Slug, info.Status, portStr, id, info.Slug); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	// Hardware section — always shown, failures are soft.
 	if err := writeln(); err != nil {
 		return err

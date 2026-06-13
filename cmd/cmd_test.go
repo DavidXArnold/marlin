@@ -94,7 +94,7 @@ func buildRootCmd() *cobra.Command {
 
 	status := &cobra.Command{Use: "status", RunE: runStatus}
 
-	logs := &cobra.Command{Use: "logs", RunE: runLogs}
+	logs := &cobra.Command{Use: "logs [model]", Args: cobra.MaximumNArgs(1), RunE: runLogs}
 	logs.Flags().BoolP("follow", "f", false, "")
 	logs.Flags().Int("lines", 100, "")
 
@@ -395,12 +395,24 @@ func TestStatusCmdNoActiveModel(t *testing.T) {
 	assert.Contains(t, out, "no active model")
 }
 
+// injectManagedLogsTarget makes resolveLogsTargetFunc return the managed provider path,
+// bypassing the no-active-model check so logs tests can focus on the provider mock.
+func injectManagedLogsTarget(t *testing.T) {
+	t.Helper()
+	old := resolveLogsTargetFunc
+	resolveLogsTargetFunc = func(_ string, _ *state.State, _ adhocRunner, _ *cobra.Command) (logsTarget, error) {
+		return logsTarget{label: "test-model", useAdhoc: false}, nil
+	}
+	t.Cleanup(func() { resolveLogsTargetFunc = old })
+}
+
 func TestLogsCmd(t *testing.T) {
 	restore := provider.SetRunCommandForTest(func(_ context.Context, w io.Writer, _ string, _ ...string) error {
 		_, _ = fmt.Fprintln(w, "fake log line")
 		return nil
 	})
 	defer restore()
+	injectManagedLogsTarget(t)
 
 	cleanup := tempEnv(t)
 	defer cleanup()
@@ -415,6 +427,7 @@ func TestLogsCmdFollowFlag(t *testing.T) {
 		return nil
 	})
 	defer restore()
+	injectManagedLogsTarget(t)
 
 	cleanup := tempEnv(t)
 	defer cleanup()
@@ -427,6 +440,7 @@ func TestLogsCmdLinesFlag(t *testing.T) {
 		return nil
 	})
 	defer restore()
+	injectManagedLogsTarget(t)
 
 	cleanup := tempEnv(t)
 	defer cleanup()
@@ -1072,6 +1086,7 @@ func TestRunLogsDirect(t *testing.T) {
 		return nil
 	})
 	defer restore()
+	injectManagedLogsTarget(t)
 
 	cleanup := tempEnv(t)
 	defer cleanup()
@@ -1334,6 +1349,9 @@ func (m *mockAdhocRunner) Start(_ context.Context, _ string) (string, error) {
 func (m *mockAdhocRunner) RunForeground(ctx context.Context, _ string, _ io.Writer) error {
 	<-ctx.Done()
 	return m.runErr
+}
+func (m *mockAdhocRunner) LogsFor(_ context.Context, _ string, _ io.Writer, _ bool, _ int) error {
+	return nil
 }
 func (m *mockAdhocRunner) List(_ context.Context) ([]provider.AdhocInfo, error) { return nil, nil }
 func (m *mockAdhocRunner) Stop(_ context.Context, _ string) error               { return nil }

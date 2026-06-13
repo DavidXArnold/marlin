@@ -154,6 +154,16 @@ func TestCheckSystemResourcesDisabled(t *testing.T) {
 	assert.Empty(t, buf.String())
 }
 
+func TestCheckSystemResourcesEnabled(t *testing.T) {
+	cfg, _ := globalConfig()
+	cfg.Behavior.WarnOnSystemResources = true
+	cfg.Behavior.SystemLoadThreshold = 0.8
+	var buf strings.Builder
+	// On this platform, LoadAvg1() may return 0 (no /proc/loadavg) — the function
+	// returns early without writing. Either way, it must not panic.
+	checkSystemResources(cfg, &buf)
+}
+
 // --- min12 ---
 
 func TestMin12(t *testing.T) {
@@ -294,10 +304,10 @@ alias = "gn100"
 
 func TestRunLogsDirectWithFollowAndLines(t *testing.T) {
 	restore := provider.SetRunCommandForTest(func(_ context.Context, _ io.Writer, _ string, args ...string) error {
-		// verify journalctl args are passed
 		return nil
 	})
 	defer restore()
+	injectManagedLogsTarget(t)
 
 	cleanup := tempEnv(t)
 	defer cleanup()

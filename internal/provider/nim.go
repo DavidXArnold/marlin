@@ -21,6 +21,7 @@ import (
 
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/privilege"
+	"github.com/DavidXArnold/marlin/internal/ui"
 )
 
 const nimContainerName = "marlin-nim"
@@ -142,10 +143,7 @@ func (n *NIMProvider) Switch(ctx context.Context, modelSlug string) error {
 	if err != nil {
 		return fmt.Errorf("pulling image %s: %w", m.Model.Image, err)
 	}
-	if _, err := io.Copy(io.Discard, reader); err != nil {
-		_ = reader.Close()
-		return fmt.Errorf("reading image pull response: %w", err)
-	}
+	ui.StreamPull(reader, n.w, ui.IsWriterTTY(n.w))
 	if err := reader.Close(); err != nil {
 		return fmt.Errorf("closing image pull response: %w", err)
 	}

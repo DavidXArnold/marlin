@@ -118,6 +118,16 @@ func TestSaveFileMode(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
+func TestSaveUnknownKey(t *testing.T) {
+	path := t.TempDir() + "/secrets.env"
+	err := Save(path, map[string]string{"CUSTOM_SECRET": "myvalue"})
+	require.NoError(t, err)
+
+	m, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, "myvalue", m["CUSTOM_SECRET"])
+}
+
 func tmpFile(t *testing.T, content string) string {
 	t.Helper()
 	f, err := os.CreateTemp("", "secrets-*.env")

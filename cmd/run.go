@@ -19,6 +19,7 @@ import (
 type adhocRunner interface {
 	Start(ctx context.Context, slug string) (string, error)
 	RunForeground(ctx context.Context, slug string, w io.Writer) error
+	LogsFor(ctx context.Context, slug string, w io.Writer, follow bool, lines int) error
 	List(ctx context.Context) ([]provider.AdhocInfo, error)
 	Stop(ctx context.Context, slug string) error
 	StopAll(ctx context.Context) error

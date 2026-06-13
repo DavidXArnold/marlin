@@ -274,3 +274,38 @@ func TestRunStatusNIMBuildProviderError(t *testing.T) {
 	// Falls back to state ContainerID when live query fails.
 	assert.Contains(t, out, cid[:12])
 }
+
+func TestStatusShowsAdhocContainers(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	injectAdhocRunner(t, &stubAdhoc{
+		listResult: []provider.AdhocInfo{
+			{Slug: "qwen-7b", Status: "running", Port: "8001", ID: "abc123def456789"},
+		},
+	})
+
+	var buf bytes.Buffer
+	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
+	out := buf.String()
+	assert.Contains(t, out, "ad-hoc containers:")
+	assert.Contains(t, out, "qwen-7b")
+	assert.Contains(t, out, "running")
+}
+
+func TestStatusShowsUnmanagedWarning(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	injectAdhocRunner(t, &stubAdhoc{
+		unmanagedResult: []provider.UnmanagedContainer{
+			{ID: "deadbeef1234567890", Image: "vllm/vllm-openai:latest", Names: []string{"rogue-vllm"}},
+		},
+	})
+
+	var buf bytes.Buffer
+	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
+	out := buf.String()
+	assert.Contains(t, out, "unmanaged inference containers")
+	assert.Contains(t, out, "rogue-vllm")
+}

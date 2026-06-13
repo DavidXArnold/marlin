@@ -206,6 +206,69 @@ func TestFormatRelativeTimeOld(t *testing.T) {
 	assert.Contains(t, result, "started ")
 }
 
+// --- StringItem ---
+
+func TestStringItemMethods(t *testing.T) {
+	item := StringItem{Label: "llama-8b (adhoc running)", Desc: ":8001"}
+	assert.Equal(t, "llama-8b (adhoc running)", item.Title())
+	assert.Equal(t, ":8001", item.Description())
+	assert.Equal(t, "llama-8b (adhoc running)", item.FilterValue())
+}
+
+// --- strPickerModel ---
+
+func TestStrPickerModelInit(t *testing.T) {
+	m := strPickerModel{}
+	cmd := m.Init()
+	assert.Nil(t, cmd)
+}
+
+func TestStrPickerModelViewQuit(t *testing.T) {
+	m := strPickerModel{quitting: true}
+	assert.Equal(t, "", m.View())
+}
+
+func TestStrPickerModelUpdateQuit(t *testing.T) {
+	items := []list.Item{StringItem{Label: "a"}, StringItem{Label: "b"}}
+	l := list.New(items, itemDelegate{}, 60, 10)
+	m := strPickerModel{list: l, selected: -1}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	pm := updated.(strPickerModel)
+	assert.True(t, pm.quitting)
+}
+
+func TestStrPickerModelUpdateEnter(t *testing.T) {
+	items := []list.Item{StringItem{Label: "first"}, StringItem{Label: "second"}}
+	l := list.New(items, itemDelegate{}, 60, 10)
+	m := strPickerModel{list: l, selected: -1}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	pm := updated.(strPickerModel)
+	assert.Equal(t, 0, pm.selected) // first item selected
+}
+
+// --- PickStrings shortcuts ---
+
+func TestPickStringsSingle(t *testing.T) {
+	idx, err := PickStrings([]StringItem{{Label: "only"}}, "pick one")
+	assert.NoError(t, err)
+	assert.Equal(t, 0, idx)
+}
+
+func TestPickStringsEmpty(t *testing.T) {
+	_, err := PickStrings(nil, "pick one")
+	assert.Error(t, err)
+}
+
+// --- min helper ---
+
+func TestMinHelper(t *testing.T) {
+	assert.Equal(t, 3, min(3, 5))
+	assert.Equal(t, 3, min(5, 3))
+	assert.Equal(t, 0, min(0, 0))
+}
+
 // --- PickModel sorting by history ---
 
 func TestPickModelSortedByHistory(t *testing.T) {

@@ -240,6 +240,89 @@ func (c confirmModel) View() string {
 	return lipgloss.NewStyle().Margin(1, 2).Render(c.prompt + " [y/n] ")
 }
 
+// StringItem is a selectable item with a label and optional description line.
+type StringItem struct {
+	Label string
+	Desc  string
+}
+
+func (s StringItem) Title() string       { return s.Label }
+func (s StringItem) Description() string { return s.Desc }
+func (s StringItem) FilterValue() string { return s.Label }
+
+// strPickerModel is the bubbletea model for the generic string picker.
+type strPickerModel struct {
+	list     list.Model
+	selected int
+	quitting bool
+}
+
+func (m strPickerModel) Init() tea.Cmd { return nil }
+
+func (m strPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			m.quitting = true
+			return m, tea.Quit
+		case "enter":
+			m.selected = m.list.Index()
+			return m, tea.Quit
+		}
+	case tea.WindowSizeMsg:
+		m.list.SetWidth(msg.Width)
+		m.list.SetHeight(msg.Height - 4)
+	}
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
+func (m strPickerModel) View() string {
+	if m.quitting {
+		return ""
+	}
+	return lipgloss.NewStyle().Margin(1, 2).Render(m.list.View())
+}
+
+// PickStrings shows an interactive list and returns the index of the selected item.
+// If only one item is provided it is returned immediately without showing the TUI.
+// Returns -1 and an error if the user cancels.
+func PickStrings(items []StringItem, title string) (int, error) {
+	if len(items) == 0 {
+		return -1, fmt.Errorf("no items to choose from")
+	}
+	if len(items) == 1 {
+		return 0, nil
+	}
+	listItems := make([]list.Item, len(items))
+	for i, item := range items {
+		listItems[i] = item
+	}
+	l := list.New(listItems, itemDelegate{}, 60, min(len(items)*3+4, 20))
+	l.Title = title
+	l.SetShowHelp(false)
+	l.Styles.Title = titleStyle
+
+	m, err := tea.NewProgram(strPickerModel{list: l, selected: -1}).Run()
+	if err != nil {
+		return -1, err
+	}
+	pm := m.(strPickerModel)
+	if pm.quitting || pm.selected < 0 {
+		return -1, fmt.Errorf("cancelled")
+	}
+	return pm.selected, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // formatRelativeTime returns a human-readable relative time string.
 func formatRelativeTime(t time.Time) string {
 	d := time.Since(t)

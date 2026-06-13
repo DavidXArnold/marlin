@@ -17,6 +17,7 @@ import (
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/privilege"
 	"github.com/DavidXArnold/marlin/internal/secrets"
+	"github.com/DavidXArnold/marlin/internal/ui"
 )
 
 const (
@@ -91,12 +92,17 @@ func newAdhocRunnerWithClient(cfg *config.Config, docker dockerClient) *AdhocRun
 
 // Start pulls the image and starts a labelled ad-hoc container. Returns the container ID.
 func (a *AdhocRunner) Start(ctx context.Context, slug string) (string, error) {
+	return a.startWithProgress(ctx, slug, io.Discard)
+}
+
+// startWithProgress is the internal start that shows pull progress to progressW.
+func (a *AdhocRunner) startWithProgress(ctx context.Context, slug string, progressW io.Writer) (string, error) {
 	m, err := a.loadModel(slug)
 	if err != nil {
 		return "", fmt.Errorf("loading model %q: %w", slug, err)
 	}
 
-	image, providerName, containerCfg, hostCfg, err := a.buildContainerConfig(slug, m)
+	image, _, containerCfg, hostCfg, err := a.buildContainerConfig(slug, m)
 	if err != nil {
 		return "", err
 	}
@@ -110,15 +116,11 @@ func (a *AdhocRunner) Start(ctx context.Context, slug string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("pulling image %s: %w", image, err)
 	}
-	if _, err := io.Copy(io.Discard, reader); err != nil {
-		_ = reader.Close()
-		return "", fmt.Errorf("reading image pull response: %w", err)
-	}
+	ui.StreamPull(reader, progressW, ui.IsWriterTTY(progressW))
 	if err := reader.Close(); err != nil {
 		return "", fmt.Errorf("closing image pull response: %w", err)
 	}
 
-	_ = providerName // embedded in labels already
 	containerName := "marlin-adhoc-" + slug
 	resp, err := a.docker.ContainerCreate(ctx, containerCfg, hostCfg, nil, nil, containerName)
 	if err != nil {
@@ -132,10 +134,10 @@ func (a *AdhocRunner) Start(ctx context.Context, slug string) (string, error) {
 	return resp.ID, nil
 }
 
-// RunForeground starts a container and streams its logs to w until ctx is cancelled,
-// then stops and removes the container.
+// RunForeground starts a container, streams pull progress and then container logs
+// to w until ctx is cancelled, then stops and removes the container.
 func (a *AdhocRunner) RunForeground(ctx context.Context, slug string, w io.Writer) error {
-	id, err := a.Start(ctx, slug)
+	id, err := a.startWithProgress(ctx, slug, w)
 	if err != nil {
 		return err
 	}
@@ -212,6 +214,43 @@ func (a *AdhocRunner) Stop(ctx context.Context, slug string) error {
 // DetectUnmanaged returns running inference containers not managed by marlin.
 func (a *AdhocRunner) DetectUnmanaged(ctx context.Context) ([]UnmanagedContainer, error) {
 	return DetectUnmanaged(ctx, a.docker)
+}
+
+// LogsFor streams logs for the named adhoc container (matched by model slug).
+// If multiple containers share the slug, the most recently created one wins.
+// Stopped containers are included so callers can inspect last-run output.
+func (a *AdhocRunner) LogsFor(ctx context.Context, slug string, w io.Writer, follow bool, lines int) error {
+	containers, err := a.docker.ContainerList(ctx, container.ListOptions{
+		All: true,
+		Filters: filters.NewArgs(
+			filters.Arg("label", labelManaged+"=true"),
+			filters.Arg("label", labelModel+"="+slug),
+		),
+	})
+	if err != nil {
+		return fmt.Errorf("listing containers: %w", err)
+	}
+	if len(containers) == 0 {
+		return fmt.Errorf("no adhoc container found for %q", slug)
+	}
+	id := containers[0].ID
+
+	tail := "all"
+	if lines > 0 {
+		tail = fmt.Sprintf("%d", lines)
+	}
+	reader, err := a.docker.ContainerLogs(ctx, id, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     follow,
+		Tail:       tail,
+	})
+	if err != nil {
+		return fmt.Errorf("fetching container logs: %w", err)
+	}
+	defer func() { _ = reader.Close() }()
+	_, _ = stdcopy.StdCopy(w, w, reader)
+	return nil
 }
 
 // StopAll stops and removes every marlin-managed ad-hoc container.

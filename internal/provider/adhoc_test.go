@@ -234,6 +234,50 @@ func TestAdhocStopAllSuccess(t *testing.T) {
 	require.NoError(t, runner.StopAll(context.Background()))
 }
 
+// --- LogsFor ---
+
+func TestAdhocLogsForSuccess(t *testing.T) {
+	d := &stubDocker{
+		listResult: []container.Summary{{ID: "ctr123"}},
+		logsReader: io.NopCloser(strings.NewReader("")),
+	}
+	runner, _ := testAdhocRunner(t, d)
+
+	var buf strings.Builder
+	err := runner.LogsFor(context.Background(), "llama-8b", &buf, false, 50)
+	require.NoError(t, err)
+}
+
+func TestAdhocLogsForNoContainer(t *testing.T) {
+	d := &stubDocker{listResult: nil}
+	runner, _ := testAdhocRunner(t, d)
+
+	err := runner.LogsFor(context.Background(), "llama-8b", io.Discard, false, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no adhoc container found")
+}
+
+func TestAdhocLogsForListError(t *testing.T) {
+	d := &stubDocker{listErr: fmt.Errorf("docker unavailable")}
+	runner, _ := testAdhocRunner(t, d)
+
+	err := runner.LogsFor(context.Background(), "llama-8b", io.Discard, false, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "listing containers")
+}
+
+func TestAdhocLogsForContainerLogsError(t *testing.T) {
+	d := &stubDocker{
+		listResult: []container.Summary{{ID: "ctr123"}},
+		logsErr:    fmt.Errorf("permission denied"),
+	}
+	runner, _ := testAdhocRunner(t, d)
+
+	err := runner.LogsFor(context.Background(), "llama-8b", io.Discard, false, 0)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "fetching container logs")
+}
+
 // --- NewAdhocRunner runtime ---
 
 func TestNewAdhocRunnerCustomSocket(t *testing.T) {
