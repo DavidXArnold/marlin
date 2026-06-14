@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -319,4 +320,39 @@ func TestStatusShowsUnmanagedWarning(t *testing.T) {
 	out := buf.String()
 	assert.Contains(t, out, "unmanaged inference containers")
 	assert.Contains(t, out, "rogue-vllm")
+}
+
+// TestRunStatusShowsLastStop: StoppedAt set in state + provider not running → "last stop: X ago".
+func TestRunStatusShowsLastStop(t *testing.T) {
+	_, cleanup := nimStatusEnv(t)
+	defer cleanup()
+
+	stoppedAt := time.Now().Add(-5 * time.Minute)
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+	require.NoError(t, state.Save(cfg.Paths.StateFile, &state.State{
+		ActiveModel:    "nim-model",
+		ActiveProvider: config.ProviderNIM,
+		StoppedAt:      &stoppedAt,
+	}))
+
+	fakeProvider := &fakeNIMProvider{
+		status: &provider.Status{
+			Running:        false,
+			ContainerState: "exited",
+		},
+	}
+	oldBuild := buildProvider
+	buildProvider = func(_ config.ProviderType, _ *config.Config) (provider.Provider, error) {
+		return fakeProvider, nil
+	}
+	defer func() { buildProvider = oldBuild }()
+
+	var buf bytes.Buffer
+	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
+	out := buf.String()
+	assert.Contains(t, out, "last stop")
+	assert.Contains(t, out, "ago")
+	// Deliberately stopped → API health check is skipped.
+	assert.NotContains(t, out, "api health")
 }

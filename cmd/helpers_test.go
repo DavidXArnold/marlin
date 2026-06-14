@@ -435,3 +435,23 @@ func TestEffectiveMaxRuntimeZeroWhenUnset(t *testing.T) {
 	cmd.Flags().String("max-runtime", "", "")
 	assert.Equal(t, time.Duration(0), effectiveMaxRuntime(cmd, cfg))
 }
+
+// --- humanDuration ---
+
+func TestHumanDuration(t *testing.T) {
+	cases := []struct {
+		d    time.Duration
+		want string
+	}{
+		{30 * time.Second, "less than a minute"},
+		{time.Minute, "1 minute"},
+		{5 * time.Minute, "5 minutes"},
+		{time.Hour, "1 hour"},
+		{3 * time.Hour, "3 hours"},
+		{24 * time.Hour, "1 day"},
+		{48 * time.Hour, "2 days"},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, humanDuration(tc.d), "duration %v", tc.d)
+	}
+}

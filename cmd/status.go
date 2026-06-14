@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -54,15 +55,14 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 
-		// Live container state for NIM providers.
+		// Live status from the provider (works for all provider types).
 		var liveStatus *provider.Status
-		if cur.ActiveProvider == config.ProviderNIM {
-			if p, err := buildProvider(cur.ActiveProvider, cfg); err == nil {
-				liveStatus, _ = p.Status(cmd.Context())
-			}
+		if p, err := buildProvider(cur.ActiveProvider, cfg); err == nil {
+			liveStatus, _ = p.Status(cmd.Context())
 		}
 
-		if liveStatus != nil {
+		if liveStatus != nil && liveStatus.ContainerState != "" {
+			// Container provider (NIM): show container ID and state.
 			id := liveStatus.ContainerID
 			if len(id) > 12 {
 				id = id[:12]
@@ -76,45 +76,69 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			if err := writef("container    : %s\n", containerLine); err != nil {
 				return err
 			}
+		} else if liveStatus != nil {
+			// Service provider (vLLM): show running/stopped.
+			svcState := "stopped"
+			if liveStatus.Running {
+				svcState = "running"
+			}
+			if err := writef("service      : %s\n", svcState); err != nil {
+				return err
+			}
 		} else if cur.ContainerID != "" {
+			// Fallback: cached container ID from state.
 			if err := writef("container    : %s\n", cur.ContainerID[:min12(len(cur.ContainerID))]); err != nil {
 				return err
 			}
 		}
 
-		client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", cfg.Server.HealthPath)
-		health, healthErr := client.Health(cmd.Context())
-		apiReady := healthErr == nil && health.Ready
-		if healthErr != nil {
-			if err := writef("api health   : error (%v)\n", healthErr); err != nil {
+		// Show stop time when deliberately stopped via marlin stop and not yet running.
+		notRunning := liveStatus == nil || !liveStatus.Running
+		if cur.StoppedAt != nil && notRunning {
+			if err := writef("last stop    : %s ago\n", humanDuration(time.Since(*cur.StoppedAt))); err != nil {
 				return err
 			}
-		} else if apiReady {
-			if err := writef("api health   : ready at http://%s:%d/v1\n", cfg.Server.Host, cfg.Server.Port); err != nil {
-				return err
-			}
-		} else {
-			if err := writef("api health   : not ready\n"); err != nil {
-				return err
-			}
-			// For container providers, show the last log line to explain why.
-			if cur.ActiveProvider == config.ProviderNIM {
-				if p, err := buildProvider(cur.ActiveProvider, cfg); err == nil {
-					var logBuf bytes.Buffer
-					if err := p.Logs(cmd.Context(), &logBuf, false, 10); err == nil {
-						logs := logBuf.String()
-						for i, line := range lastNLines(logs, 2) {
-							label := "last log     "
-							if i > 0 {
-								label = "             "
+		}
+
+		// Skip API health check only when deliberately stopped (StoppedAt set) AND
+		// the service is confirmed not running. For crashed containers we still show
+		// the API state and last log lines to help diagnose the failure.
+		deliberatelyStopped := cur.StoppedAt != nil && notRunning
+		if !deliberatelyStopped {
+			client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", cfg.Server.HealthPath)
+			health, healthErr := client.Health(cmd.Context())
+			apiReady := healthErr == nil && health.Ready
+			if healthErr != nil {
+				if err := writef("api health   : error (%v)\n", healthErr); err != nil {
+					return err
+				}
+			} else if apiReady {
+				if err := writef("api health   : ready at http://%s:%d/v1\n", cfg.Server.Host, cfg.Server.Port); err != nil {
+					return err
+				}
+			} else {
+				if err := writef("api health   : not ready\n"); err != nil {
+					return err
+				}
+				// For container providers, show the last log lines to explain why.
+				if cur.ActiveProvider == config.ProviderNIM {
+					if p, err := buildProvider(cur.ActiveProvider, cfg); err == nil {
+						var logBuf bytes.Buffer
+						if err := p.Logs(cmd.Context(), &logBuf, false, 10); err == nil {
+							logs := logBuf.String()
+							for i, line := range lastNLines(logs, 2) {
+								label := "last log     "
+								if i > 0 {
+									label = "             "
+								}
+								if err := writef("%s: %s\n", label, line); err != nil {
+									return err
+								}
 							}
-							if err := writef("%s: %s\n", label, line); err != nil {
-								return err
-							}
-						}
-						if hint := nimHint(logs); hint != "" {
-							if err := writef("hint         : %s\n", hint); err != nil {
-								return err
+							if hint := nimHint(logs); hint != "" {
+								if err := writef("hint         : %s\n", hint); err != nil {
+									return err
+								}
 							}
 						}
 					}

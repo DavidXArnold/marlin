@@ -147,6 +147,32 @@ func effectiveMaxRuntime(cmd *cobra.Command, cfg *config.Config) time.Duration {
 	return cfg.Behavior.MaxRuntimeDuration()
 }
 
+// humanDuration returns a short human-readable string for d, e.g. "5 minutes", "2 hours".
+func humanDuration(d time.Duration) string {
+	if d < time.Minute {
+		return "less than a minute"
+	}
+	if d < time.Hour {
+		m := int(d.Minutes())
+		if m == 1 {
+			return "1 minute"
+		}
+		return fmt.Sprintf("%d minutes", m)
+	}
+	if d < 24*time.Hour {
+		h := int(d.Hours())
+		if h == 1 {
+			return "1 hour"
+		}
+		return fmt.Sprintf("%d hours", h)
+	}
+	days := int(d.Hours() / 24)
+	if days == 1 {
+		return "1 day"
+	}
+	return fmt.Sprintf("%d days", days)
+}
+
 // checkSystemResources warns on stderr if the 1-minute load average exceeds
 // threshold * numCPU. Does nothing when WarnOnSystemResources is false.
 func checkSystemResources(cfg *config.Config, w io.Writer) {

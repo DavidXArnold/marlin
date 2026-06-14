@@ -91,6 +91,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	enable, _ := cmd.Flags().GetBool("enable")
 
+	// If the model was previously stopped via marlin stop, surface that context.
+	if prev, err := state.Load(cfg.Paths.StateFile); err == nil && prev.StoppedAt != nil {
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "note: %s was stopped %s ago\n",
+			prev.ActiveModel, humanDuration(time.Since(*prev.StoppedAt)))
+	}
+
 	// Switch (or restart) the active model — launches the service.
 	if err := runSwitch(cmd, args); err != nil {
 		return err

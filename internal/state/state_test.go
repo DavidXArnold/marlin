@@ -178,3 +178,47 @@ func TestLoadPermissionDenied(t *testing.T) {
 	_, err = Load(f.Name())
 	assert.Error(t, err)
 }
+
+func TestRecordStop(t *testing.T) {
+	s := Empty()
+	assert.Nil(t, s.StoppedAt)
+	before := time.Now()
+	RecordStop(s)
+	assert.NotNil(t, s.StoppedAt)
+	assert.False(t, s.StoppedAt.Before(before))
+}
+
+func TestRecordStartClearsStoppedAt(t *testing.T) {
+	s := Empty()
+	RecordStop(s)
+	require.NotNil(t, s.StoppedAt)
+	RecordStart(s, "llama-8b")
+	assert.Nil(t, s.StoppedAt)
+}
+
+func TestStoppedAtRoundtrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.toml")
+	ts := time.Now().Truncate(time.Second)
+	s := &State{
+		ActiveModel:  "llama-8b",
+		StoppedAt:    &ts,
+		ModelHistory: map[string]time.Time{},
+	}
+	require.NoError(t, Save(path, s))
+	loaded, err := Load(path)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.StoppedAt)
+	assert.WithinDuration(t, ts, *loaded.StoppedAt, time.Second)
+}
+
+func TestStoppedAtNilNotWritten(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.toml")
+	s := Empty()
+	s.ActiveModel = "llama-8b"
+	require.NoError(t, Save(path, s))
+	loaded, err := Load(path)
+	require.NoError(t, err)
+	assert.Nil(t, loaded.StoppedAt)
+}

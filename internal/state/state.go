@@ -15,10 +15,11 @@ import (
 
 // State tracks which model and provider are currently active on this machine.
 type State struct {
-	ActiveModel    string                 `toml:"active_model"`    // slug (TOML filename without .toml)
-	ActiveProvider config.ProviderType    `toml:"active_provider"` // "vllm" or "nim"
-	ContainerID    string                 `toml:"container_id"`    // populated for nim, empty for vllm
-	ModelHistory   map[string]time.Time   `toml:"model_history"`   // slug → last started time
+	ActiveModel    string               `toml:"active_model"`    // slug (TOML filename without .toml)
+	ActiveProvider config.ProviderType  `toml:"active_provider"` // "vllm" or "nim"
+	ContainerID    string               `toml:"container_id"`    // populated for nim, empty for vllm
+	ModelHistory   map[string]time.Time `toml:"model_history"`   // slug → last started time
+	StoppedAt      *time.Time           `toml:"stopped_at"`      // set when stopped via marlin stop; nil when running
 }
 
 func Empty() *State {
@@ -89,10 +90,18 @@ func SavePrivileged(w io.Writer, path string, s *State) error {
 	return nil
 }
 
-// RecordStart updates the history map with the current time for slug.
+// RecordStart updates the history map with the current time for slug and
+// clears any pending StoppedAt marker.
 func RecordStart(s *State, slug string) {
 	if s.ModelHistory == nil {
 		s.ModelHistory = make(map[string]time.Time)
 	}
 	s.ModelHistory[slug] = time.Now()
+	s.StoppedAt = nil
+}
+
+// RecordStop marks the state as manually stopped at the current time.
+func RecordStop(s *State) {
+	t := time.Now()
+	s.StoppedAt = &t
 }
