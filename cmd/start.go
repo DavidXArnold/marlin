@@ -107,7 +107,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 			buf := make([]byte, 4)
 			n, _ := startLogsPromptReader.Read(buf)
 			if strings.ToLower(strings.TrimSpace(string(buf[:n]))) == "y" {
-				_ = p.Logs(cmd.Context(), w, false, 100)
+				if err := p.Logs(cmd.Context(), w, false, 100); err != nil {
+					_, _ = fmt.Fprintf(w, "could not fetch logs: %v\n", err)
+				}
 			}
 		}
 	}

@@ -222,13 +222,14 @@ func (n *NIMProvider) Status(ctx context.Context) (*Status, error) {
 
 func (n *NIMProvider) Logs(ctx context.Context, w io.Writer, follow bool, lines int) error {
 	containers, err := n.docker.ContainerList(ctx, container.ListOptions{
+		All:     true, // include exited containers so logs work after container crash
 		Filters: filters.NewArgs(filters.Arg("name", nimContainerName)),
 	})
 	if err != nil {
 		return fmt.Errorf("listing NIM containers: %w", err)
 	}
 	if len(containers) == 0 {
-		return fmt.Errorf("no NIM container running")
+		return fmt.Errorf("no NIM container found")
 	}
 
 	reader, err := n.docker.ContainerLogs(ctx, containers[0].ID, container.LogsOptions{

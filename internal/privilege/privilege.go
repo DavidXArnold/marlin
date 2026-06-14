@@ -164,20 +164,27 @@ func PromptAndPrepareNIMCache(w io.Writer, dir string) error {
 	if err := sudoRun([]string{"chgrp", "-R", "0", dir}); err != nil {
 		return err
 	}
-	return sudoRun([]string{"chmod", "-R", "g+rwX", dir})
+	// 777 so any container user (NIM images vary: uid=1000/gid=0 or uid=1000/gid=1000)
+	// can create subdirs in the cache without a permission denied error.
+	return sudoRun([]string{"chmod", "-R", "777", dir})
 }
 
-// nimCacheReady reports whether dir exists, is owned by GID 0, and has group rwx.
+// nimCacheReady reports whether dir exists with permissions that allow any
+// container user to write to it. Accepts either the GID=0 g+rwX pattern
+// (OpenShift-style) or world-writable o+rwx (standard Docker NIM images
+// which run as uid=1000/gid=1000).
 func nimCacheReady(dir string) bool {
 	info, err := os.Stat(dir)
 	if err != nil {
 		return false
 	}
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return false
+	mode := info.Mode()
+	groupReady := func() bool {
+		st, ok := info.Sys().(*syscall.Stat_t)
+		return ok && st.Gid == 0 && mode&0o070 == 0o070
 	}
-	return st.Gid == 0 && info.Mode()&0o070 == 0o070
+	otherReady := mode&0o007 == 0o007 // world-writable (chmod 777)
+	return groupReady() || otherReady
 }
 
 // RefreshNIMCachePerms re-applies group ownership and write permissions on dir
@@ -192,7 +199,7 @@ func RefreshNIMCachePerms(dir string) error {
 	if err := sudoRun([]string{"chgrp", "-R", "0", dir}); err != nil {
 		return err
 	}
-	return sudoRun([]string{"chmod", "-R", "g+rwX", dir})
+	return sudoRun([]string{"chmod", "-R", "777", dir})
 }
 
 // PromptAndRemove removes path. If the removal fails with a permission error,

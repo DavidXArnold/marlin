@@ -257,7 +257,7 @@ func TestNIMLogsNoContainer(t *testing.T) {
 	p, _ := testNIMProvider(t, d)
 	err := p.Logs(context.Background(), io.Discard, false, 50)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no NIM container running")
+	assert.Contains(t, err.Error(), "no NIM container found")
 }
 
 func TestNIMLogsListFails(t *testing.T) {

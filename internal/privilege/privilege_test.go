@@ -562,7 +562,7 @@ func TestPromptAndPrepareNIMCacheWritableUserConfirms(t *testing.T) {
 	// Should have run chgrp and chmod (mkdir skipped — writable dir).
 	require.Len(t, calls, 2)
 	assert.Equal(t, []string{"chgrp", "-R", "0", dir}, calls[0])
-	assert.Equal(t, []string{"chmod", "-R", "g+rwX", dir}, calls[1])
+	assert.Equal(t, []string{"chmod", "-R", "777", dir}, calls[1])
 }
 
 func TestPromptAndPrepareNIMCacheNeedsRootUserConfirms(t *testing.T) {
@@ -582,7 +582,7 @@ func TestPromptAndPrepareNIMCacheNeedsRootUserConfirms(t *testing.T) {
 	require.Len(t, calls, 3)
 	assert.Equal(t, []string{"mkdir", "-p", target}, calls[0])
 	assert.Equal(t, []string{"chgrp", "-R", "0", target}, calls[1])
-	assert.Equal(t, []string{"chmod", "-R", "g+rwX", target}, calls[2])
+	assert.Equal(t, []string{"chmod", "-R", "777", target}, calls[2])
 }
 
 func TestPromptAndPrepareNIMCacheUserDeclines(t *testing.T) {
