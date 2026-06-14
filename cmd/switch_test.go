@@ -18,11 +18,12 @@ import (
 
 // mockProv is a test-only Provider that records calls and returns canned errors.
 type mockProv struct {
-	switchErr     error
-	stopErr       error
-	stopCalled    bool
-	stopFn        func()
-	statusRunning bool // if true, Status returns Running: true
+	switchErr            error
+	stopErr              error
+	stopCalled           bool
+	stopFn               func()
+	statusRunning        bool   // if true, Status returns Running: true
+	statusContainerState string // if non-empty, Status returns this ContainerState
 }
 
 func (m *mockProv) Switch(_ context.Context, _ string) error { return m.switchErr }
@@ -34,7 +35,7 @@ func (m *mockProv) Stop(_ context.Context) error {
 	return m.stopErr
 }
 func (m *mockProv) Status(_ context.Context) (*provider.Status, error) {
-	return &provider.Status{Running: m.statusRunning}, nil
+	return &provider.Status{Running: m.statusRunning, ContainerState: m.statusContainerState}, nil
 }
 func (m *mockProv) Logs(_ context.Context, _ io.Writer, _ bool, _ int) error { return nil }
 

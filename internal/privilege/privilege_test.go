@@ -606,3 +606,34 @@ func TestRefreshNIMCachePermsDirNotExist(t *testing.T) {
 	err := RefreshNIMCachePerms(filepath.Join(t.TempDir(), "nonexistent"))
 	assert.NoError(t, err)
 }
+
+func TestRefreshNIMCachePermsSuccess(t *testing.T) {
+	dir := t.TempDir()
+	var cmds []string
+	old := sudoRun
+	sudoRun = func(args []string) error { cmds = append(cmds, args[0]); return nil }
+	defer func() { sudoRun = old }()
+
+	err := RefreshNIMCachePerms(dir)
+	require.NoError(t, err)
+	// Should have run chgrp then chmod.
+	require.Len(t, cmds, 2)
+	assert.Equal(t, "chgrp", cmds[0])
+	assert.Equal(t, "chmod", cmds[1])
+}
+
+func TestRefreshNIMCachePermsChgrpError(t *testing.T) {
+	dir := t.TempDir()
+	old := sudoRun
+	sudoRun = func(args []string) error {
+		if args[0] == "chgrp" {
+			return fmt.Errorf("chgrp failed")
+		}
+		return nil
+	}
+	defer func() { sudoRun = old }()
+
+	err := RefreshNIMCachePerms(dir)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "chgrp failed")
+}

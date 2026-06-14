@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -61,7 +64,11 @@ var enableUnit = func(cfg *config.Config) error {
 }
 
 // startWaitForReadyFunc is injectable for tests.
+// Returns true when the API became ready, false on timeout or container exit.
 var startWaitForReadyFunc = waitForReady
+
+// startLogsPromptReader is injectable for tests.
+var startLogsPromptReader io.Reader = os.Stdin
 
 var spinFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
@@ -93,7 +100,16 @@ func runStart(cmd *cobra.Command, args []string) error {
 	cur, _ := state.Load(cfg.Paths.StateFile)
 	p, buildErr := buildProvider(cur.ActiveProvider, cfg)
 	if buildErr == nil {
-		startWaitForReadyFunc(cmd, cfg, cur.ActiveModel, p)
+		ok := startWaitForReadyFunc(cmd, cfg, cur.ActiveModel, p)
+		if !ok && stdoutIsTerminal() {
+			w := cmd.OutOrStdout()
+			_, _ = fmt.Fprintf(w, "show logs? [y/N] ")
+			buf := make([]byte, 4)
+			n, _ := startLogsPromptReader.Read(buf)
+			if strings.ToLower(strings.TrimSpace(string(buf[:n]))) == "y" {
+				_ = p.Logs(cmd.Context(), w, false, 100)
+			}
+		}
 	}
 
 	if enable {
@@ -115,7 +131,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 // waitForReady polls the OpenAI-compatible health endpoint after a start/switch,
 // showing a spinner on stdout. When --logs is set, container logs stream to stdout.
 // When -vvv is set, container logs stream to stderr alongside the spinner.
-func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provider.Provider) {
+// Returns true when the API is ready, false on timeout or container exit.
+func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provider.Provider) bool {
 	streamLogs, _ := cmd.Flags().GetBool("logs")
 	showLogs := streamLogs || Verbosity >= 3
 
@@ -130,7 +147,7 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 	// Fast path: already ready (e.g., vLLM process already healthy after systemd restart).
 	if h, err := client.Health(ctx); err == nil && h.Ready {
 		_, _ = fmt.Fprintf(w, "api ready at http://%s:%d/v1\n", cfg.Server.Host, cfg.Server.Port)
-		return
+		return true
 	}
 
 	// Stream logs concurrently if requested.
@@ -165,7 +182,7 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 			}
 			_, _ = fmt.Fprintf(w, "start timed out after %s — run 'marlin logs' for details\n",
 				time.Since(start).Round(time.Second))
-			return
+			return false
 
 		case <-ticker.C:
 			if h, err := client.Health(cmd.Context()); err == nil && h.Ready {
@@ -175,8 +192,21 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 				_, _ = fmt.Fprintf(w, "ready at http://%s:%d/v1 (%s)\n",
 					cfg.Server.Host, cfg.Server.Port,
 					time.Since(start).Round(time.Second))
-				return
+				return true
 			}
+
+			// Detect container exit so we don't spin indefinitely.
+			if status, err := p.Status(cmd.Context()); err == nil {
+				if cs := status.ContainerState; cs != "" && cs != "running" {
+					if isTTY {
+						_, _ = fmt.Fprintf(w, "\r\033[K")
+					}
+					_, _ = fmt.Fprintf(w, "container exited (%s) after %s — run 'marlin logs' for details\n",
+						cs, time.Since(start).Round(time.Second))
+					return false
+				}
+			}
+
 			if isTTY {
 				elapsed := time.Since(start).Round(time.Second)
 				_, _ = fmt.Fprintf(w, "\r%s %s ... %s   ",

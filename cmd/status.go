@@ -101,10 +101,14 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			if cur.ActiveProvider == config.ProviderNIM {
 				if p, err := buildProvider(cur.ActiveProvider, cfg); err == nil {
 					var logBuf bytes.Buffer
-					if err := p.Logs(cmd.Context(), &logBuf, false, 5); err == nil {
+					if err := p.Logs(cmd.Context(), &logBuf, false, 10); err == nil {
 						logs := logBuf.String()
-						if last := lastNonEmptyLine(logs); last != "" {
-							if err := writef("last log     : %s\n", last); err != nil {
+						for i, line := range lastNLines(logs, 2) {
+							label := "last log     "
+							if i > 0 {
+								label = "             "
+							}
+							if err := writef("%s: %s\n", label, line); err != nil {
 								return err
 							}
 						}
@@ -282,11 +286,24 @@ func nimHint(logs string) string {
 }
 
 func lastNonEmptyLine(s string) string {
+	lines := lastNLines(s, 1)
+	if len(lines) == 0 {
+		return ""
+	}
+	return lines[0]
+}
+
+// lastNLines returns up to n non-empty lines from the tail of s, in chronological order.
+func lastNLines(s string, n int) []string {
 	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
+	var result []string
+	for i := len(lines) - 1; i >= 0 && len(result) < n; i-- {
 		if t := strings.TrimSpace(lines[i]); t != "" {
-			return t
+			result = append(result, t)
 		}
 	}
-	return ""
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+	return result
 }

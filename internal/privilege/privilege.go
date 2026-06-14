@@ -180,13 +180,17 @@ func nimCacheReady(dir string) bool {
 	return st.Gid == 0 && info.Mode()&0o070 == 0o070
 }
 
-// RefreshNIMCachePerms re-applies group write permissions on dir so that
-// subdirectories created by a previous NIM container run remain accessible to
-// the container user (UID=1000, GID=0). Runs via sudo using the system
-// credential cache — no custom [y/N] prompt is shown.
+// RefreshNIMCachePerms re-applies group ownership and write permissions on dir
+// so that subdirectories created by a previous NIM container run (which may have
+// wrong group or permissions, including .nim/local_cache) remain accessible to
+// the container user (UID=1000, GID=0). Runs via sudo using the system credential
+// cache — no custom [y/N] prompt is shown.
 func RefreshNIMCachePerms(dir string) error {
 	if _, err := os.Stat(dir); err != nil {
 		return nil // dir doesn't exist yet; PromptAndPrepareNIMCache will handle it
+	}
+	if err := sudoRun([]string{"chgrp", "-R", "0", dir}); err != nil {
+		return err
 	}
 	return sudoRun([]string{"chmod", "-R", "g+rwX", dir})
 }

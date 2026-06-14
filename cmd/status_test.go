@@ -37,6 +37,17 @@ func TestLastNonEmptyLine(t *testing.T) {
 	}
 }
 
+// --- lastNLines ---
+
+func TestLastNLines(t *testing.T) {
+	assert.Empty(t, lastNLines("", 2))
+	assert.Equal(t, []string{"only"}, lastNLines("only", 2))
+	assert.Equal(t, []string{"first", "second"}, lastNLines("first\nsecond", 2))
+	assert.Equal(t, []string{"second", "third"}, lastNLines("first\nsecond\nthird", 2))
+	// trailing newlines are ignored
+	assert.Equal(t, []string{"a", "b"}, lastNLines("a\nb\n\n", 3))
+}
+
 // --- runStatus NIM provider paths ---
 
 // fakeNIMProvider is a minimal provider.Provider that returns a fixed Status and
