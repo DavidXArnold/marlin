@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/privilege"
 	"github.com/DavidXArnold/marlin/internal/state"
 )
 
@@ -26,6 +30,21 @@ var execEditorFunc = func(editor, path string) error {
 	c.Stderr = os.Stderr
 	return c.Run()
 }
+
+// execSudoEditorFunc is injectable for tests.
+var execSudoEditorFunc = func(editor, path string) error {
+	c := exec.Command("sudo", editor, path)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return c.Run()
+}
+
+// editPromptReader is injectable for tests.
+var editPromptReader io.Reader = os.Stdin
+
+// editNeedsRootFunc is injectable for tests.
+var editNeedsRootFunc = privilege.NeedsRoot
 
 func init() {
 	rootCmd.AddCommand(editCmd)
@@ -63,6 +82,19 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = "vi"
+	}
+
+	if editNeedsRootFunc(filepath.Dir(path)) {
+		w := cmd.OutOrStdout()
+		_, _ = fmt.Fprintf(w, "warning: %s requires administrator privileges to edit\n", path)
+		_, _ = fmt.Fprint(w, "continue with sudo? [y/N] ")
+		buf := make([]byte, 64)
+		n, _ := editPromptReader.Read(buf)
+		if strings.ToLower(strings.TrimSpace(string(buf[:n]))) != "y" {
+			_, _ = fmt.Fprintln(w, "cancelled")
+			return nil
+		}
+		return execSudoEditorFunc(editor, path)
 	}
 
 	return execEditorFunc(editor, path)

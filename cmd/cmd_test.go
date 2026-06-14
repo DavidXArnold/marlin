@@ -1210,6 +1210,47 @@ func TestRunEditDirect(t *testing.T) {
 	require.NoError(t, runEdit(cmdWithContext(io.Discard), []string{"llama-8b"}))
 }
 
+func TestEditPrivilegeNeededYes(t *testing.T) {
+	// Simulate file in a root-owned directory.
+	old := editNeedsRootFunc
+	editNeedsRootFunc = func(string) bool { return true }
+	t.Cleanup(func() { editNeedsRootFunc = old })
+
+	var sudoCalled bool
+	oldSudo := execSudoEditorFunc
+	execSudoEditorFunc = func(_, _ string) error { sudoCalled = true; return nil }
+	t.Cleanup(func() { execSudoEditorFunc = oldSudo })
+
+	oldReader := editPromptReader
+	editPromptReader = strings.NewReader("y\n")
+	t.Cleanup(func() { editPromptReader = oldReader })
+
+	cleanup := tempEnv(t, "llama-8b")
+	defer cleanup()
+
+	var buf bytes.Buffer
+	require.NoError(t, runEdit(cmdWithContext(&buf), []string{"llama-8b"}))
+	assert.True(t, sudoCalled)
+	assert.Contains(t, buf.String(), "sudo")
+}
+
+func TestEditPrivilegeNeededNo(t *testing.T) {
+	old := editNeedsRootFunc
+	editNeedsRootFunc = func(string) bool { return true }
+	t.Cleanup(func() { editNeedsRootFunc = old })
+
+	oldReader := editPromptReader
+	editPromptReader = strings.NewReader("n\n")
+	t.Cleanup(func() { editPromptReader = oldReader })
+
+	cleanup := tempEnv(t, "llama-8b")
+	defer cleanup()
+
+	var buf bytes.Buffer
+	require.NoError(t, runEdit(cmdWithContext(&buf), []string{"llama-8b"}))
+	assert.Contains(t, buf.String(), "cancelled")
+}
+
 // --- update notice in Execute() ---
 
 func TestExecuteUpdateNotice(t *testing.T) {

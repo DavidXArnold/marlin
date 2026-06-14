@@ -5,18 +5,19 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/state"
 )
 
 var restartCmd = &cobra.Command{
 	Use:   "restart [model]",
-	Short: "Stop and restart the active model, or pick one",
-	Long: `Stop the currently active model and start it again (or start a different one).
+	Short: "Stop the active model and start it again (or pick a new one)",
+	Long: `Stop the currently running model and start it again.
 
-Without an argument: if a model is active, stops it and restarts it. If no model
-is active, shows an interactive picker (same as marlin start).
+Without an argument, shows the current model status then an interactive picker
+so you can restart the same model or choose a different one.
 
-With a model name: stops the active model (if any) and starts the named one.`,
+With a model name, stops the current model (if any) and starts the named one.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runRestart,
 }
@@ -37,30 +38,48 @@ func runRestart(cmd *cobra.Command, args []string) error {
 	cur, _ := state.Load(cfg.Paths.StateFile)
 	w := cmd.OutOrStdout()
 
-	// No arg and no active model → fall through to marlin start (interactive picker).
-	if len(args) == 0 && cur.ActiveModel == "" {
-		return runStart(cmd, args)
+	var target string
+
+	if len(args) > 0 {
+		target = args[0]
+	} else {
+		// Interactive mode: show current status then a model picker.
+		if cur.ActiveModel != "" {
+			provStatus := "unknown"
+			if p, buildErr := buildProvider(cur.ActiveProvider, cfg); buildErr == nil {
+				if st, stErr := p.Status(cmd.Context()); stErr == nil {
+					if st.Running {
+						provStatus = "running"
+					} else {
+						provStatus = "stopped"
+					}
+				}
+			}
+			_, _ = fmt.Fprintf(w, "active: %s (%s, %s)\n", cur.ActiveModel, cur.ActiveProvider, provStatus)
+		}
+
+		dirs := effectiveDirs(cfg)
+		models, names, listErr := config.ListModelsFromDirs(dirs...)
+		if listErr != nil {
+			return fmt.Errorf("listing models: %w", listErr)
+		}
+
+		target, err = resolveModel("", names, models, cur.ActiveModel, cur.ModelHistory)
+		if err != nil {
+			return err
+		}
 	}
 
-	// No arg but there is an active model → stop it then restart it.
-	if len(args) == 0 {
-		target := cur.ActiveModel
-		if err := stopActiveModel(cmd, cfg, cur, w); err != nil {
-			return fmt.Errorf("stopping %s: %w", target, err)
+	// Stop the current active model if one is running.
+	if cur.ActiveModel != "" {
+		_, _ = fmt.Fprintf(w, "stopping %s...\n", cur.ActiveModel)
+		if stopErr := stopActiveModel(cmd, cfg, cur, w); stopErr != nil {
+			if cur.ActiveModel == target {
+				return fmt.Errorf("stopping %s: %w", cur.ActiveModel, stopErr)
+			}
+			_, _ = fmt.Fprintf(w, "warning: could not stop %s: %v\n", cur.ActiveModel, stopErr)
 		}
-		return runStart(cmd, []string{target})
 	}
 
-	// Arg provided: stop the active model (if any, and different), then start the named one.
-	target := args[0]
-	if cur.ActiveModel != "" && cur.ActiveModel != target {
-		if err := stopActiveModel(cmd, cfg, cur, w); err != nil {
-			_, _ = fmt.Fprintf(w, "warning: could not stop %s: %v\n", cur.ActiveModel, err)
-		}
-	} else if cur.ActiveModel == target {
-		if err := stopActiveModel(cmd, cfg, cur, w); err != nil {
-			return fmt.Errorf("stopping %s: %w", target, err)
-		}
-	}
 	return runStart(cmd, []string{target})
 }

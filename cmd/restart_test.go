@@ -33,7 +33,8 @@ func TestRestartNoArgNoActiveModel(t *testing.T) {
 	assert.Contains(t, err.Error(), "no models found")
 }
 
-// TestRestartNoArgWithActiveModel: no arg, active model → stop then restart same model.
+// TestRestartNoArgWithActiveModel: no arg, active model → shows status, single model
+// auto-selected, stops then restarts.
 func TestRestartNoArgWithActiveModel(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
@@ -54,6 +55,10 @@ func TestRestartNoArgWithActiveModel(t *testing.T) {
 	require.NoError(t, runRestart(restartCmdWithContext(&buf), nil))
 	assert.True(t, p.stopCalled)
 	out := buf.String()
+	// Status line shown before picker.
+	assert.Contains(t, out, "active: llama-8b")
+	// Stopping progress and confirmation.
+	assert.Contains(t, out, "stopping llama-8b")
 	assert.Contains(t, out, "stopped llama-8b")
 	assert.Contains(t, out, "switched to")
 }
