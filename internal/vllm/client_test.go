@@ -37,7 +37,7 @@ func TestHealthNotReady(t *testing.T) {
 }
 
 func TestHealthUnreachable(t *testing.T) {
-	c := NewClient("127.0.0.1", 19999, "")
+	c := NewClient("127.0.0.1", 19999, "", "/health")
 	status, err := c.Health(context.Background())
 	require.NoError(t, err, "unreachable server should not error, just return not ready")
 	assert.False(t, status.Ready)
@@ -78,7 +78,7 @@ func TestModelsServerError(t *testing.T) {
 }
 
 func TestHealthInvalidURL(t *testing.T) {
-	c := NewClient("unused", 0, "")
+	c := NewClient("unused", 0, "", "/health")
 	c.base = "://invalid-url"
 	_, err := c.Health(context.Background())
 	assert.Error(t, err)
@@ -125,10 +125,32 @@ func TestNewClientFromBase(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClientFromBase(srv.URL, "tok")
+	c := NewClientFromBase(srv.URL, "tok", "/health")
 	status, err := c.Health(context.Background())
 	require.NoError(t, err)
 	assert.True(t, status.Ready)
+}
+
+func TestHealthCustomPath(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := NewClientFromBase(srv.URL, "", "/healthz")
+	status, err := c.Health(context.Background())
+	require.NoError(t, err)
+	assert.True(t, status.Ready)
+
+	// Default /health path returns 404 on this server → not ready.
+	c2 := NewClientFromBase(srv.URL, "", "/health")
+	status2, err := c2.Health(context.Background())
+	require.NoError(t, err)
+	assert.False(t, status2.Ready)
 }
 
 func clientFromTestServer(srv *httptest.Server) *Client {
@@ -136,7 +158,7 @@ func clientFromTestServer(srv *httptest.Server) *Client {
 }
 
 func clientFromTestServerWithKey(srv *httptest.Server, key string) *Client {
-	c := NewClient("unused", 0, key)
+	c := NewClient("unused", 0, key, "/health")
 	c.base = srv.URL
 	return c
 }

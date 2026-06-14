@@ -72,9 +72,10 @@ type ServiceConfig struct {
 }
 
 type ServerConfig struct {
-	Host  string `toml:"host"`
-	Port  int    `toml:"port"`
-	Alias string `toml:"alias"`
+	Host       string `toml:"host"`
+	Port       int    `toml:"port"`
+	Alias      string `toml:"alias"`
+	HealthPath string `toml:"health_path"`
 }
 
 type RegistriesConfig struct {
@@ -125,9 +126,10 @@ func Defaults() *Config {
 			VLLMImage:       "vllm/vllm-openai:latest",
 		},
 		Server: ServerConfig{
-			Host:  "localhost",
-			Port:  8000,
-			Alias: "local",
+			Host:       "localhost",
+			Port:       8000,
+			Alias:      "local",
+			HealthPath: "/health",
 		},
 		Registries: RegistriesConfig{
 			HuggingFace: RegistryConfig{Enabled: true},

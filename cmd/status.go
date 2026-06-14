@@ -82,7 +82,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			}
 		}
 
-		client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "")
+		client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", cfg.Server.HealthPath)
 		health, healthErr := client.Health(cmd.Context())
 		apiReady := healthErr == nil && health.Ready
 		if healthErr != nil {

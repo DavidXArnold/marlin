@@ -23,14 +23,14 @@ func vllmBase(t *testing.T) string {
 }
 
 func TestIntegrationVLLMHealth(t *testing.T) {
-	c := vllm.NewClientFromBase(vllmBase(t), "")
+	c := vllm.NewClientFromBase(vllmBase(t), "", "/health")
 	status, err := c.Health(context.Background())
 	require.NoError(t, err)
 	assert.True(t, status.Ready)
 }
 
 func TestIntegrationVLLMModels(t *testing.T) {
-	c := vllm.NewClientFromBase(vllmBase(t), "")
+	c := vllm.NewClientFromBase(vllmBase(t), "", "/health")
 	models, err := c.Models(context.Background())
 	require.NoError(t, err)
 	require.NotEmpty(t, models, "server should return at least one model")
@@ -40,7 +40,7 @@ func TestIntegrationVLLMModels(t *testing.T) {
 }
 
 func TestIntegrationVLLMHealthUnreachable(t *testing.T) {
-	c := vllm.NewClientFromBase("http://127.0.0.1:19999", "")
+	c := vllm.NewClientFromBase("http://127.0.0.1:19999", "", "/health")
 	status, err := c.Health(context.Background())
 	require.NoError(t, err, "unreachable host should return not-ready, not an error")
 	assert.False(t, status.Ready)

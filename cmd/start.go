@@ -144,7 +144,7 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 	ctx, cancel := context.WithTimeout(cmd.Context(), startWaitTimeout)
 	defer cancel()
 
-	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "")
+	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", cfg.Server.HealthPath)
 
 	// Fast path: already ready (e.g., vLLM process already healthy after systemd restart).
 	if h, err := client.Health(ctx); err == nil && h.Ready {

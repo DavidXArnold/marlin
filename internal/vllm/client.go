@@ -9,26 +9,29 @@ import (
 )
 
 type Client struct {
-	base   string
-	apiKey string
-	http   *http.Client
+	base       string
+	apiKey     string
+	healthPath string
+	http       *http.Client
 }
 
-func NewClient(host string, port int, apiKey string) *Client {
+func NewClient(host string, port int, apiKey, healthPath string) *Client {
 	return &Client{
-		base:   fmt.Sprintf("http://%s:%d", host, port),
-		apiKey: apiKey,
-		http:   &http.Client{Timeout: 10 * time.Second},
+		base:       fmt.Sprintf("http://%s:%d", host, port),
+		apiKey:     apiKey,
+		healthPath: healthPath,
+		http:       &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
 // NewClientFromBase creates a Client with a pre-formatted base URL.
 // Useful when the URL is already known (e.g. httptest.Server.URL in integration tests).
-func NewClientFromBase(base, apiKey string) *Client {
+func NewClientFromBase(base, apiKey, healthPath string) *Client {
 	return &Client{
-		base:   base,
-		apiKey: apiKey,
-		http:   &http.Client{Timeout: 10 * time.Second},
+		base:       base,
+		apiKey:     apiKey,
+		healthPath: healthPath,
+		http:       &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -37,7 +40,7 @@ type HealthStatus struct {
 }
 
 func (c *Client) Health(ctx context.Context) (*HealthStatus, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/health", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+c.healthPath, nil)
 	if err != nil {
 		return nil, err
 	}
