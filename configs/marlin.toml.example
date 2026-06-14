@@ -1,31 +1,45 @@
+# marlin configuration — copy to /etc/marlin/config.toml and edit as needed.
+# All settings have defaults; only override what you need.
+
 [behavior]
-switch_prompt    = true    # prompt before restart on switch
-add_auto_detect  = false   # auto-detect model params on add (YMMV)
-log_tail_lines   = 100
-allow_type_switch = true   # allow switching between vllm and nim providers
-warn_unmanaged_containers = true  # warn if unmanaged inference containers are detected
-check_updates    = true    # notify when a newer marlin release is available on GitHub
+switch_prompt             = true   # confirm before switching to a different model
+add_auto_detect           = false  # auto-populate model params when running marlin add (YMMV)
+log_tail_lines            = 100    # lines shown by marlin logs (without -f)
+allow_type_switch         = true   # allow switching between vllm and nim providers
+warn_unmanaged_containers = true   # warn in marlin status if unmanaged inference containers are found
+check_updates             = true   # notify when a newer marlin release is available on GitHub
+global_install            = false  # write model configs to global_models_dir (requires sudo)
+warn_on_system_resources  = true   # warn before switch if system load is high
+system_load_threshold     = 0.8    # load-average fraction that triggers the resource warning
+# max_runtime             = ""     # auto-stop after this duration (e.g. "2h", "30m"); empty = disabled
 
 [paths]
-models_dir     = "/etc/marlin/models"
-active_symlink = "/etc/marlin/model.env"
+# models_dir defaults to $HOME/.config/marlin/models (writable without sudo).
+# Override for shared/system deployments:
+# models_dir       = "/etc/marlin/models"
+global_models_dir  = "/etc/marlin/models"    # read-only global model library (system-managed)
+active_symlink     = "/etc/marlin/model.env" # symlink → active model's rendered env file (vLLM)
 # secrets_env defaults to $HOME/.config/marlin/secrets.env — writable without sudo.
 # Override here only for shared/system deployments:
-# secrets_env = "/etc/marlin/secrets.env"
-state_file     = "/var/lib/marlin/state.toml"
-nim_cache      = "/var/cache/nim"
+# secrets_env      = "/etc/marlin/secrets.env"
+# state_file defaults to $HOME/.local/share/marlin/state.toml — writable without sudo.
+# Override here only for shared/system deployments:
+# state_file       = "/var/lib/marlin/state.toml"
+nim_cache          = "/var/cache/nim"        # host path mounted into NIM containers as model cache
 
 [service]
-systemd_unit      = "marlin"
-docker_container  = "marlin"
-vllm_image        = "vllm/vllm-openai:latest"  # Docker image for ad-hoc marlin run
-# container_runtime = "docker"       # docker (default), podman, or containerd
-# container_socket  = ""             # custom socket path; leave empty for auto-detect
+systemd_unit      = "marlin"                  # systemd unit managed by marlin start/stop/enable
+docker_container  = "marlin"                  # name given to managed NIM containers
+vllm_image        = "vllm/vllm-openai:latest" # Docker image used for ad-hoc marlin run (vLLM)
+# container_runtime = "docker"               # docker (default), podman, or containerd
+# container_socket  = ""                     # custom socket path; leave empty for auto-detect
 
 [server]
-host  = "localhost"
-port  = 8000
-alias = "local"
+host        = "localhost"  # host where the inference API is listening
+port        = 8000         # port where the inference API is listening
+alias       = "local"      # short name shown in marlin status
+health_path = "/health"    # path polled by marlin start to detect readiness
+                           # common alternatives: /healthz, /ready, /v1/health/ready
 
 [registries.huggingface]
 enabled = true

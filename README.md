@@ -49,22 +49,69 @@ sudo cp configs/marlin.toml.example /etc/marlin/config.toml
 sudo $EDITOR /etc/marlin/config.toml
 ```
 
-Key paths (all overridable in config):
+Config is loaded from `/etc/marlin/config.toml` by default. Override with `--config` or `MARLIN_CONFIG`. All settings have built-in defaults — an empty or missing config file is valid.
 
-| Setting | Default | Purpose |
-|---|---|---|
-| `paths.models_dir` | `/etc/marlin/models` | TOML model configs |
-| `paths.active_symlink` | `/etc/marlin/model.env` | Symlink → active model's rendered env file |
-| `paths.secrets_env` | `/etc/marlin/secrets.env` | `HF_TOKEN` and `NGC_API_KEY` |
-| `paths.state_file` | `/var/lib/marlin/state.toml` | Active model/provider/container state |
-| `paths.nim_cache` | `/var/cache/nim` | Host path mounted into NIM containers as model cache |
-
-Secrets (also manageable via `marlin configure`):
+Secrets are managed via `marlin configure` or written directly to `paths.secrets_env`:
 
 ```
 HF_TOKEN=hf_...
 NGC_API_KEY=nvapi-...
 ```
+
+### `[behavior]`
+
+| Key | Default | Description |
+|---|---|---|
+| `switch_prompt` | `true` | Confirm before switching to a different model |
+| `add_auto_detect` | `false` | Auto-populate model params in the add wizard (YMMV) |
+| `log_tail_lines` | `100` | Lines shown by `marlin logs` without `-f` |
+| `allow_type_switch` | `true` | Allow switching between vllm and nim providers |
+| `warn_unmanaged_containers` | `true` | Warn in `marlin status` if unmanaged inference containers are found |
+| `check_updates` | `true` | Notify when a newer marlin release is available on GitHub |
+| `global_install` | `false` | Write new model configs to `global_models_dir` (requires sudo) |
+| `warn_on_system_resources` | `true` | Warn before switch if system load is high |
+| `system_load_threshold` | `0.8` | Load-average fraction that triggers the resource warning |
+| `max_runtime` | `""` | Auto-stop the model after this duration (e.g. `"2h"`, `"30m"`); empty = disabled |
+
+### `[paths]`
+
+| Key | Default | Description |
+|---|---|---|
+| `models_dir` | `~/.config/marlin/models` | Per-user TOML model config directory |
+| `global_models_dir` | `/etc/marlin/models` | Read-only system-wide model library |
+| `active_symlink` | `/etc/marlin/model.env` | Symlink → active model's rendered env file (vLLM) |
+| `secrets_env` | `~/.config/marlin/secrets.env` | `HF_TOKEN` and `NGC_API_KEY` |
+| `state_file` | `~/.local/share/marlin/state.toml` | Active model, provider, and container ID |
+| `nim_cache` | `/var/cache/nim` | Host path mounted into NIM containers as model cache |
+
+`models_dir`, `secrets_env`, and `state_file` default to user-local paths (no sudo required). Override to `/etc/marlin/…` or `/var/lib/marlin/…` for shared system deployments.
+
+### `[service]`
+
+| Key | Default | Description |
+|---|---|---|
+| `systemd_unit` | `"marlin"` | Systemd unit name managed by `marlin start --enable` |
+| `docker_container` | `"marlin"` | Name given to managed NIM containers |
+| `vllm_image` | `"vllm/vllm-openai:latest"` | Docker image used for ad-hoc `marlin run` with vLLM |
+| `container_runtime` | `"docker"` | Container runtime: `docker`, `podman`, or `containerd` |
+| `container_socket` | `""` | Custom socket path for Docker/Podman; empty = auto-detect |
+
+### `[server]`
+
+| Key | Default | Description |
+|---|---|---|
+| `host` | `"localhost"` | Host where the inference API is listening |
+| `port` | `8000` | Port where the inference API is listening |
+| `alias` | `"local"` | Short name shown in `marlin status` |
+| `health_path` | `"/health"` | Path polled by `marlin start` to detect API readiness. Common alternatives: `/healthz`, `/ready`, `/v1/health/ready` |
+
+### `[registries.*]`
+
+| Key | Default | Description |
+|---|---|---|
+| `registries.huggingface.enabled` | `true` | Include HuggingFace in `marlin search` |
+| `registries.ngc.enabled` | `true` | Include NGC/NIM catalog in `marlin search` |
+| `registries.modelscope.enabled` | `false` | Include ModelScope in `marlin search` |
 
 ## Commands
 
@@ -93,6 +140,17 @@ Start the inference service. Without a model argument, restarts the already-acti
 marlin start                    # restart active model or pick one
 marlin start qwen25-72b-awq     # switch and start
 marlin start --enable           # also enable systemd unit at boot (vLLM)
+marlin start --logs             # stream container logs while waiting for the API
+marlin start -vvv               # stream container logs to stderr alongside the spinner
+marlin start --max-runtime 2h   # auto-stop after 2 hours
+```
+
+After switching, `marlin start` polls `server.health_path` (default `/health`) until the API responds 200, showing a spinner. If the container exits early, the countdown stops immediately and you are offered to view the logs. Configure the health path for non-vLLM containers that use a different endpoint:
+
+```toml
+[server]
+health_path = "/v1/health/ready"   # NIM
+# health_path = "/healthz"         # other common alternatives
 ```
 
 ### `marlin switch [model]`
@@ -292,7 +350,13 @@ Common NIM env vars:
 
 ## NIM container requirements
 
-NIM containers run as UID=1000, GID=0. The host cache directory (`paths.nim_cache`) must be owned or group-accessible by GID=0. `marlin switch` handles this automatically — it runs `chgrp -R 0` and `chmod -R g+rwX` on the cache dir, prompting for `sudo` if needed.
+The host cache directory (`paths.nim_cache`) must be world-writable so the NIM container user can create subdirectories (e.g. `local_cache`). `marlin switch` handles this automatically — it runs `chmod -R 777` (and `chgrp -R 0`) on the cache dir, prompting for `sudo` if needed.
+
+If a container exits immediately with a `PermissionError` on `/opt/nim/.cache/local_cache`, run:
+
+```bash
+sudo chmod -R 777 /var/cache/nim
+```
 
 **Grace-Blackwell / unified-memory systems (DGX Spark GB10, GH200, GB200):** nvidia-smi reports 0 VRAM for these GPUs. NIM's memory classifier clamps `gpu_memory_utilization` to 0.50 on UMA platforms, which is too low for large models. Set `NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9` in `extra_env` to override it. `marlin status` will show this hint automatically when a UMA GPU is detected.
 
