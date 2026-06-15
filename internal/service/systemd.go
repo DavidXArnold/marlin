@@ -104,6 +104,9 @@ func (s *SystemdManager) systemctl(ctx context.Context, action string) error {
 	}
 	if err != nil {
 		if ec, ok := err.(exitCoder); ok && ec.ExitCode() == 5 {
+			if action == "stop" {
+				return nil // unit doesn't exist — already not running, stop is a no-op
+			}
 			return fmt.Errorf("systemd unit %q not found — create it with 'marlin install'", s.unit)
 		}
 		return fmt.Errorf("systemctl %s %s: %w\n%s", action, s.unit, err, out)

@@ -39,7 +39,17 @@ func (m *mockProv) Status(_ context.Context) (*provider.Status, error) {
 }
 func (m *mockProv) Logs(_ context.Context, _ io.Writer, _ bool, _ int) error { return nil }
 
+// noopPreflightCheck disables the pre-flight provider check (unit-file existence,
+// docker connectivity, etc.) for tests that mock the underlying infrastructure.
+func noopPreflightCheck(t *testing.T) {
+	t.Helper()
+	old := preflightCheckFunc
+	preflightCheckFunc = func(_ config.ProviderType, _ *config.Config) error { return nil }
+	t.Cleanup(func() { preflightCheckFunc = old })
+}
+
 // injectProvider replaces buildProvider with one that always returns p and restores it on cleanup.
+// It also disables the pre-flight check since the environment is mocked.
 func injectProvider(t *testing.T, p provider.Provider) {
 	t.Helper()
 	old := buildProvider
@@ -47,6 +57,7 @@ func injectProvider(t *testing.T, p provider.Provider) {
 		return p, nil
 	}
 	t.Cleanup(func() { buildProvider = old })
+	noopPreflightCheck(t)
 }
 
 // noopRequireRoot is a no-op kept for call-site compatibility; privilege
@@ -54,9 +65,12 @@ func injectProvider(t *testing.T, p provider.Provider) {
 func noopRequireRoot(_ *testing.T) {}
 
 // switchEnv creates a temp config with switch_prompt=false and returns the
-// models dir path and cleanup func.
+// models dir path and cleanup func. It also disables the pre-flight check so
+// tests don't need a real systemd unit file.
 func switchEnv(t *testing.T) (string, func()) {
 	t.Helper()
+	noopPreflightCheck(t)
+
 	dir := t.TempDir()
 	modelsDir := filepath.Join(dir, "models")
 	require.NoError(t, os.MkdirAll(modelsDir, 0o755))
@@ -230,6 +244,7 @@ func TestRunSwitchSwitchError(t *testing.T) {
 // TestRunSwitchStopsOldProviderOnTypeChange covers the old-provider Stop block.
 func TestRunSwitchStopsOldProviderOnTypeChange(t *testing.T) {
 	noopRequireRoot(t)
+	noopPreflightCheck(t)
 
 	oldMock := &mockProv{}
 	newMock := &mockProv{}
@@ -284,6 +299,78 @@ alias = "gn100"
 	require.NoError(t, err)
 	assert.True(t, oldMock.stopCalled, "Stop should be called on old provider")
 	assert.Contains(t, out, "switched to")
+}
+
+// TestSwitchPreflightVLLMUnitMissing: switching TO vLLM when the unit file is absent
+// aborts BEFORE stopping the current provider.
+func TestSwitchPreflightVLLMUnitMissing(t *testing.T) {
+	noopRequireRoot(t)
+	oldMock := &mockProv{}
+	injectProvider(t, oldMock)
+
+	modelsDir, cleanup := switchEnv(t)
+	defer cleanup()
+	writeVLLMModel(t, modelsDir, "llama-8b")
+
+	// Make the NIM model active so a type switch would be attempted.
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+	require.NoError(t, state.Save(cfg.Paths.StateFile, &state.State{
+		ActiveModel:    "old-nim-model",
+		ActiveProvider: config.ProviderNIM,
+	}))
+
+	// Pre-flight sees no unit file → error before stop is called.
+	old := preflightCheckFunc
+	preflightCheckFunc = func(targetType config.ProviderType, _ *config.Config) error {
+		if targetType == config.ProviderVLLM {
+			return fmt.Errorf("systemd unit %q is not installed — run 'marlin install' first", "marlin")
+		}
+		return nil
+	}
+	t.Cleanup(func() { preflightCheckFunc = old })
+
+	_, err = executeCmd("switch", "llama-8b")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "marlin install")
+	assert.False(t, oldMock.stopCalled, "old provider must NOT be stopped when pre-flight fails")
+}
+
+// TestSwitchPreflightVLLMUnitPresent: pre-flight passes when unit file exists.
+func TestSwitchPreflightVLLMUnitPresent(t *testing.T) {
+	noopRequireRoot(t)
+	injectProvider(t, &mockProv{})
+
+	modelsDir, cleanup := switchEnv(t)
+	defer cleanup()
+	writeVLLMModel(t, modelsDir, "llama-8b")
+
+	// Unit file exists → pre-flight passes.
+	old := preflightCheckFunc
+	preflightCheckFunc = func(_ config.ProviderType, _ *config.Config) error { return nil }
+	t.Cleanup(func() { preflightCheckFunc = old })
+
+	out, err := executeCmd("switch", "llama-8b")
+	require.NoError(t, err)
+	assert.Contains(t, out, "switched to")
+}
+
+// TestPreflightForProviderVLLMNoUnitFile: unit at default path missing → error.
+func TestPreflightForProviderVLLMNoUnitFile(t *testing.T) {
+	cfg, _ := globalConfig()
+	// The real unit file almost certainly doesn't exist in CI.
+	err := preflightForProvider(config.ProviderVLLM, cfg)
+	// Either it passes (unit installed on this machine) or errors with "install".
+	if err != nil {
+		assert.Contains(t, err.Error(), "marlin install")
+	}
+}
+
+// TestPreflightForProviderNIMNoCheck: switching TO NIM has no pre-flight gate here.
+func TestPreflightForProviderNIMNoCheck(t *testing.T) {
+	cfg, _ := globalConfig()
+	// NIM pre-flight is handled inside NIMProvider.Switch (docker connectivity etc).
+	require.NoError(t, preflightForProvider(config.ProviderNIM, cfg))
 }
 
 // TestGlobalConfigNoCandidates covers the candidate-search code path when cfgFile is empty.

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/ui"
 	"github.com/DavidXArnold/marlin/internal/validate"
+	"github.com/DavidXArnold/marlin/pkg/render"
 )
 
 var switchCmd = &cobra.Command{
@@ -20,6 +22,25 @@ var switchCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(switchCmd)
+}
+
+// preflightCheckFunc is injectable for tests.
+var preflightCheckFunc = preflightForProvider
+
+// preflightForProvider validates that the target provider is ready to run before
+// we tear down the currently running one. Returns an error if the switch should
+// be aborted.
+func preflightForProvider(targetType config.ProviderType, cfg *config.Config) error {
+	switch targetType {
+	case config.ProviderVLLM:
+		// Verify the systemd unit file exists so we don't stop NIM only to
+		// fail on "unit not found" mid-switch.
+		unitPath := render.SystemdUnitPath(cfg)
+		if _, err := os.Stat(unitPath); os.IsNotExist(err) {
+			return fmt.Errorf("systemd unit %q is not installed — run 'marlin install' first", cfg.Service.SystemdUnit)
+		}
+	}
+	return nil
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
@@ -75,6 +96,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 			cur.ActiveProvider, targetModel.Model.Type)
 	}
 
+	// Pre-flight: verify the target provider is ready before we tear down the
+	// current one. For vLLM this means the systemd unit must already exist.
+	if err := preflightCheckFunc(targetModel.Model.Type, cfg); err != nil {
+		return err
+	}
+
 	// Confirmation prompt (before privilege escalation so it runs as the user).
 	if cfg.Behavior.SwitchPrompt {
 		ok, err := ui.Confirm(fmt.Sprintf("Switch to %q?", targetSlug))
@@ -88,13 +115,18 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	checkSystemResources(cfg, cmd.ErrOrStderr())
 
 	// Stop old provider if the type is changing.
+	// Exit code 5 (unit not found) from systemctl stop is treated as a no-op in
+	// SystemdManager.Stop — so vLLM → NIM switches where the unit was never
+	// started don't print a spurious warning.
 	if cur.ActiveModel != "" && cur.ActiveProvider != targetModel.Model.Type {
 		oldProvider, err := buildProvider(cur.ActiveProvider, cfg)
 		if err == nil {
 			if stopErr := oldProvider.Stop(cmd.Context()); stopErr != nil {
-				if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "warning: stopping previous provider: %v\n", stopErr); err != nil {
+				if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "warning: stopping previous provider: %v\n", err); err != nil {
 					return err
 				}
+			} else if cur.ActiveProvider != targetModel.Model.Type {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "stopped %s (%s)\n", cur.ActiveModel, cur.ActiveProvider)
 			}
 		}
 	}

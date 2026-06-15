@@ -152,6 +152,12 @@ func TestRestartUnitNotFoundSuggestsInstall(t *testing.T) {
 	assert.Contains(t, err.Error(), "marlin install")
 }
 
+func TestStopUnitNotFoundIsNoOp(t *testing.T) {
+	// Stopping a unit that doesn't exist (exit 5) should succeed — it's already not running.
+	m := &SystemdManager{unit: "marlin", execRunner: notFoundRunner}
+	require.NoError(t, m.Stop(context.Background()))
+}
+
 func TestDaemonReload(t *testing.T) {
 	m := NewSystemdManagerWithRunner("marlin", successRunner)
 	require.NoError(t, m.DaemonReload(context.Background()))
