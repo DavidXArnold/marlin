@@ -29,9 +29,10 @@ var checkForUpdate = func(ctx context.Context, current string) (string, bool, er
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "marlin",
-	Short: "Local LLM inference server manager",
-	Long:  `marlin manages vLLM and other inference backends — model switching, registry search, validation, and service control.`,
+	Use:          "marlin",
+	Short:        "Local LLM inference server manager",
+	Long:         `marlin manages vLLM and other inference backends — model switching, registry search, validation, and service control.`,
+	SilenceUsage: true, // don't dump usage on every runtime error
 	// Start the update check once flags and config are resolved.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		cfg, _ := globalConfig() // best-effort; nil means use safe default (enabled)

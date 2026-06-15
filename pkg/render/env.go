@@ -15,7 +15,7 @@ func Env(m *config.ModelConfig) string {
 
 	args := buildExtraArgs(m)
 	if len(args) > 0 {
-		fmt.Fprintf(&b, "VLLM_EXTRA_ARGS=%s\n", strings.Join(args, " \\\n  "))
+		fmt.Fprintf(&b, "VLLM_EXTRA_ARGS=%s\n", strings.Join(args, " "))
 	}
 
 	return b.String()

@@ -80,6 +80,20 @@ func (s *SystemdManager) IsEnabled(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+func (s *SystemdManager) DaemonReload(ctx context.Context) error {
+	var out []byte
+	var err error
+	if s.sudo {
+		out, err = s.execRunner(ctx, "sudo", "systemctl", "daemon-reload")
+	} else {
+		out, err = s.execRunner(ctx, "systemctl", "daemon-reload")
+	}
+	if err != nil {
+		return fmt.Errorf("systemctl daemon-reload: %w\n%s", err, out)
+	}
+	return nil
+}
+
 func (s *SystemdManager) systemctl(ctx context.Context, action string) error {
 	var out []byte
 	var err error
@@ -89,6 +103,9 @@ func (s *SystemdManager) systemctl(ctx context.Context, action string) error {
 		out, err = s.execRunner(ctx, "systemctl", action, s.unit)
 	}
 	if err != nil {
+		if ec, ok := err.(exitCoder); ok && ec.ExitCode() == 5 {
+			return fmt.Errorf("systemd unit %q not found — create it with 'marlin install'", s.unit)
+		}
 		return fmt.Errorf("systemctl %s %s: %w\n%s", action, s.unit, err, out)
 	}
 	return nil

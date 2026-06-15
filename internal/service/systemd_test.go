@@ -133,3 +133,33 @@ func TestIsEnabled_Error(t *testing.T) {
 	_, err := m.IsEnabled(context.Background())
 	assert.Error(t, err)
 }
+
+// notFoundErr simulates systemctl exit code 5 (unit not found).
+type notFoundErr struct{}
+
+func (e *notFoundErr) Error() string { return "exit status 5" }
+func (e *notFoundErr) ExitCode() int { return 5 }
+
+func notFoundRunner(_ context.Context, _ string, _ ...string) ([]byte, error) {
+	return []byte("Failed to restart marlin.service: Unit marlin.service not found."), &notFoundErr{}
+}
+
+func TestRestartUnitNotFoundSuggestsInstall(t *testing.T) {
+	m := &SystemdManager{unit: "marlin", execRunner: notFoundRunner}
+	err := m.Restart(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+	assert.Contains(t, err.Error(), "marlin install")
+}
+
+func TestDaemonReload(t *testing.T) {
+	m := NewSystemdManagerWithRunner("marlin", successRunner)
+	require.NoError(t, m.DaemonReload(context.Background()))
+}
+
+func TestDaemonReloadFail(t *testing.T) {
+	m := NewSystemdManagerWithRunner("marlin", failRunner)
+	err := m.DaemonReload(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "daemon-reload")
+}

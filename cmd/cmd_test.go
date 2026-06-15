@@ -124,7 +124,11 @@ func buildRootCmd() *cobra.Command {
 	start.Flags().BoolP("logs", "l", false, "")
 	start.Flags().String("max-runtime", "", "")
 
-	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop, rm, edit, completion, configure, start)
+	install := &cobra.Command{Use: "install", Args: cobra.NoArgs, RunE: runInstall}
+	install.Flags().Bool("enable", false, "")
+	install.Flags().Bool("force", false, "")
+
+	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop, rm, edit, completion, configure, start, install)
 	return root
 }
 
