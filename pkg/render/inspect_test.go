@@ -1,0 +1,139 @@
+package render
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/DavidXArnold/marlin/internal/config"
+)
+
+func baseConfig() *config.Config {
+	cfg := config.Defaults()
+	cfg.Server.Host = "0.0.0.0"
+	cfg.Server.Port = 8000
+	cfg.Paths.ModelsDir = "/etc/marlin/models"
+	cfg.Paths.NIMCache = "/opt/nim/cache"
+	return cfg
+}
+
+func TestInspectVLLMIdentity(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.ID = "meta-llama/Llama-3-8b"
+	m.Model.Type = config.ProviderVLLM
+	m.Model.Status = "untested"
+	m.Serve.GPUMemoryUtilization = 0.9
+
+	out := Inspect(m, baseConfig())
+
+	if !strings.Contains(out, "meta-llama/Llama-3-8b") {
+		t.Errorf("expected model id in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "vllm") {
+		t.Errorf("expected type 'vllm' in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "=== serve flags ===") {
+		t.Errorf("expected serve flags section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "0.900") {
+		t.Errorf("expected gpu_memory_utilization, got:\n%s", out)
+	}
+}
+
+func TestInspectVLLMEnvSection(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.ID = "mistral/Mistral-7B"
+	m.Model.Type = config.ProviderVLLM
+	m.Model.Status = "untested"
+
+	out := Inspect(m, baseConfig())
+
+	if !strings.Contains(out, "=== env file") {
+		t.Errorf("expected env file section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "=== systemd ExecStart ===") {
+		t.Errorf("expected systemd ExecStart section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "vllm serve") {
+		t.Errorf("expected vllm serve command, got:\n%s", out)
+	}
+}
+
+func TestInspectVLLMServeFlags(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.ID = "test/model"
+	m.Model.Type = config.ProviderVLLM
+	m.Model.Status = "active"
+	m.Serve.GPUMemoryUtilization = 0.85
+	m.Serve.ServedModelName = []string{"alias1", "alias2"}
+	m.Serve.Quantization = "awq"
+	m.Serve.MaxModelLen = 4096
+	m.Serve.ExtraFlags = []string{"--disable-log-requests"}
+
+	out := Inspect(m, baseConfig())
+
+	for _, want := range []string{"0.850", "alias1, alias2", "awq", "4096", "--disable-log-requests"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected %q in output, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestInspectNIMIdentity(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.ID = "nim/llama3-8b"
+	m.Model.Image = "nvcr.io/nim/meta/llama3-8b-instruct:1.0.0"
+	m.Model.Type = config.ProviderNIM
+	m.Model.Status = "untested"
+
+	out := Inspect(m, baseConfig())
+
+	if !strings.Contains(out, "nim") {
+		t.Errorf("expected type 'nim' in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "nvcr.io/nim/meta/llama3-8b-instruct:1.0.0") {
+		t.Errorf("expected image in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "=== container config ===") {
+		t.Errorf("expected container config section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "=== equivalent docker run ===") {
+		t.Errorf("expected docker run section, got:\n%s", out)
+	}
+}
+
+func TestInspectNIMVolumesAndEnv(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.Image = "nvcr.io/nim/test:latest"
+	m.Model.Type = config.ProviderNIM
+	m.Model.Status = "untested"
+	m.Serve.ExtraVolumes = []string{"/data/models:/models"}
+	m.Serve.ExtraEnv = []string{"EXTRA_VAR=val"}
+
+	out := Inspect(m, baseConfig())
+
+	if !strings.Contains(out, "/data/models:/models") {
+		t.Errorf("expected extra volume, got:\n%s", out)
+	}
+	if !strings.Contains(out, "EXTRA_VAR=val") {
+		t.Errorf("expected extra env, got:\n%s", out)
+	}
+	if !strings.Contains(out, "NGC_API_KEY") {
+		t.Errorf("expected NGC_API_KEY placeholder, got:\n%s", out)
+	}
+}
+
+func TestInspectNIMDockerRunPort(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.Image = "nvcr.io/nim/test:latest"
+	m.Model.Type = config.ProviderNIM
+	m.Model.Status = "untested"
+
+	cfg := baseConfig()
+	cfg.Server.Port = 9000
+
+	out := Inspect(m, cfg)
+
+	if !strings.Contains(out, "9000:8000") {
+		t.Errorf("expected port mapping 9000:8000, got:\n%s", out)
+	}
+}

@@ -91,6 +91,7 @@ func buildRootCmd() *cobra.Command {
 	search.Flags().Bool("plain", false, "")
 
 	validate := &cobra.Command{Use: "validate <model>", Args: cobra.ExactArgs(1), RunE: runValidate}
+	validate.Flags().Bool("show-config", false, "")
 
 	status := &cobra.Command{Use: "status", RunE: runStatus}
 
@@ -957,6 +958,53 @@ func TestRunValidateDirect(t *testing.T) {
 	cleanup := tempEnv(t, "qwen25-72b")
 	defer cleanup()
 	require.NoError(t, runValidate(cmdWithContext(io.Discard), []string{"qwen25-72b"}))
+}
+
+func TestValidateShowConfig(t *testing.T) {
+	cleanup := tempEnv(t, "qwen25-72b")
+	defer cleanup()
+	out, err := executeCmd("validate", "--show-config", "qwen25-72b")
+	require.NoError(t, err)
+	assert.Contains(t, out, "OK")
+	assert.Contains(t, out, "=== model ===")
+	assert.Contains(t, out, "vllm")
+}
+
+func TestValidateShowConfigNIM(t *testing.T) {
+	dir := t.TempDir()
+	modelsDir := filepath.Join(dir, "models")
+	require.NoError(t, os.MkdirAll(modelsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(modelsDir, "nim-model.toml"), []byte(`[model]
+id = "nim/llama3-8b"
+image = "nvcr.io/nim/meta/llama3-8b-instruct:1.0.0"
+type = "nim"
+status = "untested"
+`), 0o644))
+
+	cfgContent := fmt.Sprintf(`[paths]
+models_dir = %q
+state_file = %q
+secrets_env = %q
+active_symlink = %q
+
+[server]
+alias = "gn100"
+`, modelsDir,
+		filepath.Join(dir, "state.toml"),
+		filepath.Join(dir, "secrets.env"),
+		filepath.Join(dir, "model.env"),
+	)
+	cfgPath := filepath.Join(dir, "config.toml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(cfgContent), 0o644))
+	old := cfgFile
+	cfgFile = cfgPath
+	defer func() { cfgFile = old }()
+
+	out, err := executeCmd("validate", "--show-config", "nim-model")
+	require.NoError(t, err)
+	assert.Contains(t, out, "=== container config ===")
+	assert.Contains(t, out, "docker run")
+	assert.Contains(t, out, "nvcr.io/nim/meta/llama3-8b-instruct:1.0.0")
 }
 
 func TestRunStatusDirect(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/validate"
+	"github.com/DavidXArnold/marlin/pkg/render"
 )
 
 var validateCmd = &cobra.Command{
@@ -18,6 +19,7 @@ var validateCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(validateCmd)
+	validateCmd.Flags().Bool("show-config", false, "print the fully rendered config (env file, systemd unit or docker run)")
 }
 
 func runValidate(cmd *cobra.Command, args []string) error {
@@ -41,15 +43,20 @@ func runValidate(cmd *cobra.Command, args []string) error {
 
 	w := cmd.OutOrStdout()
 	if len(issues) == 0 {
-		_, err := fmt.Fprintf(w, "%s: OK\n", slug)
-		return err
-	}
-
-	for _, iss := range issues {
-		if _, err := fmt.Fprintf(w, "[%s] %s\n", iss.Level, iss.Message); err != nil {
+		if _, err := fmt.Fprintf(w, "%s: OK\n", slug); err != nil {
 			return err
+		}
+	} else {
+		for _, iss := range issues {
+			if _, err := fmt.Fprintf(w, "[%s] %s\n", iss.Level, iss.Message); err != nil {
+				return err
+			}
 		}
 	}
 
-	return nil
+	showConfig, _ := cmd.Flags().GetBool("show-config")
+	if showConfig {
+		_, err = fmt.Fprint(w, render.Inspect(m, cfg))
+	}
+	return err
 }
