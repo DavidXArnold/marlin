@@ -58,11 +58,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	if !force {
 		if _, statErr := os.Stat(unitPath); statErr == nil {
 			_, _ = fmt.Fprintf(w, "warning: %s already exists\n", unitPath)
-			_, _ = fmt.Fprint(w, "overwrite? [y/N] ")
-			buf := make([]byte, 4)
-			n, _ := installPromptReader.Read(buf)
-			ans := string(buf[:n])
-			if ans != "y\n" && ans != "y" && ans != "Y\n" && ans != "Y" {
+			if !confirmPrompt(w, installPromptReader, "overwrite? [y/N] ") {
 				_, _ = fmt.Fprintln(w, "cancelled")
 				return nil
 			}

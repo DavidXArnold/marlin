@@ -44,7 +44,6 @@ func noopWaitForReady(t *testing.T) {
 func TestStartNoActiveModel(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	noopEnableUnit(t)
 
 	_ = modelsDir
@@ -57,7 +56,6 @@ func TestStartNoActiveModel(t *testing.T) {
 func TestStartSingleModel(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")
@@ -71,7 +69,6 @@ func TestStartSingleModel(t *testing.T) {
 func TestStartWithModelArg(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 
@@ -86,7 +83,6 @@ func TestStartWithModelArg(t *testing.T) {
 func TestStartWithEnable(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")
@@ -105,7 +101,6 @@ func TestStartWithEnable(t *testing.T) {
 func TestStartEnableNoArg(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")
@@ -125,7 +120,6 @@ func TestStartEnableNoArg(t *testing.T) {
 func TestStartEnableFails(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")
@@ -143,7 +137,6 @@ func TestStartEnableFails(t *testing.T) {
 func TestStartProviderError(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	writeVLLMModel(t, modelsDir, "llama-8b")
 
 	old := buildProvider
@@ -320,7 +313,6 @@ func TestWaitForReadyContainerExitDetected(t *testing.T) {
 func TestStartLogsPromptShownOnFailure(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	writeVLLMModel(t, modelsDir, "llama-8b")
 
 	// waitForReady always fails.
@@ -351,7 +343,6 @@ func TestStartLogsPromptShownOnFailure(t *testing.T) {
 func TestStartLogsPromptYesStreamsLogs(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	writeVLLMModel(t, modelsDir, "llama-8b")
 
 	old := startWaitForReadyFunc

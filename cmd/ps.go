@@ -46,12 +46,8 @@ func runPs(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	for _, c := range items {
-		id := c.ID
-		if len(id) > 12 {
-			id = id[:12]
-		}
 		if _, err := fmt.Fprintf(w, "%-20s %-8s %-10s %-6s %s\n",
-			c.Slug, c.Provider, c.Status, c.Port, id); err != nil {
+			c.Slug, c.Provider, c.Status, c.Port, shortID(c.ID)); err != nil {
 			return err
 		}
 	}

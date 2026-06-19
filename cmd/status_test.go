@@ -19,25 +19,6 @@ import (
 	"github.com/DavidXArnold/marlin/internal/sysinfo"
 )
 
-// --- lastNonEmptyLine ---
-
-func TestLastNonEmptyLine(t *testing.T) {
-	cases := []struct {
-		input string
-		want  string
-	}{
-		{"", ""},
-		{"\n\n", ""},
-		{"only line", "only line"},
-		{"first\nsecond\nthird", "third"},
-		{"first\nsecond\n\n", "second"},
-		{"  spaces  \n  trimmed  \n", "trimmed"},
-	}
-	for _, tc := range cases {
-		assert.Equal(t, tc.want, lastNonEmptyLine(tc.input), "input %q", tc.input)
-	}
-}
-
 // --- lastNLines ---
 
 func TestLastNLines(t *testing.T) {

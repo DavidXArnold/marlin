@@ -91,37 +91,27 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		query = args[0]
 	}
 	w := cmd.OutOrStdout()
-	writef := func(format string, args ...any) error {
-		_, err := fmt.Fprintf(w, format, args...)
-		return err
-	}
-	writeln := func(args ...any) error {
-		_, err := fmt.Fprintln(w, args...)
-		return err
-	}
-	writeErrf := func(format string, args ...any) error {
-		_, err := fmt.Fprintf(cmd.ErrOrStderr(), format, args...)
-		return err
-	}
+	out := lineWriter{w}
+	errOut := lineWriter{cmd.ErrOrStderr()}
 
 	// Warn about registries that will be skipped or have limited results due to missing credentials.
 	for _, name := range regs {
 		switch name {
 		case "ngc":
 			if sec["NGC_API_KEY"] == "" {
-				if err := writeErrf("notice: NGC not searched — run 'marlin configure' to add NGC_API_KEY\n"); err != nil {
+				if err := errOut.printf("notice: NGC not searched — run 'marlin configure' to add NGC_API_KEY\n"); err != nil {
 					return err
 				}
-				if err := writeErrf("        generate a key at https://org.ngc.nvidia.com/setup/personal-keys\n"); err != nil {
+				if err := errOut.printf("        generate a key at https://org.ngc.nvidia.com/setup/personal-keys\n"); err != nil {
 					return err
 				}
 			}
 		case "huggingface":
 			if sec["HF_TOKEN"] == "" {
-				if err := writeErrf("notice: HF_TOKEN not configured — gated models will be excluded from results\n"); err != nil {
+				if err := errOut.printf("notice: HF_TOKEN not configured — gated models will be excluded from results\n"); err != nil {
 					return err
 				}
-				if err := writeErrf("        run 'marlin configure' to add your HuggingFace token\n"); err != nil {
+				if err := errOut.printf("        run 'marlin configure' to add your HuggingFace token\n"); err != nil {
 					return err
 				}
 			}
@@ -152,7 +142,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	for _, r := range registries {
 		results, err := r.Search(cmd.Context(), query)
 		if err != nil {
-			if err := writeErrf("warning: %s search failed: %v\n", r.Name(), err); err != nil {
+			if err := errOut.printf("warning: %s search failed: %v\n", r.Name(), err); err != nil {
 				return err
 			}
 			continue
@@ -164,19 +154,19 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	// Always print the table.
 	for _, pr := range perRegistry {
 		if len(pr.results) == 0 {
-			if err := writef("[%s] no results\n", pr.name); err != nil {
+			if err := out.printf("[%s] no results\n", pr.name); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := writef("\n[%s]\n", pr.name); err != nil {
+		if err := out.printf("\n[%s]\n", pr.name); err != nil {
 			return err
 		}
-		if err := writef("%-52s %-12s %-9s %-4s  %s\n",
+		if err := out.printf("%-52s %-12s %-9s %-4s  %s\n",
 			"ID", "UPDATED", "VRAM EST", "FIT", "DESCRIPTION"); err != nil {
 			return err
 		}
-		if err := writef("%-52s %-12s %-9s %-4s  %s\n",
+		if err := out.printf("%-52s %-12s %-9s %-4s  %s\n",
 			"--", "-------", "--------", "---", "-----------"); err != nil {
 			return err
 		}
@@ -186,7 +176,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 			if len(desc) > 40 {
 				desc = desc[:37] + "..."
 			}
-			if err := writef("%-52s %-12s %-9s %-4s  %s\n",
+			if err := out.printf("%-52s %-12s %-9s %-4s  %s\n",
 				m.DisplayName(),
 				ui.FormatUpdated(m.LastUpdated),
 				formatVRAM(m.EstimatedVRAMMB()),
@@ -220,9 +210,9 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	switch action {
 	case ui.SearchActionBrowse:
 		if url == "" {
-			return writeln("no URL available for this model")
+			return out.println("no URL available for this model")
 		}
-		if err := writef("opening %s\n", url); err != nil {
+		if err := out.printf("opening %s\n", url); err != nil {
 			return err
 		}
 		if err := openBrowserCmd(url); err != nil {

@@ -60,10 +60,6 @@ func injectProvider(t *testing.T, p provider.Provider) {
 	noopPreflightCheck(t)
 }
 
-// noopRequireRoot is a no-op kept for call-site compatibility; privilege
-// escalation is now handled inline by the privilege package.
-func noopRequireRoot(_ *testing.T) {}
-
 // switchEnv creates a temp config with switch_prompt=false and returns the
 // models dir path and cleanup func. It also disables the pre-flight check so
 // tests don't need a real systemd unit file.
@@ -170,7 +166,6 @@ alias = "gn100"
 
 // TestRunSwitchSuccess covers the happy path: requireRoot no-op, mock provider succeeds.
 func TestRunSwitchSuccess(t *testing.T) {
-	noopRequireRoot(t)
 	mock := &mockProv{}
 	injectProvider(t, mock)
 
@@ -186,7 +181,6 @@ func TestRunSwitchSuccess(t *testing.T) {
 
 // TestRunSwitchValidationWarning covers the warning print branch (non-error issues).
 func TestRunSwitchValidationWarning(t *testing.T) {
-	noopRequireRoot(t)
 	injectProvider(t, &mockProv{})
 
 	modelsDir, cleanup := switchEnv(t)
@@ -210,7 +204,6 @@ gpu_memory_utilization = 0.90
 
 // TestRunSwitchProviderBuildError covers the buildProvider failure branch.
 func TestRunSwitchProviderBuildError(t *testing.T) {
-	noopRequireRoot(t)
 
 	old := buildProvider
 	buildProvider = func(_ config.ProviderType, _ *config.Config) (provider.Provider, error) {
@@ -229,7 +222,6 @@ func TestRunSwitchProviderBuildError(t *testing.T) {
 
 // TestRunSwitchSwitchError covers the p.Switch() failure branch.
 func TestRunSwitchSwitchError(t *testing.T) {
-	noopRequireRoot(t)
 	injectProvider(t, &mockProv{switchErr: fmt.Errorf("systemd failed")})
 
 	modelsDir, cleanup := switchEnv(t)
@@ -243,7 +235,6 @@ func TestRunSwitchSwitchError(t *testing.T) {
 
 // TestRunSwitchStopsOldProviderOnTypeChange covers the old-provider Stop block.
 func TestRunSwitchStopsOldProviderOnTypeChange(t *testing.T) {
-	noopRequireRoot(t)
 	noopPreflightCheck(t)
 
 	oldMock := &mockProv{}
@@ -304,7 +295,6 @@ alias = "gn100"
 // TestSwitchPreflightVLLMUnitMissing: switching TO vLLM when the unit file is absent
 // aborts BEFORE stopping the current provider.
 func TestSwitchPreflightVLLMUnitMissing(t *testing.T) {
-	noopRequireRoot(t)
 	oldMock := &mockProv{}
 	injectProvider(t, oldMock)
 
@@ -338,7 +328,6 @@ func TestSwitchPreflightVLLMUnitMissing(t *testing.T) {
 
 // TestSwitchPreflightVLLMUnitPresent: pre-flight passes when unit file exists.
 func TestSwitchPreflightVLLMUnitPresent(t *testing.T) {
-	noopRequireRoot(t)
 	injectProvider(t, &mockProv{})
 
 	modelsDir, cleanup := switchEnv(t)

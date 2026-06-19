@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -109,10 +108,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		ok := startWaitForReadyFunc(cmd, cfg, cur.ActiveModel, p)
 		if !ok && stdoutIsTerminal() {
 			w := cmd.OutOrStdout()
-			_, _ = fmt.Fprintf(w, "show logs? [y/N] ")
-			buf := make([]byte, 4)
-			n, _ := startLogsPromptReader.Read(buf)
-			if strings.ToLower(strings.TrimSpace(string(buf[:n]))) == "y" {
+			if confirmPrompt(w, startLogsPromptReader, "show logs? [y/N] ") {
 				if err := p.Logs(cmd.Context(), w, false, 100); err != nil {
 					_, _ = fmt.Fprintf(w, "could not fetch logs: %v\n", err)
 				}

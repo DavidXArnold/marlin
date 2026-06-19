@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -87,10 +86,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	if editNeedsRootFunc(filepath.Dir(path)) {
 		w := cmd.OutOrStdout()
 		_, _ = fmt.Fprintf(w, "warning: %s requires administrator privileges to edit\n", path)
-		_, _ = fmt.Fprint(w, "continue with sudo? [y/N] ")
-		buf := make([]byte, 64)
-		n, _ := editPromptReader.Read(buf)
-		if strings.ToLower(strings.TrimSpace(string(buf[:n]))) != "y" {
+		if !confirmPrompt(w, editPromptReader, "continue with sudo? [y/N] ") {
 			_, _ = fmt.Fprintln(w, "cancelled")
 			return nil
 		}

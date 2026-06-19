@@ -74,11 +74,7 @@ func runRun(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		short := id
-		if len(short) > 12 {
-			short = short[:12]
-		}
-		if _, err := fmt.Fprintf(w, "started %s (container %s)\n", slug, short); err != nil {
+		if _, err := fmt.Fprintf(w, "started %s (container %s)\n", slug, shortID(id)); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintln(w, "use 'marlin ps' to list running containers"); err != nil {

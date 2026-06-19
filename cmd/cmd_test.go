@@ -1487,7 +1487,6 @@ func TestRunMaxRuntimeForegroundExits(t *testing.T) {
 func TestStartMaxRuntimeTimerCalled(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")
@@ -1507,7 +1506,6 @@ func TestStartMaxRuntimeTimerCalled(t *testing.T) {
 func TestStartMaxRuntimeNotCalledWhenZero(t *testing.T) {
 	modelsDir, cleanup := switchEnv(t)
 	defer cleanup()
-	noopRequireRoot(t)
 	noopWaitForReady(t)
 	injectProvider(t, &mockProv{})
 	writeVLLMModel(t, modelsDir, "llama-8b")

@@ -18,6 +18,37 @@ import (
 	"github.com/DavidXArnold/marlin/internal/ui"
 )
 
+// shortID truncates a container ID to 12 hex characters (Docker short-form).
+func shortID(s string) string {
+	if len(s) > 12 {
+		return s[:12]
+	}
+	return s
+}
+
+// lineWriter wraps an io.Writer with error-returning printf/println helpers,
+// eliminating repetitive fmt.Fprintf boilerplate in command handlers.
+type lineWriter struct{ w io.Writer }
+
+func (lw lineWriter) printf(format string, args ...any) error {
+	_, err := fmt.Fprintf(lw.w, format, args...)
+	return err
+}
+
+func (lw lineWriter) println(args ...any) error {
+	_, err := fmt.Fprintln(lw.w, args...)
+	return err
+}
+
+// confirmPrompt prints prompt to w, reads from r, and returns true if the
+// response is "y" or "Y" (leading/trailing whitespace is ignored).
+func confirmPrompt(w io.Writer, r io.Reader, prompt string) bool {
+	_, _ = fmt.Fprint(w, prompt)
+	buf := make([]byte, 4)
+	n, _ := r.Read(buf)
+	return strings.ToLower(strings.TrimSpace(string(buf[:n]))) == "y"
+}
+
 // globalConfig loads the typed config, falling back to defaults when no file exists.
 func globalConfig() (*config.Config, error) {
 	path := cfgFile

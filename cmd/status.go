@@ -37,21 +37,13 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 
 	cur, _ := state.Load(cfg.Paths.StateFile)
 
-	w := cmd.OutOrStdout()
-	writef := func(format string, args ...any) error {
-		_, err := fmt.Fprintf(w, format, args...)
-		return err
-	}
-	writeln := func(args ...any) error {
-		_, err := fmt.Fprintln(w, args...)
-		return err
-	}
+	out := lineWriter{cmd.OutOrStdout()}
 
 	if cur.ActiveModel != "" {
-		if err := writef("active model : %s\n", cur.ActiveModel); err != nil {
+		if err := out.printf("active model : %s\n", cur.ActiveModel); err != nil {
 			return err
 		}
-		if err := writef("provider     : %s\n", cur.ActiveProvider); err != nil {
+		if err := out.printf("provider     : %s\n", cur.ActiveProvider); err != nil {
 			return err
 		}
 
@@ -63,17 +55,14 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 
 		if liveStatus != nil && liveStatus.ContainerState != "" {
 			// Container provider (NIM): show container ID and state.
-			id := liveStatus.ContainerID
-			if len(id) > 12 {
-				id = id[:12]
-			}
+			id := shortID(liveStatus.ContainerID)
 			var containerLine string
 			if id != "" {
 				containerLine = fmt.Sprintf("%s  (%s)", id, liveStatus.ContainerState)
 			} else {
 				containerLine = liveStatus.ContainerState
 			}
-			if err := writef("container    : %s\n", containerLine); err != nil {
+			if err := out.printf("container    : %s\n", containerLine); err != nil {
 				return err
 			}
 		} else if liveStatus != nil {
@@ -82,12 +71,12 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			if liveStatus.Running {
 				svcState = "running"
 			}
-			if err := writef("service      : %s\n", svcState); err != nil {
+			if err := out.printf("service      : %s\n", svcState); err != nil {
 				return err
 			}
 		} else if cur.ContainerID != "" {
 			// Fallback: cached container ID from state.
-			if err := writef("container    : %s\n", cur.ContainerID[:min12(len(cur.ContainerID))]); err != nil {
+			if err := out.printf("container    : %s\n", shortID(cur.ContainerID)); err != nil {
 				return err
 			}
 		}
@@ -95,7 +84,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		// Show stop time when deliberately stopped via marlin stop and not yet running.
 		notRunning := liveStatus == nil || !liveStatus.Running
 		if cur.StoppedAt != nil && notRunning {
-			if err := writef("last stop    : %s ago\n", humanDuration(time.Since(*cur.StoppedAt))); err != nil {
+			if err := out.printf("last stop    : %s ago\n", humanDuration(time.Since(*cur.StoppedAt))); err != nil {
 				return err
 			}
 		}
@@ -109,15 +98,15 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			health, healthErr := client.Health(cmd.Context())
 			apiReady := healthErr == nil && health.Ready
 			if healthErr != nil {
-				if err := writef("api health   : error (%v)\n", healthErr); err != nil {
+				if err := out.printf("api health   : error (%v)\n", healthErr); err != nil {
 					return err
 				}
 			} else if apiReady {
-				if err := writef("api health   : ready at http://%s:%d/v1\n", cfg.Server.Host, cfg.Server.Port); err != nil {
+				if err := out.printf("api health   : ready at http://%s:%d/v1\n", cfg.Server.Host, cfg.Server.Port); err != nil {
 					return err
 				}
 			} else {
-				if err := writef("api health   : not ready\n"); err != nil {
+				if err := out.printf("api health   : not ready\n"); err != nil {
 					return err
 				}
 				// For container providers, show the last log lines to explain why.
@@ -131,12 +120,12 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 								if i > 0 {
 									label = "             "
 								}
-								if err := writef("%s: %s\n", label, line); err != nil {
+								if err := out.printf("%s: %s\n", label, line); err != nil {
 									return err
 								}
 							}
 							if hint := nimHint(logs); hint != "" {
-								if err := writef("hint         : %s\n", hint); err != nil {
+								if err := out.printf("hint         : %s\n", hint); err != nil {
 									return err
 								}
 							}
@@ -154,13 +143,13 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 				if !enabled {
 					bootLine = "disabled  (run 'marlin start --enable' to start at boot)"
 				}
-				if err := writef("boot         : %s\n", bootLine); err != nil {
+				if err := out.printf("boot         : %s\n", bootLine); err != nil {
 					return err
 				}
 			}
 		}
 	} else {
-		if err := writeln("no active model"); err != nil {
+		if err := out.println("no active model"); err != nil {
 			return err
 		}
 	}
@@ -168,10 +157,10 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	// Ad-hoc containers section — show marlin-managed containers started via marlin run.
 	if adhocR, err := buildAdhocRunner(cfg); err == nil {
 		if infos, err := adhocR.List(cmd.Context()); err == nil && len(infos) > 0 {
-			if err := writeln(); err != nil {
+			if err := out.println(); err != nil {
 				return err
 			}
-			if err := writeln("ad-hoc containers:"); err != nil {
+			if err := out.println("ad-hoc containers:"); err != nil {
 				return err
 			}
 			for _, info := range infos {
@@ -179,12 +168,8 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 				if info.Port != "" {
 					portStr = "  :" + info.Port
 				}
-				id := info.ID
-				if len(id) > 12 {
-					id = id[:12]
-				}
-				if err := writef("  %-20s  %s%s  (%s)  run 'marlin logs %s' to inspect\n",
-					info.Slug, info.Status, portStr, id, info.Slug); err != nil {
+				if err := out.printf("  %-20s  %s%s  (%s)  run 'marlin logs %s' to inspect\n",
+					info.Slug, info.Status, portStr, shortID(info.ID), info.Slug); err != nil {
 					return err
 				}
 			}
@@ -192,16 +177,16 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Hardware section — always shown, failures are soft.
-	if err := writeln(); err != nil {
+	if err := out.println(); err != nil {
 		return err
 	}
 	si, err := sysinfo.Detect(cfg.Paths.ModelsDir, cfg.Paths.NIMCache)
 	if err != nil {
-		return writef("hardware     : detection error (%v)\n", err)
+		return out.printf("hardware     : detection error (%v)\n", err)
 	}
 
 	if len(si.GPUs) == 0 {
-		if err := writeln("gpu          : none detected (nvidia-smi not found)"); err != nil {
+		if err := out.println("gpu          : none detected (nvidia-smi not found)"); err != nil {
 			return err
 		}
 	} else {
@@ -222,19 +207,19 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 					sysinfo.FormatMB(g.VRAMFreeMB),
 					sysinfo.FormatMB(g.VRAMTotalMB))
 			}
-			if err := writef("%s", gpuLine); err != nil {
+			if err := out.printf("%s", gpuLine); err != nil {
 				return err
 			}
 		}
 		if sawUMA && nimActive {
-			if err := writef("               hint: add extra_env = [\"NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9\"] if model OOMs\n"); err != nil {
+			if err := out.printf("               hint: add extra_env = [\"NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9\"] if model OOMs\n"); err != nil {
 				return err
 			}
 		}
 	}
 
 	if si.RAMTotalMB > 0 {
-		if err := writef("ram          : %s free / %s total\n",
+		if err := out.printf("ram          : %s free / %s total\n",
 			sysinfo.FormatMB(si.RAMFreeMB),
 			sysinfo.FormatMB(si.RAMTotalMB)); err != nil {
 			return err
@@ -242,7 +227,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	for path, d := range si.Disks {
-		if err := writef("disk %-11s: %.1f GiB free / %.1f GiB total\n",
+		if err := out.printf("disk %-11s: %.1f GiB free / %.1f GiB total\n",
 			diskLabel(path, cfg.Paths.ModelsDir, cfg.Paths.NIMCache),
 			d.FreeGB, d.TotalGB); err != nil {
 			return err
@@ -254,23 +239,19 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		runner, err := buildAdhocRunner(cfg)
 		if err == nil {
 			if unmanaged, err := runner.DetectUnmanaged(cmd.Context()); err == nil && len(unmanaged) > 0 {
-				if err := writeln(); err != nil {
+				if err := out.println(); err != nil {
 					return err
 				}
-				if err := writeln("warning: unmanaged inference containers detected (not started by marlin):"); err != nil {
+				if err := out.println("warning: unmanaged inference containers detected (not started by marlin):"); err != nil {
 					return err
 				}
 				for _, c := range unmanaged {
 					name := strings.Join(c.Names, ", ")
-					id := c.ID
-					if len(id) > 12 {
-						id = id[:12]
-					}
-					if err := writef("  %s  image: %s  name: %s\n", id, c.Image, name); err != nil {
+					if err := out.printf("  %s  image: %s  name: %s\n", shortID(c.ID), c.Image, name); err != nil {
 						return err
 					}
 				}
-				if err := writeln("  use 'marlin run' to manage containers, or set warn_unmanaged_containers=false to silence"); err != nil {
+				if err := out.println("  use 'marlin run' to manage containers, or set warn_unmanaged_containers=false to silence"); err != nil {
 					return err
 				}
 			}
@@ -291,13 +272,6 @@ func diskLabel(path, modelsDir, nimCache string) string {
 	}
 }
 
-func min12(n int) int {
-	if n < 12 {
-		return n
-	}
-	return 12
-}
-
 func nimHint(logs string) string {
 	lower := strings.ToLower(logs)
 	if strings.Contains(lower, "uma device detected") || strings.Contains(lower, "no available memory") {
@@ -307,14 +281,6 @@ func nimHint(logs string) string {
 		return `GPU OOM — try reducing load: extra_env = ["NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.7"]`
 	}
 	return ""
-}
-
-func lastNonEmptyLine(s string) string {
-	lines := lastNLines(s, 1)
-	if len(lines) == 0 {
-		return ""
-	}
-	return lines[0]
 }
 
 // lastNLines returns up to n non-empty lines from the tail of s, in chronological order.

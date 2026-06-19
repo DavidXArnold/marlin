@@ -164,13 +164,13 @@ func TestCheckSystemResourcesEnabled(t *testing.T) {
 	checkSystemResources(cfg, &buf)
 }
 
-// --- min12 ---
+// --- shortID ---
 
-func TestMin12(t *testing.T) {
-	assert.Equal(t, 5, min12(5))
-	assert.Equal(t, 12, min12(20))
-	assert.Equal(t, 12, min12(12))
-	assert.Equal(t, 0, min12(0))
+func TestShortID(t *testing.T) {
+	assert.Equal(t, "abc12", shortID("abc12"))
+	assert.Equal(t, "abcdef012345", shortID("abcdef0123456789"))
+	assert.Equal(t, "abcdef012345", shortID("abcdef012345"))
+	assert.Equal(t, "", shortID(""))
 }
 
 // --- status with active model ---
@@ -182,7 +182,7 @@ func TestStatusCmdActiveModel(t *testing.T) {
 	cfg, err := globalConfig()
 	require.NoError(t, err)
 
-	// Write state with active model and a container ID (to exercise min12 path).
+	// Write state with active model and a container ID (to exercise shortID path).
 	s := &state.State{
 		ActiveModel:    "qwen25-72b",
 		ActiveProvider: "vllm",

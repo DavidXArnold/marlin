@@ -74,20 +74,12 @@ func runConfigure(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("loading secrets: %w", err)
 	}
 
-	w := cmd.OutOrStdout()
-	writef := func(format string, args ...any) error {
-		_, err := fmt.Fprintf(w, format, args...)
-		return err
-	}
-	writeln := func(args ...any) error {
-		_, err := fmt.Fprintln(w, args...)
-		return err
-	}
+	out := lineWriter{cmd.OutOrStdout()}
 
-	if err := writef("Configuring API keys for marlin.\n"); err != nil {
+	if err := out.printf("Configuring API keys for marlin.\n"); err != nil {
 		return err
 	}
-	if err := writef("Keys will be saved to %s\n\n", path); err != nil {
+	if err := out.printf("Keys will be saved to %s\n\n", path); err != nil {
 		return err
 	}
 
@@ -101,22 +93,22 @@ func runConfigure(cmd *cobra.Command, _ []string) error {
 			keepOrSkip = "keep"
 		}
 
-		if err := writef("%s\n", spec.label); err != nil {
+		if err := out.printf("%s\n", spec.label); err != nil {
 			return err
 		}
-		if err := writef("  Generate: %s\n", spec.infoURL); err != nil {
+		if err := out.printf("  Generate: %s\n", spec.infoURL); err != nil {
 			return err
 		}
 		if isSet {
-			if err := writef("  Status:   [set]\n"); err != nil {
+			if err := out.printf("  Status:   [set]\n"); err != nil {
 				return err
 			}
 		} else {
-			if err := writef("  Status:   [not set]\n"); err != nil {
+			if err := out.printf("  Status:   [not set]\n"); err != nil {
 				return err
 			}
 		}
-		if err := writef("  New value (Enter to %s): ", keepOrSkip); err != nil {
+		if err := out.printf("  New value (Enter to %s): ", keepOrSkip); err != nil {
 			return err
 		}
 
@@ -125,46 +117,46 @@ func runConfigure(cmd *cobra.Command, _ []string) error {
 		if line != "" {
 			updates[spec.key] = line
 		}
-		if err := writeln(); err != nil {
+		if err := out.println(); err != nil {
 			return err
 		}
 	}
 
 	if len(updates) == 0 {
-		return writeln("No changes made.")
+		return out.println("No changes made.")
 	}
 
 	if err := secrets.Save(path, updates); err != nil {
 		return fmt.Errorf("saving secrets: %w", err)
 	}
-	if err := writef("Saved to %s\n\n", path); err != nil {
+	if err := out.printf("Saved to %s\n\n", path); err != nil {
 		return err
 	}
 
 	// If an NGC key was just set, offer to authenticate Docker to nvcr.io.
 	// NIM image pulls require: docker login nvcr.io -u $oauthtoken -p <key>
 	if ngcKey, ok := updates["NGC_API_KEY"]; ok && ngcKey != "" {
-		if err := writef("NIM images are hosted on nvcr.io and require Docker registry auth.\n"); err != nil {
+		if err := out.printf("NIM images are hosted on nvcr.io and require Docker registry auth.\n"); err != nil {
 			return err
 		}
-		if err := writef("  docker login nvcr.io --username '$oauthtoken' --password-stdin\n\n"); err != nil {
+		if err := out.printf("  docker login nvcr.io --username '$oauthtoken' --password-stdin\n\n"); err != nil {
 			return err
 		}
-		if err := writef("Run docker login nvcr.io now? [y/N]: "); err != nil {
+		if err := out.printf("Run docker login nvcr.io now? [y/N]: "); err != nil {
 			return err
 		}
 
 		line, _ := reader.ReadString('\n')
 		if strings.ToLower(strings.TrimSpace(line)) == "y" {
 			if err := dockerLoginFunc(ngcKey); err != nil {
-				if err := writef("docker login failed: %v\n", err); err != nil {
+				if err := out.printf("docker login failed: %v\n", err); err != nil {
 					return err
 				}
-				if err := writef("Run it manually with your NGC API key as the password.\n"); err != nil {
+				if err := out.printf("Run it manually with your NGC API key as the password.\n"); err != nil {
 					return err
 				}
 			} else {
-				if err := writeln("Docker authenticated to nvcr.io."); err != nil {
+				if err := out.println("Docker authenticated to nvcr.io."); err != nil {
 					return err
 				}
 			}
