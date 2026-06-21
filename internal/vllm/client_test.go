@@ -3,6 +3,7 @@ package vllm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -151,6 +152,63 @@ func TestHealthCustomPath(t *testing.T) {
 	status2, err := c2.Health(context.Background())
 	require.NoError(t, err)
 	assert.False(t, status2.Ready)
+}
+
+func TestChatStreamOK(t *testing.T) {
+	events := []string{
+		`data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}`,
+		`data: {"choices":[{"delta":{"content":" world"},"finish_reason":"stop"}]}`,
+		`data: [DONE]`,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/v1/chat/completions", r.URL.Path)
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		for _, e := range events {
+			_, _ = w.Write([]byte(e + "\n"))
+		}
+	}))
+	defer srv.Close()
+
+	c := clientFromTestServer(srv)
+	var got []string
+	err := c.ChatStream(context.Background(), "llama", "hi", 64, func(sc StreamChunk) error {
+		if sc.Content != "" {
+			got = append(got, sc.Content)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Hello", " world"}, got)
+}
+
+func TestChatStreamServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("model overloaded"))
+	}))
+	defer srv.Close()
+
+	c := clientFromTestServer(srv)
+	err := c.ChatStream(context.Background(), "m", "hi", 64, func(_ StreamChunk) error { return nil })
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "503")
+}
+
+func TestChatStreamCallbackError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`data: {"choices":[{"delta":{"content":"tok"}}]}` + "\n"))
+		_, _ = w.Write([]byte(`data: [DONE]` + "\n"))
+	}))
+	defer srv.Close()
+
+	c := clientFromTestServer(srv)
+	err := c.ChatStream(context.Background(), "m", "hi", 64, func(_ StreamChunk) error {
+		return fmt.Errorf("stop early")
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "stop early")
 }
 
 func clientFromTestServer(srv *httptest.Server) *Client {
