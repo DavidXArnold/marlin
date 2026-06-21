@@ -78,25 +78,49 @@ func runHistory(cmd *cobra.Command, _ []string) error {
 	w := cmd.OutOrStdout()
 
 	if len(filtered) == 0 {
+		if outputFormat == "json" {
+			return writeJSON(w, []history.HistoryEvent{})
+		}
 		_, err = fmt.Fprintln(w, "no history")
 		return err
 	}
 
-	_, _ = fmt.Fprintf(w, "%-21s %-15s %-22s %s\n",
-		"TIME", "EVENT", "SLUG", "ELAPSED/DURATION")
-	_, _ = fmt.Fprintln(w, strings.Repeat("-", 75))
-
-	for _, ev := range filtered {
-		ts := ev.Timestamp.Local().Format("2006-01-02 15:04:05")
-		extra := ""
-		if ev.ElapsedS > 0 {
-			extra = fmt.Sprintf("%.1fs", ev.ElapsedS)
-		} else if ev.DurationS > 0 {
-			extra = fmt.Sprintf("%.0fs", ev.DurationS)
+	switch outputFormat {
+	case "json":
+		return writeJSON(w, filtered)
+	case "jsonl":
+		for _, ev := range filtered {
+			if err := writeJSONLine(w, ev); err != nil {
+				return err
+			}
 		}
-		_, _ = fmt.Fprintf(w, "%-21s %-15s %-22s %s\n", ts, ev.Event, ev.Slug, extra)
+		return nil
+	case "plain":
+		for _, ev := range filtered {
+			ts := ev.Timestamp.UTC().Format(time.RFC3339)
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%.3f\t%.3f\n",
+				ts, ev.Event, ev.Slug, ev.ElapsedS, ev.DurationS)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	default: // table
+		_, _ = fmt.Fprintf(w, "%-21s %-15s %-22s %s\n",
+			"TIME", "EVENT", "SLUG", "ELAPSED/DURATION")
+		_, _ = fmt.Fprintln(w, strings.Repeat("-", 75))
+		for _, ev := range filtered {
+			ts := ev.Timestamp.Local().Format("2006-01-02 15:04:05")
+			extra := ""
+			if ev.ElapsedS > 0 {
+				extra = fmt.Sprintf("%.1fs", ev.ElapsedS)
+			} else if ev.DurationS > 0 {
+				extra = fmt.Sprintf("%.0fs", ev.DurationS)
+			}
+			_, _ = fmt.Fprintf(w, "%-21s %-15s %-22s %s\n", ts, ev.Event, ev.Slug, extra)
+		}
+		return nil
 	}
-	return nil
 }
 
 func runHistoryStats(cmd *cobra.Command, _ []string) error {

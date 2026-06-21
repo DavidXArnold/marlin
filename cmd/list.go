@@ -19,6 +19,14 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 }
 
+type listItem struct {
+	Slug    string `json:"slug"`
+	Type    string `json:"type"`
+	Status  string `json:"status"`
+	ModelID string `json:"model_id"`
+	Active  bool   `json:"active"`
+}
+
 func runList(cmd *cobra.Command, _ []string) error {
 	cfg, err := globalConfig()
 	if err != nil {
@@ -37,25 +45,58 @@ func runList(cmd *cobra.Command, _ []string) error {
 
 	cur, _ := state.Load(cfg.Paths.StateFile)
 
-	w := cmd.OutOrStdout()
-	if _, err := fmt.Fprintf(w, "%-30s %-6s %-10s %s\n", "SLUG", "TYPE", "STATUS", "MODEL ID"); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "%-30s %-6s %-10s %s\n", "----", "----", "------", "--------"); err != nil {
-		return err
+	items := make([]listItem, len(names))
+	for i, slug := range names {
+		items[i] = listItem{
+			Slug:    slug,
+			Type:    string(models[i].Model.Type),
+			Status:  string(models[i].Model.Status),
+			ModelID: models[i].Model.ID,
+			Active:  slug == cur.ActiveModel,
+		}
 	}
 
-	for i, slug := range names {
-		m := models[i]
-		active := ""
-		if slug == cur.ActiveModel {
-			active = " ◀ active"
+	w := cmd.OutOrStdout()
+
+	switch outputFormat {
+	case "json":
+		return writeJSON(w, items)
+	case "jsonl":
+		for _, it := range items {
+			if err := writeJSONLine(w, it); err != nil {
+				return err
+			}
 		}
-		if _, err := fmt.Fprintf(w, "%-30s %-6s %-10s %s%s\n",
-			slug, m.Model.Type, m.Model.Status, m.Model.ID, active); err != nil {
+		return nil
+	case "plain":
+		for _, it := range items {
+			active := ""
+			if it.Active {
+				active = "active"
+			}
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", it.Slug, it.Type, it.Status, it.ModelID, active)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	default: // table
+		if _, err := fmt.Fprintf(w, "%-30s %-6s %-10s %s\n", "SLUG", "TYPE", "STATUS", "MODEL ID"); err != nil {
 			return err
 		}
+		if _, err := fmt.Fprintf(w, "%-30s %-6s %-10s %s\n", "----", "----", "------", "--------"); err != nil {
+			return err
+		}
+		for _, it := range items {
+			active := ""
+			if it.Active {
+				active = " ◀ active"
+			}
+			if _, err := fmt.Fprintf(w, "%-30s %-6s %-10s %s%s\n",
+				it.Slug, it.Type, it.Status, it.ModelID, active); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-
-	return nil
 }

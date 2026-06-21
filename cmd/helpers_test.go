@@ -455,3 +455,29 @@ func TestHumanDuration(t *testing.T) {
 		assert.Equal(t, tc.want, humanDuration(tc.d), "duration %v", tc.d)
 	}
 }
+
+// --- smokeConfig ---
+
+func TestSmokeConfigDefaults(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+	sc := smokeConfig(cfg)
+	assert.False(t, sc.Enabled)
+	assert.Equal(t, 30*time.Second, sc.Timeout)
+	assert.Empty(t, sc.Skip)
+}
+
+func TestSmokeConfigCustomTimeout(t *testing.T) {
+	cleanup := tempEnvWithBehavior(t, `smoke_test = true
+smoke_test_timeout = "10s"
+smoke_test_skip = ["streaming"]`)
+	defer cleanup()
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+	sc := smokeConfig(cfg)
+	assert.True(t, sc.Enabled)
+	assert.Equal(t, 10*time.Second, sc.Timeout)
+	assert.Equal(t, []string{"streaming"}, sc.Skip)
+}

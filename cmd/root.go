@@ -83,6 +83,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default: /etc/marlin/config.toml or $HOME/.config/marlin/config.toml)")
 	rootCmd.PersistentFlags().CountVarP(&Verbosity, "verbose", "v", "verbosity: -v requests, -vv headers, -vvv bodies")
+	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "table", "output format: table, json, jsonl, plain")
 }
 
 func initConfig() {
