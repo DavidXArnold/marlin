@@ -263,6 +263,47 @@ func TestDefaultPodmanSocket(t *testing.T) {
 	assert.Contains(t, got, "podman.sock")
 }
 
+// --- GetDigest / PullImage ---
+
+func TestContainerdGetDigestOK(t *testing.T) {
+	inspectJSON := []byte(`[{"RepoDigests":["nvcr.io/nim/meta/llama@sha256:abc123"]}]`)
+	calls := 0
+	p := newContainerdNIMProviderWithRunner(config.Defaults(), "", func(_ context.Context, args ...string) ([]byte, error) {
+		calls++
+		return inspectJSON, nil
+	})
+	digest, err := p.GetDigest(context.Background(), "nvcr.io/nim/meta/llama:latest")
+	require.NoError(t, err)
+	assert.Equal(t, "sha256:abc123", digest)
+	assert.Equal(t, 1, calls)
+}
+
+func TestContainerdGetDigestInspectError(t *testing.T) {
+	p := newContainerdNIMProviderWithRunner(config.Defaults(), "", func(_ context.Context, _ ...string) ([]byte, error) {
+		return nil, fmt.Errorf("image not cached")
+	})
+	// getDigestFunc returns ("", nil) when inspect fails — not found is not an error.
+	digest, err := p.GetDigest(context.Background(), "nvcr.io/nim/meta/llama:latest")
+	require.NoError(t, err)
+	assert.Empty(t, digest)
+}
+
+func TestContainerdPullImageOK(t *testing.T) {
+	stub := &stubRunner{}
+	p := newContainerdProviderWithStub(t, stub)
+	err := p.PullImage(context.Background(), "nvcr.io/nim/meta/llama:latest")
+	require.NoError(t, err)
+	require.Len(t, stub.calls, 1)
+	assert.Equal(t, "pull", stub.calls[0][0])
+}
+
+func TestContainerdPullImageError(t *testing.T) {
+	stub := &stubRunner{err: fmt.Errorf("registry unreachable")}
+	p := newContainerdProviderWithStub(t, stub)
+	err := p.PullImage(context.Background(), "nvcr.io/nim/meta/llama:latest")
+	require.Error(t, err)
+}
+
 // — nerdctl live tests (skipped when nerdctl not on PATH) —
 
 func TestContainerdNIMProviderLiveStatusNoContainer(t *testing.T) {

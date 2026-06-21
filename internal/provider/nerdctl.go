@@ -264,6 +264,25 @@ func (c *nerdctlClient) ContainerLogs(ctx context.Context, id string, opts conta
 	return pr, nil
 }
 
+// nerdctlImageInspect is the JSON shape nerdctl image inspect returns (subset we need).
+type nerdctlImageInspect struct {
+	RepoDigests []string `json:"RepoDigests"`
+}
+
+// ImageInspect runs nerdctl image inspect and returns a minimal InspectResponse
+// populated with RepoDigests.  The variadic opts parameter is unused.
+func (c *nerdctlClient) ImageInspect(ctx context.Context, imageID string) (dimage.InspectResponse, error) {
+	out, err := c.run(ctx, "image", "inspect", imageID)
+	if err != nil {
+		return dimage.InspectResponse{}, fmt.Errorf("nerdctl image inspect %s: %w", imageID, err)
+	}
+	var infos []nerdctlImageInspect
+	if jsonErr := json.Unmarshal(out, &infos); jsonErr != nil || len(infos) == 0 {
+		return dimage.InspectResponse{}, fmt.Errorf("parsing nerdctl image inspect output: %w", jsonErr)
+	}
+	return dimage.InspectResponse{RepoDigests: infos[0].RepoDigests}, nil
+}
+
 // decodeDockerAuth unpacks a base64-encoded Docker auth JSON blob.
 func decodeDockerAuth(encoded string) (username, password string, ok bool) {
 	b, err := base64.URLEncoding.DecodeString(encoded)

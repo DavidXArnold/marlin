@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
+
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/privilege"
 )
@@ -30,8 +31,10 @@ type ContainerdNIMProvider struct {
 	cmdOutput func(ctx context.Context, args ...string) ([]byte, error)
 	// loginFunc authenticates with the container registry.
 	// Replaceable in tests to avoid a real nerdctl login call.
-	loginFunc func(ctx context.Context, registry, key string) error
-	loadModel func(slug string) (*config.ModelConfig, error)
+	loginFunc     func(ctx context.Context, registry, key string) error
+	loadModel     func(slug string) (*config.ModelConfig, error)
+	getDigestFunc func(context.Context, string) (string, error)
+	pullImageFunc  func(context.Context, string) error
 }
 
 func NewContainerdNIMProvider(cfg *config.Config, ngcKey string) (*ContainerdNIMProvider, error) {
@@ -44,7 +47,7 @@ func NewContainerdNIMProvider(cfg *config.Config, ngcKey string) (*ContainerdNIM
 }
 
 func newContainerdNIMProviderWithRunner(cfg *config.Config, ngcKey string, runner func(context.Context, ...string) ([]byte, error)) *ContainerdNIMProvider {
-	return &ContainerdNIMProvider{
+	p := &ContainerdNIMProvider{
 		cfg:          cfg,
 		ngcKey:       ngcKey,
 		w:            os.Stderr,
@@ -56,6 +59,34 @@ func newContainerdNIMProviderWithRunner(cfg *config.Config, ngcKey string, runne
 			return config.ResolveModel(slug, cfg.Paths.ModelsDir, cfg.Paths.GlobalModelsDir)
 		},
 	}
+	p.getDigestFunc = func(ctx context.Context, image string) (string, error) {
+		out, err := runner(ctx, "image", "inspect", image)
+		if err != nil {
+			return "", nil // image not cached yet
+		}
+		var infos []struct {
+			RepoDigests []string `json:"RepoDigests"`
+		}
+		if jsonErr := json.Unmarshal(out, &infos); jsonErr != nil || len(infos) == 0 {
+			return "", nil
+		}
+		return extractDigest(infos[0].RepoDigests), nil
+	}
+	p.pullImageFunc = func(ctx context.Context, image string) error {
+		_, err := runner(ctx, "pull", image)
+		return err
+	}
+	return p
+}
+
+// GetDigest returns the OCI digest (sha256:...) of the locally cached image.
+func (p *ContainerdNIMProvider) GetDigest(ctx context.Context, image string) (string, error) {
+	return p.getDigestFunc(ctx, image)
+}
+
+// PullImage pulls the latest version of image without restarting the container.
+func (p *ContainerdNIMProvider) PullImage(ctx context.Context, image string) error {
+	return p.pullImageFunc(ctx, image)
 }
 
 // nerdctlLogin authenticates with a container registry using nerdctl login via stdin.

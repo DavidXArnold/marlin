@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -51,6 +52,17 @@ type dockerClient interface {
 	ContainerList(ctx context.Context, options container.ListOptions) ([]container.Summary, error)
 	ContainerLogs(ctx context.Context, containerID string, options container.LogsOptions) (io.ReadCloser, error)
 	ImagePull(ctx context.Context, refStr string, options dimage.PullOptions) (io.ReadCloser, error)
+	ImageInspect(ctx context.Context, imageID string) (dimage.InspectResponse, error)
+}
+
+// dockerClientWrapper adapts *client.Client to dockerClient by providing
+// a zero-option wrapper for the SDK's variadic ImageInspect method.
+type dockerClientWrapper struct {
+	*client.Client
+}
+
+func (w dockerClientWrapper) ImageInspect(ctx context.Context, imageID string) (dimage.InspectResponse, error) {
+	return w.Client.ImageInspect(ctx, imageID)
 }
 
 // NIMProvider manages NVIDIA NIM inference containers via the Docker SDK.
@@ -62,13 +74,15 @@ type dockerClient interface {
 // container downloads weights and compiles TRT engines (can be minutes).
 // Future enhancement: front port 8000 with a reverse proxy for zero-downtime switching.
 type NIMProvider struct {
-	cfg          *config.Config
-	ngcKey       string
-	docker       dockerClient
-	loadModel    func(slug string) (*config.ModelConfig, error)
-	w            io.Writer                    // for privilege prompts; defaults to os.Stderr
-	prepareCache func(io.Writer, string) error // injectable for tests
-	refreshPerms func(string) error            // injectable for tests
+	cfg           *config.Config
+	ngcKey        string
+	docker        dockerClient
+	loadModel     func(slug string) (*config.ModelConfig, error)
+	w             io.Writer                    // for privilege prompts; defaults to os.Stderr
+	prepareCache  func(io.Writer, string) error // injectable for tests
+	refreshPerms  func(string) error            // injectable for tests
+	getDigestFunc func(context.Context, string) (string, error)
+	pullImageFunc  func(context.Context, string) error
 }
 
 func NewNIMProvider(cfg *config.Config, ngcKey string) (*NIMProvider, error) {
@@ -99,7 +113,7 @@ func NewNIMProvider(cfg *config.Config, ngcKey string) (*NIMProvider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connecting to container runtime: %w", err)
 	}
-	return newNIMProviderWithClient(cfg, ngcKey, cli), nil
+	return newNIMProviderWithClient(cfg, ngcKey, dockerClientWrapper{cli}), nil
 }
 
 // defaultPodmanSocket returns the most likely podman API socket path.
@@ -112,7 +126,7 @@ func defaultPodmanSocket() string {
 }
 
 func newNIMProviderWithClient(cfg *config.Config, ngcKey string, docker dockerClient) *NIMProvider {
-	return &NIMProvider{
+	p := &NIMProvider{
 		cfg:          cfg,
 		ngcKey:       ngcKey,
 		docker:       docker,
@@ -123,6 +137,45 @@ func newNIMProviderWithClient(cfg *config.Config, ngcKey string, docker dockerCl
 			return config.ResolveModel(slug, cfg.Paths.ModelsDir, cfg.Paths.GlobalModelsDir)
 		},
 	}
+	p.getDigestFunc = func(ctx context.Context, image string) (string, error) {
+		info, err := docker.ImageInspect(ctx, image)
+		if err != nil {
+			return "", err
+		}
+		return extractDigest(info.RepoDigests), nil
+	}
+	p.pullImageFunc = func(ctx context.Context, image string) error {
+		r, err := docker.ImagePull(ctx, image, dimage.PullOptions{RegistryAuth: ngcRegistryAuth(ngcKey)})
+		if err != nil {
+			return err
+		}
+		_, _ = io.Copy(io.Discard, r)
+		return r.Close()
+	}
+	return p
+}
+
+// GetDigest returns the OCI digest (sha256:...) of the locally cached image.
+func (n *NIMProvider) GetDigest(ctx context.Context, image string) (string, error) {
+	return n.getDigestFunc(ctx, image)
+}
+
+// PullImage pulls the latest version of image without restarting the container.
+func (n *NIMProvider) PullImage(ctx context.Context, image string) error {
+	return n.pullImageFunc(ctx, image)
+}
+
+// extractDigest returns the sha256 digest portion from a repo-digest string
+// (e.g. "nvcr.io/nim/meta/llama@sha256:abc...") or the string itself if no @.
+func extractDigest(repoDigests []string) string {
+	if len(repoDigests) == 0 {
+		return ""
+	}
+	d := repoDigests[0]
+	if i := strings.Index(d, "@"); i >= 0 {
+		return d[i+1:]
+	}
+	return d
 }
 
 func (n *NIMProvider) Switch(ctx context.Context, modelSlug string) error {

@@ -74,7 +74,7 @@ func NewAdhocRunner(cfg *config.Config) (*AdhocRunner, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connecting to container runtime: %w", err)
 	}
-	return newAdhocRunnerWithClient(cfg, cli), nil
+	return newAdhocRunnerWithClient(cfg, dockerClientWrapper{cli}), nil
 }
 
 func newAdhocRunnerWithClient(cfg *config.Config, docker dockerClient) *AdhocRunner {

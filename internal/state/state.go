@@ -18,6 +18,7 @@ type State struct {
 	ActiveModel    string               `toml:"active_model"`    // slug (TOML filename without .toml)
 	ActiveProvider config.ProviderType  `toml:"active_provider"` // "vllm" or "nim"
 	ContainerID    string               `toml:"container_id"`    // populated for nim, empty for vllm
+	PinnedDigest   string               `toml:"pinned_digest"`   // OCI digest of the running NIM image (sha256:...)
 	ModelHistory   map[string]time.Time `toml:"model_history"`   // slug → last started time
 	StoppedAt      *time.Time           `toml:"stopped_at"`      // set when stopped via marlin stop; nil when running
 }

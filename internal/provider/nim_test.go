@@ -23,17 +23,19 @@ import (
 
 // stubDocker is a fully controllable in-process Docker client stub.
 type stubDocker struct {
-	stopErr    error
-	removeErr  error
-	createResp container.CreateResponse
-	createErr  error
-	startErr   error
-	listResult []container.Summary
-	listErr    error
-	logsReader io.ReadCloser
-	logsErr    error
-	pullReader io.ReadCloser
-	pullErr    error
+	stopErr       error
+	removeErr     error
+	createResp    container.CreateResponse
+	createErr     error
+	startErr      error
+	listResult    []container.Summary
+	listErr       error
+	logsReader    io.ReadCloser
+	logsErr       error
+	pullReader    io.ReadCloser
+	pullErr       error
+	inspectResult dimage.InspectResponse
+	inspectErr    error
 }
 
 func (s *stubDocker) ContainerStop(_ context.Context, _ string, _ container.StopOptions) error {
@@ -57,6 +59,9 @@ func (s *stubDocker) ContainerLogs(_ context.Context, _ string, _ container.Logs
 }
 func (s *stubDocker) ImagePull(_ context.Context, _ string, _ dimage.PullOptions) (io.ReadCloser, error) {
 	return s.pullReader, s.pullErr
+}
+func (s *stubDocker) ImageInspect(_ context.Context, _ string) (dimage.InspectResponse, error) {
+	return s.inspectResult, s.inspectErr
 }
 
 func testNIMProvider(t *testing.T, d *stubDocker) (*NIMProvider, string) {
@@ -289,6 +294,61 @@ func TestImageToModelID(t *testing.T) {
 	}
 	for _, c := range cases {
 		assert.Equal(t, c.want, imageToModelID(c.image), c.image)
+	}
+}
+
+// --- GetDigest / PullImage ---
+
+func TestNIMGetDigestOK(t *testing.T) {
+	d := &stubDocker{
+		pullReader: emptyReader(),
+		inspectResult: dimage.InspectResponse{
+			RepoDigests: []string{"nvcr.io/nim/meta/llama:latest@sha256:abc123"},
+		},
+	}
+	p, _ := testNIMProvider(t, d)
+	digest, err := p.GetDigest(context.Background(), "nvcr.io/nim/meta/llama:latest")
+	require.NoError(t, err)
+	assert.Equal(t, "sha256:abc123", digest)
+}
+
+func TestNIMGetDigestNoRepoDigests(t *testing.T) {
+	d := &stubDocker{inspectResult: dimage.InspectResponse{}}
+	p, _ := testNIMProvider(t, d)
+	digest, err := p.GetDigest(context.Background(), "nvcr.io/nim/meta/llama:latest")
+	require.NoError(t, err)
+	assert.Empty(t, digest)
+}
+
+func TestNIMGetDigestInspectError(t *testing.T) {
+	d := &stubDocker{inspectErr: fmt.Errorf("image not found")}
+	p, _ := testNIMProvider(t, d)
+	_, err := p.GetDigest(context.Background(), "nvcr.io/nim/meta/llama:latest")
+	require.Error(t, err)
+}
+
+func TestNIMPullImageOK(t *testing.T) {
+	d := &stubDocker{pullReader: emptyReader()}
+	p, _ := testNIMProvider(t, d)
+	err := p.PullImage(context.Background(), "nvcr.io/nim/meta/llama:latest")
+	require.NoError(t, err)
+}
+
+func TestNIMPullImageError(t *testing.T) {
+	d := &stubDocker{pullErr: fmt.Errorf("network error")}
+	p, _ := testNIMProvider(t, d)
+	err := p.PullImage(context.Background(), "nvcr.io/nim/meta/llama:latest")
+	require.Error(t, err)
+}
+
+func TestExtractDigest(t *testing.T) {
+	cases := []struct{ input []string; want string }{
+		{[]string{"nvcr.io/nim/meta/llama@sha256:abc"}, "sha256:abc"},
+		{[]string{"sha256:abc"}, "sha256:abc"},
+		{nil, ""},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, extractDigest(c.input))
 	}
 }
 

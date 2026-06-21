@@ -168,6 +168,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 	if st, err := p.Status(cmd.Context()); err == nil {
 		newState.ContainerID = st.ContainerID
 	}
+	// Capture image digest for NIM providers so marlin update can detect changes.
+	if dg, ok := p.(nimDigester); ok && targetModel.Model.Image != "" {
+		if digest, err := dg.GetDigest(cmd.Context(), targetModel.Model.Image); err == nil {
+			newState.PinnedDigest = digest
+		}
+	}
 	state.RecordStart(newState, targetSlug)
 	if err := state.SavePrivileged(cmd.ErrOrStderr(), cfg.Paths.StateFile, newState); err != nil {
 		if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not save state: %v\n", err); writeErr != nil {
