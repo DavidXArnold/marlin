@@ -21,6 +21,11 @@ var (
 			"--query-gpu=index,name,memory.total,memory.free,compute_cap",
 			"--format=csv,noheader,nounits").Output()
 	}
+	runNvidiaSmiTelemetry = func() ([]byte, error) {
+		return exec.Command("nvidia-smi",
+			"--query-gpu=index,power.draw,power.limit,temperature.gpu,temperature.memory,clocks.gr,clocks.mem",
+			"--format=csv,noheader,nounits").Output()
+	}
 	readMeminfo = func() ([]byte, error) {
 		return os.ReadFile("/proc/meminfo")
 	}
@@ -46,6 +51,14 @@ type GPUInfo struct {
 	VRAMFreeMB  uint64
 	ComputeCap  string // e.g. "12.1", "10.0", "9.0" — empty if unavailable
 	IsUMA       bool   // true for unified-memory architectures (GB10, GH200, GB200, GB300)
+
+	// Telemetry fields — populated by SampleTelemetry, zeroed by Detect.
+	PowerDrawW      float64 // current power draw in watts
+	PowerLimitW     float64 // power limit in watts
+	TempC           float64 // GPU junction temp in Celsius
+	MemTempC        float64 // memory temp in Celsius (0 if unavailable)
+	GraphicsClockMHz int    // current graphics clock in MHz
+	MemClockMHz      int    // current memory clock in MHz
 }
 
 // umaGPUNames lists GPU model strings that use unified CPU+GPU memory.
@@ -197,12 +210,66 @@ func LoadAvg1() float64 {
 	return v
 }
 
+// SampleTelemetry fills power, temperature, and clock fields on each GPUInfo
+// in si.GPUs. Missing or unavailable fields are silently zeroed.
+// This is a separate call from Detect so the heavier query is opt-in.
+func SampleTelemetry(si *SystemInfo) {
+	out, err := runNvidiaSmiTelemetry()
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, ", ")
+		if len(parts) < 7 {
+			continue
+		}
+		idx, _ := strconv.Atoi(strings.TrimSpace(parts[0]))
+		powerDraw := parseNvFloat(parts[1])
+		powerLimit := parseNvFloat(parts[2])
+		tempGPU := parseNvFloat(parts[3])
+		tempMem := parseNvFloat(parts[4])
+		clockGr := int(parseNvFloat(parts[5]))
+		clockMem := int(parseNvFloat(parts[6]))
+		for i := range si.GPUs {
+			if si.GPUs[i].Index == idx {
+				si.GPUs[i].PowerDrawW = powerDraw
+				si.GPUs[i].PowerLimitW = powerLimit
+				si.GPUs[i].TempC = tempGPU
+				si.GPUs[i].MemTempC = tempMem
+				si.GPUs[i].GraphicsClockMHz = clockGr
+				si.GPUs[i].MemClockMHz = clockMem
+				break
+			}
+		}
+	}
+}
+
+// parseNvFloat parses an nvidia-smi field, returning 0 for N/A or empty.
+func parseNvFloat(s string) float64 {
+	s = strings.TrimSpace(s)
+	if s == "" || s == "[N/A]" || s == "N/A" {
+		return 0
+	}
+	v, _ := strconv.ParseFloat(s, 64)
+	return v
+}
+
 // SetRunNvidiaSmiForTest replaces the nvidia-smi runner for tests and returns
 // a restore function. Only call from test code.
 func SetRunNvidiaSmiForTest(fn func() ([]byte, error)) func() {
 	old := runNvidiaSmi
 	runNvidiaSmi = fn
 	return func() { runNvidiaSmi = old }
+}
+
+// SetRunNvidiaSmiTelemetryForTest replaces the telemetry runner for tests.
+func SetRunNvidiaSmiTelemetryForTest(fn func() ([]byte, error)) func() {
+	old := runNvidiaSmiTelemetry
+	runNvidiaSmiTelemetry = fn
+	return func() { runNvidiaSmiTelemetry = old }
 }
 
 // FormatMB formats a megabyte count as "X GiB" or "X MiB".

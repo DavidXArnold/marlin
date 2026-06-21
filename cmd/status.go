@@ -184,6 +184,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return out.printf("hardware     : detection error (%v)\n", err)
 	}
+	sysinfo.SampleTelemetry(si)
 
 	if len(si.GPUs) == 0 {
 		if err := out.println("gpu          : none detected (nvidia-smi not found)"); err != nil {
@@ -209,6 +210,24 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			}
 			if err := out.printf("%s", gpuLine); err != nil {
 				return err
+			}
+			// Show power/temp telemetry when available.
+			if g.PowerDrawW > 0 || g.TempC > 0 {
+				tel := "              "
+				if g.PowerDrawW > 0 && g.PowerLimitW > 0 {
+					tel += fmt.Sprintf(" power %.0f W / %.0f W", g.PowerDrawW, g.PowerLimitW)
+				} else if g.PowerDrawW > 0 {
+					tel += fmt.Sprintf(" power %.0f W", g.PowerDrawW)
+				}
+				if g.TempC > 0 {
+					tel += fmt.Sprintf("  temp %.0f C", g.TempC)
+				}
+				if g.GraphicsClockMHz > 0 {
+					tel += fmt.Sprintf("  clock %d MHz", g.GraphicsClockMHz)
+				}
+				if err := out.printf("%s\n", tel); err != nil {
+					return err
+				}
 			}
 		}
 		if sawUMA && nimActive {

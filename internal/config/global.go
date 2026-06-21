@@ -24,6 +24,14 @@ func defaultStateFile() string {
 	return filepath.Join(home, ".local", "share", "marlin", "state.toml")
 }
 
+func defaultHistoryFile() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/var/lib/marlin/history.jsonl"
+	}
+	return filepath.Join(home, ".local", "share", "marlin", "history.jsonl")
+}
+
 type Config struct {
 	Behavior   BehaviorConfig   `toml:"behavior"`
 	Paths      PathsConfig      `toml:"paths"`
@@ -60,7 +68,8 @@ type PathsConfig struct {
 	ActiveSymlink   string `toml:"active_symlink"`
 	SecretsEnv      string `toml:"secrets_env"`
 	StateFile       string `toml:"state_file"`
-	NIMCache        string `toml:"nim_cache"` // host path mounted into NIM containers
+	NIMCache        string `toml:"nim_cache"`    // host path mounted into NIM containers
+	HistoryFile     string `toml:"history_file"` // append-only JSONL event log
 }
 
 type ServiceConfig struct {
@@ -119,6 +128,7 @@ func Defaults() *Config {
 			SecretsEnv:      defaultSecretsPath(),
 			StateFile:       defaultStateFile(),
 			NIMCache:        "/var/cache/nim",
+			HistoryFile:     defaultHistoryFile(),
 		},
 		Service: ServiceConfig{
 			SystemdUnit:     "marlin",

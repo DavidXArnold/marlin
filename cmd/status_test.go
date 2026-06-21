@@ -303,6 +303,28 @@ func TestStatusShowsUnmanagedWarning(t *testing.T) {
 	assert.Contains(t, out, "rogue-vllm")
 }
 
+func TestRunStatusShowsGPUTelemetry(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	oldNvidiaSmi := sysinfo.SetRunNvidiaSmiForTest(func() ([]byte, error) {
+		return []byte("0, NVIDIA A100-SXM4-80GB, 81920, 75000, 8.0\n"), nil
+	})
+	defer oldNvidiaSmi()
+
+	oldTelemetry := sysinfo.SetRunNvidiaSmiTelemetryForTest(func() ([]byte, error) {
+		return []byte("0, 142.5, 240.0, 71, 65, 1455, 2619\n"), nil
+	})
+	defer oldTelemetry()
+
+	var buf bytes.Buffer
+	require.NoError(t, runStatus(cmdWithContext(&buf), nil))
+	out := buf.String()
+	assert.Contains(t, out, "power")
+	assert.Contains(t, out, "temp")
+	assert.Contains(t, out, "clock")
+}
+
 // TestRunStatusShowsLastStop: StoppedAt set in state + provider not running → "last stop: X ago".
 func TestRunStatusShowsLastStop(t *testing.T) {
 	_, cleanup := nimStatusEnv(t)

@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/history"
 	"github.com/DavidXArnold/marlin/internal/state"
 )
 
@@ -86,6 +88,21 @@ func stopActiveModel(cmd *cobra.Command, cfg *config.Config, cur *state.State, w
 	if saveErr := state.SavePrivileged(w, cfg.Paths.StateFile, cur); saveErr != nil {
 		_, _ = fmt.Fprintf(w, "warning: could not save state: %v\n", saveErr)
 	}
+
+	var durationS float64
+	if startedAt, ok := cur.ModelHistory[cur.ActiveModel]; ok && !startedAt.IsZero() {
+		durationS = time.Since(startedAt).Seconds()
+	}
+	if herr := appendHistory(cfg.Paths.HistoryFile, history.HistoryEvent{
+		Timestamp: time.Now(),
+		Event:     "stop",
+		Slug:      cur.ActiveModel,
+		Provider:  string(cur.ActiveProvider),
+		DurationS: durationS,
+	}); herr != nil {
+		_, _ = fmt.Fprintf(w, "warning: history: %v\n", herr)
+	}
+
 	_, err = fmt.Fprintf(w, "stopped %s\n", cur.ActiveModel)
 	return err
 }

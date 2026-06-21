@@ -207,3 +207,43 @@ func TestLoadAvg1(t *testing.T) {
 	readLoadavg = func() ([]byte, error) { return []byte(""), nil }
 	assert.Equal(t, 0.0, LoadAvg1())
 }
+
+func TestSampleTelemetry(t *testing.T) {
+	restore := SetRunNvidiaSmiTelemetryForTest(func() ([]byte, error) {
+		return []byte("0, 142.5, 240.0, 71, 65, 1455, 2619\n"), nil
+	})
+	defer restore()
+
+	si := &SystemInfo{
+		GPUs: []GPUInfo{{Index: 0, Name: "NVIDIA GB10"}},
+	}
+	SampleTelemetry(si)
+	assert.InDelta(t, 142.5, si.GPUs[0].PowerDrawW, 0.01)
+	assert.InDelta(t, 240.0, si.GPUs[0].PowerLimitW, 0.01)
+	assert.InDelta(t, 71.0, si.GPUs[0].TempC, 0.01)
+	assert.Equal(t, 1455, si.GPUs[0].GraphicsClockMHz)
+}
+
+func TestSampleTelemetryNvidiaSmiMissing(t *testing.T) {
+	restore := SetRunNvidiaSmiTelemetryForTest(func() ([]byte, error) {
+		return nil, fmt.Errorf("nvidia-smi not found")
+	})
+	defer restore()
+
+	si := &SystemInfo{GPUs: []GPUInfo{{Index: 0}}}
+	SampleTelemetry(si) // must not panic
+	assert.Equal(t, 0.0, si.GPUs[0].PowerDrawW)
+}
+
+func TestSampleTelemetryNAFields(t *testing.T) {
+	restore := SetRunNvidiaSmiTelemetryForTest(func() ([]byte, error) {
+		return []byte("0, [N/A], [N/A], 45, N/A, 1200, N/A\n"), nil
+	})
+	defer restore()
+
+	si := &SystemInfo{GPUs: []GPUInfo{{Index: 0}}}
+	SampleTelemetry(si)
+	assert.Equal(t, 0.0, si.GPUs[0].PowerDrawW)
+	assert.InDelta(t, 45.0, si.GPUs[0].TempC, 0.01)
+	assert.Equal(t, 1200, si.GPUs[0].GraphicsClockMHz)
+}

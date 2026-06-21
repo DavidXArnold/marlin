@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/history"
 	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/ui"
 	"github.com/DavidXArnold/marlin/internal/validate"
@@ -137,6 +139,17 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	switchStart := time.Now()
+	if herr := appendHistory(cfg.Paths.HistoryFile, history.HistoryEvent{
+		Timestamp: switchStart,
+		Event:     "switch_start",
+		Slug:      targetSlug,
+		Provider:  string(targetModel.Model.Type),
+		FromSlug:  cur.ActiveModel,
+	}); herr != nil {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: history: %v\n", herr)
+	}
+
 	if err := p.Switch(cmd.Context(), targetSlug); err != nil {
 		return err
 	}
@@ -155,6 +168,16 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		if _, writeErr := fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not save state: %v\n", err); writeErr != nil {
 			return writeErr
 		}
+	}
+
+	if herr := appendHistory(cfg.Paths.HistoryFile, history.HistoryEvent{
+		Timestamp: time.Now(),
+		Event:     "switch_ready",
+		Slug:      targetSlug,
+		Provider:  string(targetModel.Model.Type),
+		ElapsedS:  time.Since(switchStart).Seconds(),
+	}); herr != nil {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: history: %v\n", herr)
 	}
 
 	_, err = fmt.Fprintf(cmd.OutOrStdout(), "switched to %s (%s)\n", targetSlug, targetModel.Model.Type)
