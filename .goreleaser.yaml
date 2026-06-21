@@ -46,6 +46,32 @@ nfpms:
       - src: configs/marlin.toml.example
         dst: /etc/marlin/config.toml
         type: config|noreplace
+      - src: configs/marlin.toml.x86.example
+        dst: /etc/marlin/config.x86.toml.example
+      - src: configs/models/qwen3-32b-nvfp4.toml
+        dst: /etc/marlin/models/qwen3-32b-nvfp4.toml
+        type: config|noreplace
+      - src: configs/models/qwen3-14b-nvfp4.toml
+        dst: /etc/marlin/models/qwen3-14b-nvfp4.toml
+        type: config|noreplace
+      - src: configs/models/qwen3-8b-nvfp4.toml
+        dst: /etc/marlin/models/qwen3-8b-nvfp4.toml
+        type: config|noreplace
+      - src: configs/models/llama-3.3-70b-instruct-nvfp4.toml
+        dst: /etc/marlin/models/llama-3.3-70b-instruct-nvfp4.toml
+        type: config|noreplace
+      - src: configs/models/llama-3.1-8b-instruct-nvfp4.toml
+        dst: /etc/marlin/models/llama-3.1-8b-instruct-nvfp4.toml
+        type: config|noreplace
+      - src: configs/models/nemotron-super-120b-a12b-nvfp4.toml
+        dst: /etc/marlin/models/nemotron-super-120b-a12b-nvfp4.toml
+        type: config|noreplace
+      - src: configs/models/qwen2.5-vl-7b-instruct-nvfp4.toml
+        dst: /etc/marlin/models/qwen2.5-vl-7b-instruct-nvfp4.toml
+        type: config|noreplace
+      - src: configs/models/phi-4-reasoning-plus-nvfp4.toml
+        dst: /etc/marlin/models/phi-4-reasoning-plus-nvfp4.toml
+        type: config|noreplace
       - dst: /etc/marlin/models
         type: dir
         file_info:

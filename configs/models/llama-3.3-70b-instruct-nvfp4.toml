@@ -1,0 +1,12 @@
+[model]
+id     = "nvidia/Llama-3.3-70B-Instruct-NVFP4"
+type   = "vllm"
+status = "untested"
+notes  = "Llama 3.3 70B Instruct in NVFP4 precision. --quantization is omitted; vLLM auto-detects from model config."
+
+[serve]
+quantization           = "nvfp4"
+gpu_memory_utilization = 0.90
+max_model_len          = 32768
+served_model_name      = ["local", "llama-3.3-70b"]
+tool_call_parser       = "llama3_json"

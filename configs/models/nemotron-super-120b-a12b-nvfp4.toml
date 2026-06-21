@@ -1,0 +1,11 @@
+[model]
+id     = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+type   = "vllm"
+status = "untested"
+notes  = "Nemotron Super 120B MoE with 12B active params in NVFP4. --quantization is omitted; vLLM auto-detects from model config."
+
+[serve]
+quantization           = "nvfp4"
+gpu_memory_utilization = 0.90
+max_model_len          = 32768
+served_model_name      = ["local", "nemotron-super-120b"]

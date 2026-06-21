@@ -50,7 +50,11 @@ func inspectVLLM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config) 
 		writef("served_model_name     : %s\n", strings.Join(m.Serve.ServedModelName, ", "))
 	}
 	if m.Serve.Quantization != "" {
-		writef("quantization          : %s\n", m.Serve.Quantization)
+		if m.Serve.Quantization == "nvfp4" {
+			writef("quantization          : nvfp4 (auto-detected, no --quantization flag)\n")
+		} else {
+			writef("quantization          : %s\n", m.Serve.Quantization)
+		}
 	}
 	if m.Serve.MaxModelLen > 0 {
 		writef("max_model_len         : %d\n", m.Serve.MaxModelLen)

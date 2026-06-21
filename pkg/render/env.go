@@ -33,7 +33,8 @@ func buildExtraArgs(m *config.ModelConfig) []string {
 		args = append(args, "--served-model-name "+strings.Join(m.Serve.ServedModelName, " "))
 	}
 
-	if m.Serve.Quantization != "" {
+	// nvfp4 is auto-detected by vLLM from the model config; no --quantization flag needed.
+	if m.Serve.Quantization != "" && m.Serve.Quantization != "nvfp4" {
 		args = append(args, "--quantization "+m.Serve.Quantization)
 	}
 

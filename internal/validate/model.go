@@ -78,9 +78,10 @@ func checkServedModelName(m *config.ModelConfig, requiredAlias string) []Issue {
 
 // knownQuantizations maps model ID substrings to their expected quantization flag.
 var knownQuantizations = map[string]string{
-	"-AWQ":  "awq_marlin",
-	"-GPTQ": "gptq",
-	"-FP8":  "fp8",
+	"-AWQ":   "awq_marlin",
+	"-GPTQ":  "gptq",
+	"-FP8":   "fp8",
+	"-NVFP4": "nvfp4",
 }
 
 func checkQuantization(m *config.ModelConfig) []Issue {

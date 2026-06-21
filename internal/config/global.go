@@ -136,7 +136,7 @@ func Defaults() *Config {
 		Service: ServiceConfig{
 			SystemdUnit:     "marlin",
 			DockerContainer: "marlin",
-			VLLMImage:       "vllm/vllm-openai:latest",
+			VLLMImage:       "nvcr.io/nvidia/vllm:26.05.post1-py3",
 		},
 		Server: ServerConfig{
 			Host:       "localhost",

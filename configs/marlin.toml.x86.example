@@ -1,9 +1,9 @@
-# marlin configuration — copy to /etc/marlin/config.toml and edit as needed.
+# marlin configuration for x86_64 / AMD64 systems.
+# Copy to /etc/marlin/config.toml and edit as needed.
 # All settings have defaults; only override what you need.
 #
-# This file is tuned for ARM64 / Grace-Blackwell (GB10, GH200, GB200, DGX Spark).
-# For x86_64 / AMD64 systems, use marlin.toml.x86.example instead, which uses
-# the public vllm/vllm-openai image in place of the NGC ARM64 build.
+# The only required change from the ARM64 default is vllm_image (see [service] below).
+# On Grace-Blackwell / ARM64 systems, use marlin.toml.example instead.
 
 [behavior]
 switch_prompt             = true   # confirm before switching to a different model
@@ -37,13 +37,13 @@ nim_cache          = "/var/cache/nim"        # host path mounted into NIM contai
 # history_file     = "/var/lib/marlin/history.jsonl"
 
 [service]
-systemd_unit      = "marlin"                  # systemd unit managed by marlin start/stop/enable
-docker_container  = "marlin"                  # name given to managed NIM containers
-# vllm_image: NGC official ARM64/Blackwell build (default).
-# On x86_64, replace with: vllm_image = "vllm/vllm-openai:latest"
-vllm_image        = "nvcr.io/nvidia/vllm:26.05.post1-py3"
-# container_runtime = "docker"               # docker (default), podman, or containerd
-# container_socket  = ""                     # custom socket path; leave empty for auto-detect
+systemd_unit      = "marlin"                # systemd unit managed by marlin start/stop/enable
+docker_container  = "marlin"               # name given to managed NIM containers
+# Public Docker Hub image — works on x86_64/AMD64. No NGC login required.
+# On ARM64/Blackwell, use: vllm_image = "nvcr.io/nvidia/vllm:26.05.post1-py3"
+vllm_image        = "vllm/vllm-openai:latest"
+# container_runtime = "docker"             # docker (default), podman, or containerd
+# container_socket  = ""                   # custom socket path; leave empty for auto-detect
 
 [server]
 host        = "localhost"  # host where the inference API is listening

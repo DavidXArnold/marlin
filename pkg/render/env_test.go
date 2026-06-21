@@ -104,6 +104,19 @@ func TestEnvOmitsEmptyQuantization(t *testing.T) {
 	assert.NotContains(t, out, "--quantization")
 }
 
+func TestEnvNVFP4OmitsQuantizationFlag(t *testing.T) {
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{ID: "nvidia/Qwen3-32B-NVFP4"},
+		Serve: config.ServeConfig{
+			Quantization:         "nvfp4",
+			GPUMemoryUtilization: 0.90,
+		},
+	}
+
+	out := Env(m)
+	assert.NotContains(t, out, "--quantization", "nvfp4 is auto-detected; flag must not be emitted")
+}
+
 func TestEnvOmitsZeroMaxModelLen(t *testing.T) {
 	m := &config.ModelConfig{
 		Model: config.ModelMeta{ID: "some/model"},

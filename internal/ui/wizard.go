@@ -107,7 +107,7 @@ func (w wizardModel) currentPrompt() string {
 	case stepSlug:
 		return "Local slug (filename, no spaces):"
 	case stepQuantization:
-		return "Quantization (awq_marlin, fp8, gptq…):"
+		return "Quantization (awq_marlin, fp8, gptq, nvfp4…):"
 	case stepGPUMem:
 		return "GPU memory utilization (0.0–1.0):"
 	case stepMaxLen:

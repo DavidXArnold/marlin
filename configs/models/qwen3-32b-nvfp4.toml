@@ -1,0 +1,12 @@
+[model]
+id     = "nvidia/Qwen3-32B-NVFP4"
+type   = "vllm"
+status = "untested"
+notes  = "Qwen3 32B in NVFP4 precision. --quantization is omitted; vLLM auto-detects from model config."
+
+[serve]
+quantization           = "nvfp4"
+gpu_memory_utilization = 0.90
+max_model_len          = 32768
+served_model_name      = ["local", "qwen3-32b"]
+tool_call_parser       = "hermes"
