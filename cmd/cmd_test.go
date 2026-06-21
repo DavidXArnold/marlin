@@ -50,6 +50,8 @@ served_model_name = ["gn100"]
 		require.NoError(t, os.WriteFile(filepath.Join(modelsDir, slug+".toml"), []byte(content), 0o644))
 	}
 
+	nimCache := filepath.Join(dir, "nim-cache")
+
 	cfgContent := fmt.Sprintf(`[behavior]
 switch_prompt = false
 
@@ -58,6 +60,7 @@ models_dir = %q
 state_file = %q
 secrets_env = %q
 active_symlink = %q
+nim_cache = %q
 
 [server]
 alias = "gn100"
@@ -65,6 +68,7 @@ alias = "gn100"
 		filepath.Join(dir, "state.toml"),
 		filepath.Join(dir, "secrets.env"),
 		filepath.Join(dir, "model.env"),
+		nimCache,
 	)
 
 	cfgPath := filepath.Join(dir, "config.toml")
