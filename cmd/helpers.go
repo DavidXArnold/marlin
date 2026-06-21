@@ -14,6 +14,7 @@ import (
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/secrets"
+	"github.com/DavidXArnold/marlin/internal/smoke"
 	"github.com/DavidXArnold/marlin/internal/sysinfo"
 	"github.com/DavidXArnold/marlin/internal/ui"
 )
@@ -202,6 +203,21 @@ func humanDuration(d time.Duration) string {
 		return "1 day"
 	}
 	return fmt.Sprintf("%d days", days)
+}
+
+// smokeConfig converts BehaviorConfig smoke fields to a smoke.Config.
+func smokeConfig(cfg *config.Config) smoke.Config {
+	timeout := 30 * time.Second
+	if cfg.Behavior.SmokeTestTimeout != "" {
+		if d, err := time.ParseDuration(cfg.Behavior.SmokeTestTimeout); err == nil {
+			timeout = d
+		}
+	}
+	return smoke.Config{
+		Enabled: cfg.Behavior.SmokeTest,
+		Timeout: timeout,
+		Skip:    cfg.Behavior.SmokeTestSkip,
+	}
 }
 
 // checkSystemResources warns on stderr if the 1-minute load average exceeds

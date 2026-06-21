@@ -12,6 +12,7 @@ import (
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/service"
+	"github.com/DavidXArnold/marlin/internal/smoke"
 	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/vllm"
 )
@@ -106,6 +107,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 	p, buildErr := buildProvider(cur.ActiveProvider, cfg)
 	if buildErr == nil {
 		ok := startWaitForReadyFunc(cmd, cfg, cur.ActiveModel, p)
+		if ok && cfg.Behavior.SmokeTest {
+			smCfg := smokeConfig(cfg)
+			smokeCtx, smokeCancel := context.WithTimeout(cmd.Context(), smCfg.Timeout)
+			base := fmt.Sprintf("http://%s:%d", cfg.Server.Host, cfg.Server.Port)
+			smoke.Run(smokeCtx, base, smCfg, cmd.OutOrStdout())
+			smokeCancel()
+		}
 		if !ok && stdoutIsTerminal() {
 			w := cmd.OutOrStdout()
 			if confirmPrompt(w, startLogsPromptReader, "show logs? [y/N] ") {

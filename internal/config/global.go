@@ -50,7 +50,10 @@ type BehaviorConfig struct {
 	GlobalInstall             bool    `toml:"global_install"`
 	WarnOnSystemResources     bool    `toml:"warn_on_system_resources"`
 	SystemLoadThreshold       float64 `toml:"system_load_threshold"`
-	MaxRuntime                string  `toml:"max_runtime"` // e.g. "15m", "1h", "" = disabled
+	MaxRuntime                string   `toml:"max_runtime"`          // e.g. "15m", "1h", "" = disabled
+	SmokeTest                 bool     `toml:"smoke_test"`           // run API smoke test after ready
+	SmokeTestTimeout          string   `toml:"smoke_test_timeout"`   // default "30s"
+	SmokeTestSkip             []string `toml:"smoke_test_skip"`      // e.g. ["streaming","tool_call"]
 }
 
 // MaxRuntimeDuration parses MaxRuntime as a Go duration. Returns 0 if unset or invalid.
