@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/docker/docker/api/types/container"
@@ -121,7 +120,7 @@ func newNIMProviderWithClient(cfg *config.Config, ngcKey string, docker dockerCl
 		prepareCache: privilege.PromptAndPrepareNIMCache,
 		refreshPerms: privilege.RefreshNIMCachePerms,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
-			return config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
+			return config.ResolveModel(slug, cfg.Paths.ModelsDir, cfg.Paths.GlobalModelsDir)
 		},
 	}
 }

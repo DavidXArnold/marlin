@@ -29,14 +29,9 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	}
 
 	slug := args[0]
-	modelPath, err := config.FindModelPath(slug, effectiveDirs(cfg)...)
+	m, err := config.ResolveModel(slug, effectiveDirs(cfg)...)
 	if err != nil {
-		return fmt.Errorf("model %q not found", slug)
-	}
-
-	m, err := config.LoadModel(modelPath)
-	if err != nil {
-		return fmt.Errorf("loading model %q: %w", slug, err)
+		return fmt.Errorf("model %q: %w", slug, err)
 	}
 
 	issues := validate.Model(m, cfg.Server.Alias)

@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/DavidXArnold/marlin/internal/config"
@@ -54,7 +53,7 @@ func newContainerdNIMProviderWithRunner(cfg *config.Config, ngcKey string, runne
 		cmdOutput:    runner,
 		loginFunc:    nerdctlLogin,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
-			return config.LoadModel(filepath.Join(cfg.Paths.ModelsDir, slug+".toml"))
+			return config.ResolveModel(slug, cfg.Paths.ModelsDir, cfg.Paths.GlobalModelsDir)
 		},
 	}
 }

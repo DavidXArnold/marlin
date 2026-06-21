@@ -57,6 +57,16 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("listing models: %w", err)
 	}
 
+	// Filter abstract models out of the picker — they are base configs only.
+	concreteModels := models[:0:0]
+	concreteNames := names[:0:0]
+	for i, m := range models {
+		if !m.Model.Abstract {
+			concreteModels = append(concreteModels, models[i])
+			concreteNames = append(concreteNames, names[i])
+		}
+	}
+
 	// Load current state early so resolveModel can mark the active model.
 	cur, _ := state.Load(cfg.Paths.StateFile)
 
@@ -65,17 +75,12 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		query = args[0]
 	}
 
-	targetSlug, err := resolveModel(query, names, models, cur.ActiveModel, cur.ModelHistory)
+	targetSlug, err := resolveModel(query, concreteNames, concreteModels, cur.ActiveModel, cur.ModelHistory)
 	if err != nil {
 		return err
 	}
 
-	modelPath, err := config.FindModelPath(targetSlug, dirs...)
-	if err != nil {
-		return err
-	}
-
-	targetModel, err := config.LoadModel(modelPath)
+	targetModel, err := config.ResolveModel(targetSlug, dirs...)
 	if err != nil {
 		return err
 	}

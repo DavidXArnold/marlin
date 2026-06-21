@@ -38,11 +38,7 @@ func NewVLLMProvider(cfg *config.Config, dirs []string) *VLLMProvider {
 		svc: service.NewSystemdManager(cfg.Service.SystemdUnit),
 		w:   os.Stderr,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
-			path, err := config.FindModelPath(slug, dirs...)
-			if err != nil {
-				return nil, err
-			}
-			return config.LoadModel(path)
+			return config.ResolveModel(slug, dirs...)
 		},
 	}
 }

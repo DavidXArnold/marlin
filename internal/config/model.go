@@ -34,6 +34,8 @@ type ModelMeta struct {
 	Registry string       `toml:"registry"` // vLLM only: huggingface, ngc
 	Status   ModelStatus  `toml:"status"`
 	Notes    string       `toml:"notes"`
+	Extends  string       `toml:"extends"`  // slug of parent model to inherit from
+	Abstract bool         `toml:"abstract"` // hide from picker and list; use as base only
 }
 
 type ServeConfig struct {

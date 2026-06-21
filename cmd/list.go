@@ -45,15 +45,18 @@ func runList(cmd *cobra.Command, _ []string) error {
 
 	cur, _ := state.Load(cfg.Paths.StateFile)
 
-	items := make([]listItem, len(names))
+	var items []listItem
 	for i, slug := range names {
-		items[i] = listItem{
+		if models[i].Model.Abstract {
+			continue
+		}
+		items = append(items, listItem{
 			Slug:    slug,
 			Type:    string(models[i].Model.Type),
 			Status:  string(models[i].Model.Status),
 			ModelID: models[i].Model.ID,
 			Active:  slug == cur.ActiveModel,
-		}
+		})
 	}
 
 	w := cmd.OutOrStdout()
