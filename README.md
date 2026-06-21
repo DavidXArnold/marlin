@@ -4,19 +4,23 @@
 
 <h1 align="center">marlin</h1>
 
-<p align="center">An opinionated CLI for managing local LLM inference. Handles vLLM (systemd) and NIM (Docker/Podman/nerdctl) model switching, live health checks, hardware detection, and registry searches.</p>
+<p align="center">An opinionated CLI for managing local LLM inference. Handles vLLM (systemd), NIM (Docker/Podman/nerdctl), and llama.cpp/GGUF model switching, live health checks, hardware detection, and registry searches.</p>
 
 ## Features
 
-- **Two provider types** — `vllm` (systemd service + env-file symlink) and `nim` (NIM containers via Docker, Podman, or nerdctl)
-- **Interactive TUI** — fuzzy model picker, multi-step add wizard, and search result picker (bubbletea)
-- **Atomic symlink swap** — zero-gap `model.env` rotation for vLLM
+- **Three provider types** — `vllm` (systemd + env-file symlink), `nim` (NIM containers via Docker, Podman, or nerdctl), and `llamacpp` (llama-server via a dedicated systemd unit)
+- **Interactive TUI** — fuzzy model picker, multi-step add wizard, search result picker, and live `marlin top` dashboard (bubbletea)
+- **Atomic symlink swap** — zero-gap `model.env` rotation for vLLM and llama.cpp
 - **NIM container lifecycle** — pull, stop old, start new; host cache dir prepared with correct GID=0 permissions
+- **NIM digest pinning** — `marlin update` pulls the latest image, detects digest changes, and auto-switches when a new version lands
+- **Model config inheritance** — `extends = "slug"` to inherit shared settings; `abstract = true` hides base configs from the picker
+- **Quant advisor** — `marlin advise <model>` shows per-quantization VRAM estimates with GPU-fit indicators
+- **Benchmark suite** — `marlin bench` measures TTFT and decode throughput across multiple runs
 - **Registry search** — HuggingFace and NGC/NIM catalog with VRAM estimates and fit indicators
 - **Hardware detection** — GPU VRAM, compute capability, UMA/unified-memory architecture (GB10, GH200, GB200), RAM, disk; plus live power draw, temperature, and clock via nvidia-smi
 - **Validation** — quantization mismatch, GPU memory, served-model-name alias checks
 - **Privilege escalation** — prompts for `sudo` only when needed (like `systemctl`)
-- **State tracking** — persists active model, provider, and container ID
+- **State tracking** — persists active model, provider, container ID, and pinned digest
 - **Event history** — append-only JSONL log of every switch/stop event with elapsed times and session durations
 - **Environment health checks** — `marlin doctor` audits runtime, GPU, secrets, paths, disk, and config
 - **Disk reclamation** — `marlin prune` scans HuggingFace and NIM caches and removes stale data
@@ -91,6 +95,7 @@ NGC_API_KEY=nvapi-...
 | `state_file` | `~/.local/share/marlin/state.toml` | Active model, provider, and container ID |
 | `nim_cache` | `/var/cache/nim` | Host path mounted into NIM containers as model cache |
 | `history_file` | `~/.local/share/marlin/history.jsonl` | Append-only JSONL event log; auto-rotated at 50 MiB |
+| `llamacpp_env_file` | `/etc/marlin/llamacpp.env` | Symlink → active llama.cpp model's rendered env file |
 
 `models_dir`, `secrets_env`, and `state_file` default to user-local paths (no sudo required). Override to `/etc/marlin/…` or `/var/lib/marlin/…` for shared system deployments.
 
@@ -100,9 +105,10 @@ NGC_API_KEY=nvapi-...
 |---|---|---|
 | `systemd_unit` | `"marlin"` | Systemd unit name managed by `marlin start --enable` |
 | `docker_container` | `"marlin"` | Name given to managed NIM containers |
-| `vllm_image` | `"vllm/vllm-openai:latest"` | Docker image used for ad-hoc `marlin run` with vLLM |
+| `vllm_image` | `"nvcr.io/nvidia/vllm:26.05.post1-py3"` | Docker image used for ad-hoc `marlin run` with vLLM |
 | `container_runtime` | `"docker"` | Container runtime: `docker`, `podman`, or `containerd` |
 | `container_socket` | `""` | Custom socket path for Docker/Podman; empty = auto-detect |
+| `llamacpp_unit` | `"marlin-llamacpp"` | Systemd unit for llama-server (llamacpp provider) |
 
 ### `[server]`
 
@@ -165,9 +171,13 @@ health_path = "/v1/health/ready"   # NIM
 
 ### `marlin switch [model]`
 
-Switch the active inference model. Shows an interactive fuzzy picker when no argument is given. For vLLM: validates the config, renders the env file, atomically replaces the active symlink, and restarts the systemd unit. For NIM: prepares the host cache directory (sets GID=0 and group-write permissions), pulls the image, stops the old container, and starts a new one.
+Switch the active inference model. Shows an interactive fuzzy picker when no argument is given.
 
-Records `switch_start` and `switch_ready` events to the history log with elapsed time.
+- **vLLM**: validates the config, renders the env file, atomically replaces the active symlink, and restarts the systemd unit.
+- **NIM**: prepares the host cache directory (sets GID=0 and group-write permissions), pulls the image, stops the old container, and starts a new one. Stores the pinned image digest in state.
+- **llama.cpp**: renders the env file (`LLAMA_MODEL`, `LLAMA_NGL`, `LLAMA_CONTEXT`), updates the `llamacpp.env` symlink, and restarts the `marlin-llamacpp` unit.
+
+Records `switch_start` and `switch_ready` events to the history log with elapsed time. Abstract models (base configs with `abstract = true`) are hidden from the picker.
 
 ```bash
 marlin switch qwen25-72b-awq
@@ -372,6 +382,85 @@ nvidia/llama-3.1-nemotron-ultra-253b-v1              -            -         ?
 
 FIT legend: `✓` comfortable fit · `~` tight fit · `✗` exceeds free VRAM · `?` unknown
 
+### `marlin update [model]`
+
+Pull the latest NIM image for the active (or named) model, check whether the image digest has changed, and automatically switch to the new version if it has. Safe to run on a cron schedule.
+
+```bash
+marlin update                  # update active model
+marlin update llama-3.1-8b-nim # update a specific model
+```
+
+```
+pulling nvcr.io/nim/meta/llama-3.1-8b-instruct:latest ...
+digest changed (sha256:abc123... → sha256:def456...)
+switching to llama-3.1-8b-nim with new digest
+```
+
+If the digest is unchanged, prints "already up to date" and exits without switching.
+
+### `marlin top`
+
+Live bubbletea TUI dashboard showing GPU utilization, VRAM usage, power draw, temperature, and active model status. Refreshes every 2 seconds.
+
+```bash
+marlin top
+```
+
+```
+marlin top — llama-3.1-8b-nim (running)  q quit
+
+GPU[0]  NVIDIA H100 80GB HBM3  sm_9.0
+  vram  ████████████████████░░░░  74 / 80 GiB  92%
+  power 312 W / 700 W
+  temp  67 C  clock 1980 MHz
+```
+
+### `marlin bench`
+
+Benchmark the active model's inference performance — measures time-to-first-token (TTFT) and decode throughput across multiple runs.
+
+```bash
+marlin bench                              # single run, default prompt
+marlin bench --runs 5                     # 5 runs, report mean ± stddev
+marlin bench --prompt "Write a haiku"     # custom prompt
+marlin bench --max-tokens 200             # limit output tokens
+```
+
+```
+run 1/3  ttft 89ms   tokens 128  throughput 142 tok/s
+run 2/3  ttft 91ms   tokens 128  throughput 139 tok/s
+run 3/3  ttft 87ms   tokens 128  throughput 145 tok/s
+
+ttft     89.0ms ± 2.0ms
+tokens   128.0 ± 0.0
+tok/s    142.0 ± 3.1
+```
+
+### `marlin advise <model-id>`
+
+Estimate per-quantization VRAM requirements for a model and recommend the highest-quality option that fits your GPU.
+
+```bash
+marlin advise meta-llama/Llama-3.1-70B-Instruct
+marlin advise Qwen/Qwen2.5-72B --no-detect   # skip VRAM detection
+```
+
+```
+quant advisor: Llama-3.1-70B-Instruct  (70B params)
+available VRAM: 480 GiB
+
+QUANTIZATION    EST. VRAM   FITS?
+------------    ---------   -----
+fp16            156 GiB     ✓
+fp8             78 GiB      ✓
+nvfp4           39 GiB      ✓
+awq_marlin      39 GiB      ✓
+gptq            39 GiB      ✓
+
+recommendation: fp16 (full precision) — search HF: "Llama-3.1-70B-Instruct fp16"
+```
+
 ### `marlin rm <model>`
 
 Remove a model profile from `paths.models_dir`.
@@ -418,7 +507,7 @@ marlin completion fish   > ~/.config/fish/completions/marlin.fish
 
 Each model is a TOML file in `paths.models_dir`.
 
-vLLM model:
+### vLLM model
 
 ```toml
 [model]
@@ -435,7 +524,9 @@ served_model_name      = ["local", "qwen25-72b"]
 tool_call_parser       = "hermes"
 ```
 
-NIM model:
+**NVFP4 models**: set `quantization = "nvfp4"` but do not pass `--quantization` to vLLM — it is auto-detected from the model config. marlin omits the flag automatically.
+
+### NIM model
 
 ```toml
 [model]
@@ -458,6 +549,57 @@ Common NIM env vars:
 | `NIM_TENSOR_PARALLEL_SIZE=2` | Multi-GPU tensor parallelism |
 | `NIM_MAX_MODEL_LEN=8192` | Override max context length |
 | `NIM_KVCACHE_PERCENT=0.8` | KV cache memory fraction |
+
+### llama.cpp / GGUF model
+
+Requires a `marlin-llamacpp.service` systemd unit that reads `/etc/marlin/llamacpp.env` and runs `llama-server`:
+
+```ini
+[Service]
+EnvironmentFile=/etc/marlin/llamacpp.env
+ExecStart=llama-server -m ${LLAMA_MODEL} --ngl ${LLAMA_NGL} -c ${LLAMA_CONTEXT:-4096} --port 8080
+```
+
+```toml
+[model]
+id     = "bartowski/Llama-3.2-3B-Instruct-GGUF"
+type   = "llamacpp"
+status = "working"
+
+[serve]
+gguf_path    = "/var/cache/huggingface/hub/models--bartowski--Llama-3.2-3B-Instruct-GGUF/snapshots/latest/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+ngl          = 99        # GPU layers to offload; default 99 (all)
+context_size = 8192
+```
+
+`marlin switch` writes `LLAMA_MODEL`, `LLAMA_NGL`, and `LLAMA_CONTEXT` to `<models_dir>/<slug>.llamacpp.env`, updates the `paths.llamacpp_env_file` symlink, and restarts the `service.llamacpp_unit` systemd unit.
+
+### Config inheritance
+
+Use `extends` to share common settings across multiple model configs. The child wins on any field it sets; arrays replace (not append).
+
+```toml
+# base-llama3.toml
+[model]
+type     = "vllm"
+abstract = true   # hidden from picker and list; used as a base only
+
+[serve]
+gpu_memory_utilization = 0.90
+tool_call_parser       = "llama3_json"
+served_model_name      = ["local"]
+```
+
+```toml
+# llama-3.1-8b.toml
+[model]
+id      = "meta-llama/Llama-3.1-8B-Instruct"
+type    = "vllm"
+extends = "base-llama3"   # inherits gpu_memory_utilization and tool_call_parser
+
+[serve]
+max_model_len = 32768
+```
 
 ## NIM container requirements
 
@@ -493,22 +635,26 @@ MARLIN_TEST_HOST=localhost:8000 make integration
 ```
 cmd/                    Cobra commands
 internal/
-  config/               Global config + per-model TOML schema
+  advise/               Quant advisor (VRAM estimation, fit detection, recommendations)
+  bench/                Benchmark engine (TTFT + decode throughput, multi-run stats)
+  config/               Global config + per-model TOML schema (includes inheritance resolver)
   doctor/               Environment health checks (runtime, GPU, secrets, paths, disk)
   history/              Append-only JSONL event log with rotation
-  provider/             Provider interface + VLLMProvider + NIMProvider + ContainerdNIMProvider + AdhocRunner
+  provider/             Provider interface + VLLMProvider + NIMProvider + ContainerdNIMProvider + LlamaCppProvider + AdhocRunner
   service/              Systemd wrapper (enable, start, stop, logs)
   smoke/                Post-startup API smoke tests (completion, streaming, tool-call)
-  state/                Persistent active-model state
+  state/                Persistent active-model state (includes pinned_digest)
   sysinfo/              GPU (VRAM, compute cap, UMA detection, power/temp/clock), RAM, disk
+  top/                  bubbletea TUI dashboard (GPU/VRAM/power/temp live view)
   ui/                   bubbletea TUI (fuzzy picker, add wizard, search picker)
+  update/               NIM image digest comparison and auto-switch logic
   validate/             Model config validation
   registry/             HuggingFace + NGC registry clients
   secrets/              Dotenv secrets loader
   privilege/            Sudo escalation (file write, mkdir, NIM cache prep)
-  vllm/                 OpenAI-compatible health + model list client
+  vllm/                 OpenAI-compatible health, model list, and streaming client
 pkg/
-  render/               Env file renderer (model config → KEY=VALUE)
+  render/               Env file renderer (model config → KEY=VALUE for vLLM and llama.cpp)
 ```
 
 ## License
