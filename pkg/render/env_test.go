@@ -126,3 +126,37 @@ func TestEnvOmitsZeroMaxModelLen(t *testing.T) {
 	out := Env(m)
 	assert.NotContains(t, out, "--max-model-len")
 }
+
+func TestLlamaCppEnvBasic(t *testing.T) {
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{ID: "llama-3b", Type: config.ProviderLlamaCpp},
+		Serve: config.ServeConfig{
+			GGUFPath:    "/models/llama-3.2-3b-q4_k_m.gguf",
+			NGL:         99,
+			ContextSize: 4096,
+		},
+	}
+
+	out := LlamaCppEnv(m)
+	assert.Contains(t, out, "LLAMA_MODEL=/models/llama-3.2-3b-q4_k_m.gguf")
+	assert.Contains(t, out, "LLAMA_NGL=99")
+	assert.Contains(t, out, "LLAMA_CONTEXT=4096")
+}
+
+func TestLlamaCppEnvDefaultNGL(t *testing.T) {
+	m := &config.ModelConfig{
+		Serve: config.ServeConfig{GGUFPath: "/models/test.gguf"},
+	}
+
+	out := LlamaCppEnv(m)
+	assert.Contains(t, out, "LLAMA_NGL=99")
+}
+
+func TestLlamaCppEnvOmitsContextWhenZero(t *testing.T) {
+	m := &config.ModelConfig{
+		Serve: config.ServeConfig{GGUFPath: "/models/test.gguf", NGL: 35},
+	}
+
+	out := LlamaCppEnv(m)
+	assert.NotContains(t, out, "LLAMA_CONTEXT")
+}

@@ -66,13 +66,14 @@ func (b BehaviorConfig) MaxRuntimeDuration() time.Duration {
 }
 
 type PathsConfig struct {
-	ModelsDir       string `toml:"models_dir"`
-	GlobalModelsDir string `toml:"global_models_dir"`
-	ActiveSymlink   string `toml:"active_symlink"`
-	SecretsEnv      string `toml:"secrets_env"`
-	StateFile       string `toml:"state_file"`
-	NIMCache        string `toml:"nim_cache"`    // host path mounted into NIM containers
-	HistoryFile     string `toml:"history_file"` // append-only JSONL event log
+	ModelsDir          string `toml:"models_dir"`
+	GlobalModelsDir    string `toml:"global_models_dir"`
+	ActiveSymlink      string `toml:"active_symlink"`
+	SecretsEnv         string `toml:"secrets_env"`
+	StateFile          string `toml:"state_file"`
+	NIMCache           string `toml:"nim_cache"`           // host path mounted into NIM containers
+	HistoryFile        string `toml:"history_file"`        // append-only JSONL event log
+	LlamaCppEnvFile    string `toml:"llamacpp_env_file"`   // env file symlink for llama-server unit
 }
 
 type ServiceConfig struct {
@@ -81,6 +82,7 @@ type ServiceConfig struct {
 	ContainerRuntime string `toml:"container_runtime"` // "docker" (default), "podman", or "containerd"
 	ContainerSocket  string `toml:"container_socket"`  // optional custom socket path (docker/podman)
 	VLLMImage        string `toml:"vllm_image"`        // Docker image used for ad-hoc vLLM runs
+	LlamaCppUnit     string `toml:"llamacpp_unit"`     // systemd unit for llama-server
 }
 
 type ServerConfig struct {
@@ -132,11 +134,13 @@ func Defaults() *Config {
 			StateFile:       defaultStateFile(),
 			NIMCache:        "/var/cache/nim",
 			HistoryFile:     defaultHistoryFile(),
+			LlamaCppEnvFile: "/etc/marlin/llamacpp.env",
 		},
 		Service: ServiceConfig{
 			SystemdUnit:     "marlin",
 			DockerContainer: "marlin",
 			VLLMImage:       "nvcr.io/nvidia/vllm:26.05.post1-py3",
+			LlamaCppUnit:    "marlin-llamacpp",
 		},
 		Server: ServerConfig{
 			Host:       "localhost",

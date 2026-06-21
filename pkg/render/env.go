@@ -21,6 +21,26 @@ func Env(m *config.ModelConfig) string {
 	return b.String()
 }
 
+// LlamaCppEnv renders a ModelConfig to the .env format consumed by the
+// marlin-llamacpp systemd service (llama-server).
+func LlamaCppEnv(m *config.ModelConfig) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "LLAMA_MODEL=%s\n", m.Serve.GGUFPath)
+
+	ngl := m.Serve.NGL
+	if ngl <= 0 {
+		ngl = 99 // default: offload all layers to GPU
+	}
+	fmt.Fprintf(&b, "LLAMA_NGL=%d\n", ngl)
+
+	if m.Serve.ContextSize > 0 {
+		fmt.Fprintf(&b, "LLAMA_CONTEXT=%d\n", m.Serve.ContextSize)
+	}
+
+	return b.String()
+}
+
 func buildExtraArgs(m *config.ModelConfig) []string {
 	var args []string
 

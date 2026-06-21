@@ -76,6 +76,17 @@ func TestBuildProviderEmpty(t *testing.T) {
 	assert.NotNil(t, p)
 }
 
+func TestBuildProviderLlamaCpp(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+	cfg, err := globalConfig()
+	require.NoError(t, err)
+
+	p, err := buildProvider(config.ProviderLlamaCpp, cfg)
+	require.NoError(t, err)
+	assert.NotNil(t, p)
+}
+
 func TestBuildProviderUnknown(t *testing.T) {
 	cleanup := tempEnv(t)
 	defer cleanup()

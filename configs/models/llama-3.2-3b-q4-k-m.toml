@@ -1,0 +1,10 @@
+[model]
+id     = "bartowski/Llama-3.2-3B-Instruct-GGUF"
+type   = "llamacpp"
+status = "untested"
+notes  = "Llama 3.2 3B Instruct Q4_K_M GGUF — runs on CPU or GPU via llama-server."
+
+[serve]
+gguf_path    = "/var/cache/huggingface/hub/models--bartowski--Llama-3.2-3B-Instruct-GGUF/snapshots/latest/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+ngl          = 99
+context_size = 8192

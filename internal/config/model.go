@@ -18,8 +18,9 @@ const (
 	StatusBroken   ModelStatus = "broken"
 	StatusUntested ModelStatus = "untested"
 
-	ProviderVLLM ProviderType = "vllm"
-	ProviderNIM  ProviderType = "nim"
+	ProviderVLLM     ProviderType = "vllm"
+	ProviderNIM      ProviderType = "nim"
+	ProviderLlamaCpp ProviderType = "llamacpp"
 )
 
 type ModelConfig struct {
@@ -47,6 +48,11 @@ type ServeConfig struct {
 	ExtraFlags           []string `toml:"extra_flags"`   // vLLM: extra CLI flags passed to vllm serve
 	ExtraEnv             []string `toml:"extra_env"`     // NIM: extra KEY=VALUE env vars for the container
 	ExtraVolumes         []string `toml:"extra_volumes"` // NIM: extra /host:/container volume mounts
+
+	// llama.cpp-specific fields
+	GGUFPath    string `toml:"gguf_path"`    // path to the .gguf model file
+	NGL         int    `toml:"ngl"`          // GPU layers to offload (-ngl flag)
+	ContextSize int    `toml:"context_size"` // context window size (-c flag)
 }
 
 func LoadModel(path string) (*ModelConfig, error) {
