@@ -13,10 +13,14 @@
 - **Atomic symlink swap** — zero-gap `model.env` rotation for vLLM
 - **NIM container lifecycle** — pull, stop old, start new; host cache dir prepared with correct GID=0 permissions
 - **Registry search** — HuggingFace and NGC/NIM catalog with VRAM estimates and fit indicators
-- **Hardware detection** — GPU VRAM, compute capability, UMA/unified-memory architecture (GB10, GH200, GB200), RAM, disk
+- **Hardware detection** — GPU VRAM, compute capability, UMA/unified-memory architecture (GB10, GH200, GB200), RAM, disk; plus live power draw, temperature, and clock via nvidia-smi
 - **Validation** — quantization mismatch, GPU memory, served-model-name alias checks
 - **Privilege escalation** — prompts for `sudo` only when needed (like `systemctl`)
 - **State tracking** — persists active model, provider, and container ID
+- **Event history** — append-only JSONL log of every switch/stop event with elapsed times and session durations
+- **Environment health checks** — `marlin doctor` audits runtime, GPU, secrets, paths, disk, and config
+- **Disk reclamation** — `marlin prune` scans HuggingFace and NIM caches and removes stale data
+- **Post-start smoke tests** — optional completion/streaming/tool-call validation after the API becomes ready
 
 ## Installation
 
@@ -72,6 +76,9 @@ NGC_API_KEY=nvapi-...
 | `warn_on_system_resources` | `true` | Warn before switch if system load is high |
 | `system_load_threshold` | `0.8` | Load-average fraction that triggers the resource warning |
 | `max_runtime` | `""` | Auto-stop the model after this duration (e.g. `"2h"`, `"30m"`); empty = disabled |
+| `smoke_test` | `false` | Run API smoke tests (completion, streaming, tool-call) after startup |
+| `smoke_test_timeout` | `"30s"` | Timeout for the full smoke test suite |
+| `smoke_test_skip` | `[]` | Tests to skip; valid values: `"streaming"`, `"tool_call"` |
 
 ### `[paths]`
 
@@ -83,6 +90,7 @@ NGC_API_KEY=nvapi-...
 | `secrets_env` | `~/.config/marlin/secrets.env` | `HF_TOKEN` and `NGC_API_KEY` |
 | `state_file` | `~/.local/share/marlin/state.toml` | Active model, provider, and container ID |
 | `nim_cache` | `/var/cache/nim` | Host path mounted into NIM containers as model cache |
+| `history_file` | `~/.local/share/marlin/history.jsonl` | Append-only JSONL event log; auto-rotated at 50 MiB |
 
 `models_dir`, `secrets_env`, and `state_file` default to user-local paths (no sudo required). Override to `/etc/marlin/…` or `/var/lib/marlin/…` for shared system deployments.
 
@@ -145,7 +153,9 @@ marlin start -vvv               # stream container logs to stderr alongside the 
 marlin start --max-runtime 2h   # auto-stop after 2 hours
 ```
 
-After switching, `marlin start` polls `server.health_path` (default `/health`) until the API responds 200, showing a spinner. If the container exits early, the countdown stops immediately and you are offered to view the logs. Configure the health path for non-vLLM containers that use a different endpoint:
+After switching, `marlin start` polls `server.health_path` (default `/health`) until the API responds 200, showing a spinner. If `behavior.smoke_test = true`, a quick completion/streaming/tool-call validation runs immediately after the API becomes ready.
+
+Configure the health path for non-vLLM containers that use a different endpoint:
 
 ```toml
 [server]
@@ -156,6 +166,8 @@ health_path = "/v1/health/ready"   # NIM
 ### `marlin switch [model]`
 
 Switch the active inference model. Shows an interactive fuzzy picker when no argument is given. For vLLM: validates the config, renders the env file, atomically replaces the active symlink, and restarts the systemd unit. For NIM: prepares the host cache directory (sets GID=0 and group-write permissions), pulls the image, stops the old container, and starts a new one.
+
+Records `switch_start` and `switch_ready` events to the history log with elapsed time.
 
 ```bash
 marlin switch qwen25-72b-awq
@@ -173,16 +185,19 @@ marlin add Qwen/Qwen2.5-72B-Instruct-AWQ
 
 ### `marlin validate <model>`
 
-Run validation checks without switching. Warns on quantization mismatches, excessive GPU memory utilization, and served-model-name alias issues.
+Run validation checks without switching. Warns on quantization mismatches, excessive GPU memory utilization, and served-model-name alias issues. Use `--show-config` to render the equivalent `docker run` or systemd env-file command.
 
 ```bash
 marlin validate qwen25-72b-awq
 # [warn] serve.gpu_memory_utilization 0.970 is very high (>0.95)
+
+marlin validate llama-nim --show-config
+# docker run --rm --gpus all -p 8000:8000 ...
 ```
 
 ### `marlin status`
 
-Shows the active model, live container state (NIM), API health, and detected hardware. For NIM, when the API is not ready it shows the last container log line and a hint if an OOM or UMA failure pattern is detected.
+Shows the active model, live container state (NIM), API health, and detected hardware including GPU power draw, temperature, and clock (when nvidia-smi is available).
 
 ```
 active model : llama-3.1-8b-nim
@@ -191,6 +206,7 @@ container    : a1b2c3d4e5f6  (running)
 api health   : ready at http://127.0.0.1:8000/v1
 
 gpu[0]       : NVIDIA H100 80GB HBM3  vram 74 GiB free / 80 GiB total
+               power 312 W / 700 W  temp 67 C  clock 1980 MHz
 ram          : 220 GiB free / 256 GiB total
 disk (models)    : 1.2 TiB free / 2.0 TiB total
 disk (nim cache) : 800 GiB free / 2.0 TiB total
@@ -202,6 +218,85 @@ On Grace-Blackwell/unified-memory systems (GB10, GH200, GB200):
 gpu[0]       : NVIDIA GB10  unified memory (see RAM)  sm_121
                hint: add extra_env = ["NIM_PASSTHROUGH_ARGS=--gpu-memory-utilization 0.9"] if model OOMs
 ram          : 105 GiB free / 128 GiB total
+```
+
+### `marlin doctor`
+
+Runs a suite of environment health checks and reports results.
+
+```bash
+marlin doctor           # check only
+marlin doctor --fix     # auto-fix safe issues (file permissions, missing dirs)
+marlin doctor --fix --yes  # skip confirmation when fixing
+```
+
+```
+[PASS] config.loaded             /etc/marlin/config.toml
+[PASS] runtime.docker            docker 27.3.1
+[WARN] runtime.podman            not reachable
+       hint: install podman to use this container runtime
+[PASS] gpu.driver                driver 535.129.03
+[PASS] gpu.compute_cap           compute cap 9.0
+[WARN] secrets.hf_token_set      HF_TOKEN not set
+       hint: run 'marlin configure' to set your HuggingFace token
+[PASS] paths.models_dir          /home/user/.config/marlin/models
+[WARN] disk.models_dir           12 GiB free (want ≥50 GiB)
+
+3 PASS, 3 WARN, 0 FAIL
+```
+
+Checks: `config.loaded`, `runtime.docker/podman/nerdctl`, `gpu.driver`, `gpu.compute_cap`, `gpu.uma`, `secrets.file_exists/file_mode/hf_token_set/ngc_key_set`, `paths.models_dir/nim_cache/state_dir`, `disk.models_dir/nim_cache`.
+
+### `marlin history`
+
+Show the event log of switch and stop operations.
+
+```bash
+marlin history              # last 20 events
+marlin history --last 50    # last 50 events
+marlin history --slug qwen25-72b-awq  # filter by model
+marlin history --since 7d   # events in the last 7 days
+marlin history stats        # aggregate statistics
+```
+
+```
+TIME                  EVENT           SLUG                   ELAPSED/DURATION
+---------------------------------------------------------------------------
+2026-06-20 10:15:02   switch_start    qwen25-72b-awq
+2026-06-20 10:15:28   switch_ready    qwen25-72b-awq         26.1s
+2026-06-20 14:22:01   stop            qwen25-72b-awq         14817s
+```
+
+```bash
+marlin history stats
+total switches : 14
+unique models  : 3
+avg ready time : 24.3s
+avg session    : 2h 18m
+crashes        : 0
+```
+
+History is stored in `paths.history_file` (default `~/.local/share/marlin/history.jsonl`) and auto-rotated to `.1.gz` when it exceeds 50 MiB.
+
+### `marlin prune`
+
+Scan HuggingFace hub cache and NIM cache directories and report reclaimable disk space.
+
+```bash
+marlin prune                         # dry run — show what would be deleted
+marlin prune --apply                 # delete identified directories
+marlin prune --hf-cache /data/hf     # override HF cache location
+```
+
+```
+prune [DRY RUN]
+
+  hf-cache      2.3 GiB  /home/user/.cache/huggingface/hub/models--Qwen--Qwen2.5-7B
+  nim-cache    14.7 GiB  /var/cache/nim/llama-3.1-8b-instruct
+
+total reclaimable: 17.0 GiB
+
+run with --apply to delete
 ```
 
 ### `marlin logs [-f] [--lines N]`
@@ -236,11 +331,11 @@ llama-3.1-8b-nim     nim      running    8000   a1b2c3d4e5f6
 
 ### `marlin stop [model]`
 
-Stop and remove one or all ad-hoc containers started with `marlin run`.
+Stop the active managed model (or a specific ad-hoc container). Records a `stop` event with active session duration to the history log.
 
 ```bash
-marlin stop llama-3.1-8b-nim  # stop a specific model
-marlin stop                    # stop all marlin-managed containers
+marlin stop                    # stop active model or all ad-hoc containers
+marlin stop llama-3.1-8b-nim  # stop a specific model/container
 ```
 
 ### `marlin search <query>`
@@ -291,6 +386,22 @@ Open a model profile in `$EDITOR` (falls back to `vi`).
 
 ```bash
 marlin edit qwen25-72b-awq
+```
+
+### `marlin install`
+
+Install the vLLM systemd unit file. Run once before using `marlin start --enable` for boot-time autostart.
+
+```bash
+marlin install
+```
+
+### `marlin restart`
+
+Restart the active managed model's service without switching models.
+
+```bash
+marlin restart
 ```
 
 ### `marlin completion`
@@ -383,15 +494,18 @@ MARLIN_TEST_HOST=localhost:8000 make integration
 cmd/                    Cobra commands
 internal/
   config/               Global config + per-model TOML schema
+  doctor/               Environment health checks (runtime, GPU, secrets, paths, disk)
+  history/              Append-only JSONL event log with rotation
   provider/             Provider interface + VLLMProvider + NIMProvider + ContainerdNIMProvider + AdhocRunner
   service/              Systemd wrapper (enable, start, stop, logs)
+  smoke/                Post-startup API smoke tests (completion, streaming, tool-call)
   state/                Persistent active-model state
+  sysinfo/              GPU (VRAM, compute cap, UMA detection, power/temp/clock), RAM, disk
   ui/                   bubbletea TUI (fuzzy picker, add wizard, search picker)
   validate/             Model config validation
   registry/             HuggingFace + NGC registry clients
   secrets/              Dotenv secrets loader
   privilege/            Sudo escalation (file write, mkdir, NIM cache prep)
-  sysinfo/              GPU (VRAM, compute cap, UMA detection), RAM, disk
   vllm/                 OpenAI-compatible health + model list client
 pkg/
   render/               Env file renderer (model config → KEY=VALUE)
