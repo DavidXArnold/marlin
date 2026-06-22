@@ -19,7 +19,7 @@
 - **Registry search** — HuggingFace and NGC/NIM catalog with VRAM estimates and fit indicators
 - **Hardware detection** — GPU VRAM, compute capability, UMA/unified-memory architecture (GB10, GH200, GB200), RAM, disk; plus live power draw, temperature, and clock via nvidia-smi
 - **Validation** — quantization mismatch, GPU memory, served-model-name alias checks
-- **Privilege escalation** — prompts for `sudo` only when needed (like `systemctl`)
+- **Privilege escalation** — prompts for `sudo` only when needed
 - **State tracking** — persists active model, provider, container ID, and pinned digest
 - **Event history** — append-only JSONL log of every switch/stop event with elapsed times and session durations
 - **Environment health checks** — `marlin doctor` audits runtime, GPU, secrets, paths, disk, and config
@@ -173,7 +173,7 @@ health_path = "/v1/health/ready"   # NIM
 
 Switch the active inference model. Shows an interactive fuzzy picker when no argument is given.
 
-- **vLLM**: validates the config, renders the env file, atomically replaces the active symlink, and restarts the systemd unit.
+- **vLLM**: validates the config, renders the env file (including `HF_TOKEN` from secrets when configured), atomically replaces the active symlink, and restarts the systemd unit.
 - **NIM**: prepares the host cache directory (sets GID=0 and group-write permissions), pulls the image, stops the old container, and starts a new one. Stores the pinned image digest in state.
 - **llama.cpp**: renders the env file (`LLAMA_MODEL`, `LLAMA_NGL`, `LLAMA_CONTEXT`), updates the `llamacpp.env` symlink, and restarts the `marlin-llamacpp` unit.
 
@@ -195,11 +195,17 @@ marlin add Qwen/Qwen2.5-72B-Instruct-AWQ
 
 ### `marlin validate <model>`
 
-Run validation checks without switching. Warns on quantization mismatches, excessive GPU memory utilization, and served-model-name alias issues. Use `--show-config` to render the equivalent `docker run` or systemd env-file command.
+Run validation checks without switching. Warns on quantization mismatches, excessive GPU memory utilization, and served-model-name alias issues. Use `--show-config` to render the full runtime config: env file content and systemd ExecStart for vLLM, or equivalent `docker run` for NIM.
 
 ```bash
 marlin validate qwen25-72b-awq
 # [warn] serve.gpu_memory_utilization 0.970 is very high (>0.95)
+
+marlin validate qwen3-32b-nvfp4 --show-config
+# === env file (/etc/marlin/models/qwen3-32b-nvfp4.env) ===
+# VLLM_MODEL=nvidia/Qwen3-32B-NVFP4
+# HF_TOKEN=*** (from secrets)
+# VLLM_EXTRA_ARGS=--enable-auto-tool-choice --tool-call-parser hermes ...
 
 marlin validate llama-nim --show-config
 # docker run --rm --gpus all -p 8000:8000 ...
@@ -327,7 +333,7 @@ marlin run llama-3.1-8b-nim           # foreground — streams logs, Ctrl-C stop
 marlin run llama-3.1-8b-nim -d        # background — returns immediately
 ```
 
-The vLLM image used for ad-hoc runs is configurable via `service.vllm_image` (default: `vllm/vllm-openai:latest`).
+The vLLM image used for ad-hoc runs is configurable via `service.vllm_image` (default: `nvcr.io/nvidia/vllm:26.05.post1-py3`).
 
 ### `marlin ps`
 
@@ -513,18 +519,22 @@ Each model is a TOML file in `paths.models_dir`.
 [model]
 id     = "Qwen/Qwen2.5-72B-Instruct-AWQ"
 type   = "vllm"
+image  = "nvcr.io/nvidia/vllm:26.05.post1-py3"   # optional; overrides service.vllm_image
 status = "working"
 notes  = "Best for tool-calling"
 
 [serve]
 quantization           = "awq_marlin"
-gpu_memory_utilization = 0.90
+gpu_memory_utilization = 0.824
 max_model_len          = 131072
-served_model_name      = ["local", "qwen25-72b"]
+served_model_name      = ["local", "gn100", "qwen25-72b"]
 tool_call_parser       = "hermes"
+trust_remote_code      = false   # set true for models requiring --trust-remote-code (e.g. Qwen2.5-VL)
 ```
 
-**NVFP4 models**: set `quantization = "nvfp4"` but do not pass `--quantization` to vLLM — it is auto-detected from the model config. marlin omits the flag automatically.
+`HF_TOKEN` is read from `paths.secrets_env` and written into the rendered env file automatically — no manual wiring needed.
+
+**NVFP4 models**: do not set `quantization = "nvfp4"` — vLLM auto-detects NVFP4 from the model config and does not accept `--quantization nvfp4` on the command line. The bundled profiles omit the field entirely. If you do set it, marlin silently drops it from the generated args.
 
 ### NIM model
 
