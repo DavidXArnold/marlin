@@ -1,12 +1,12 @@
 [model]
-id     = "nvidia/Llama-3.1-8B-Instruct-NVFP4"
-type   = "vllm"
-status = "untested"
-notes  = "Llama 3.1 8B Instruct in NVFP4 precision. --quantization is omitted; vLLM auto-detects from model config."
+  type   = "vllm"
+  id     = "nvidia/Llama-3.1-8B-Instruct-NVFP4"
+  image  = "nvcr.io/nvidia/vllm:26.05.post1-py3"
+  status = "untested"
+  notes  = "Llama 3.1 8B Instruct NVFP4. --quantization omitted; vLLM auto-detects."
 
 [serve]
-quantization           = "nvfp4"
-gpu_memory_utilization = 0.90
-max_model_len          = 32768
-served_model_name      = ["local", "llama-3.1-8b"]
-tool_call_parser       = "llama3_json"
+  tool_call_parser       = "llama3_json"
+  served_model_name      = ["local", "gn100", "llama-3.1-8b"]
+  gpu_memory_utilization = 0.824
+  max_model_len          = 131072

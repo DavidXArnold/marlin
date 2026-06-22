@@ -23,7 +23,7 @@ func TestInspectVLLMIdentity(t *testing.T) {
 	m.Model.Status = "untested"
 	m.Serve.GPUMemoryUtilization = 0.9
 
-	out := Inspect(m, baseConfig())
+	out := Inspect(m, baseConfig(), "test-slug", "")
 
 	if !strings.Contains(out, "meta-llama/Llama-3-8b") {
 		t.Errorf("expected model id in output, got:\n%s", out)
@@ -45,7 +45,7 @@ func TestInspectVLLMEnvSection(t *testing.T) {
 	m.Model.Type = config.ProviderVLLM
 	m.Model.Status = "untested"
 
-	out := Inspect(m, baseConfig())
+	out := Inspect(m, baseConfig(), "test-slug", "")
 
 	if !strings.Contains(out, "=== env file") {
 		t.Errorf("expected env file section, got:\n%s", out)
@@ -69,12 +69,59 @@ func TestInspectVLLMServeFlags(t *testing.T) {
 	m.Serve.MaxModelLen = 4096
 	m.Serve.ExtraFlags = []string{"--disable-log-requests"}
 
-	out := Inspect(m, baseConfig())
+	out := Inspect(m, baseConfig(), "test-slug", "")
 
 	for _, want := range []string{"0.850", "alias1, alias2", "awq", "4096", "--disable-log-requests"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected %q in output, got:\n%s", want, out)
 		}
+	}
+}
+
+func TestInspectVLLMHFTokenPlaceholder(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.ID = "meta-llama/Llama-3.1-8B-Instruct"
+	m.Model.Type = config.ProviderVLLM
+	m.Model.Status = "untested"
+
+	// With a token: placeholder shown.
+	out := Inspect(m, baseConfig(), "llama-3.1-8b", "hf_secret")
+	if !strings.Contains(out, "HF_TOKEN=*** (from secrets)") {
+		t.Errorf("expected HF_TOKEN placeholder, got:\n%s", out)
+	}
+
+	// Without a token: no placeholder.
+	out = Inspect(m, baseConfig(), "llama-3.1-8b", "")
+	if strings.Contains(out, "HF_TOKEN") {
+		t.Errorf("expected no HF_TOKEN line, got:\n%s", out)
+	}
+}
+
+func TestInspectVLLMSlugInEnvPath(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.ID = "test/model"
+	m.Model.Type = config.ProviderVLLM
+	m.Model.Status = "untested"
+
+	out := Inspect(m, baseConfig(), "my-actual-slug", "")
+	if !strings.Contains(out, "my-actual-slug.env") {
+		t.Errorf("expected slug in env file path, got:\n%s", out)
+	}
+	if strings.Contains(out, "/slug.env") {
+		t.Errorf("expected literal 'slug' to be replaced, got:\n%s", out)
+	}
+}
+
+func TestInspectVLLMTrustRemoteCode(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.ID = "some/model"
+	m.Model.Type = config.ProviderVLLM
+	m.Model.Status = "untested"
+	m.Serve.TrustRemoteCode = true
+
+	out := Inspect(m, baseConfig(), "some-model", "")
+	if !strings.Contains(out, "trust_remote_code") {
+		t.Errorf("expected trust_remote_code in output, got:\n%s", out)
 	}
 }
 
@@ -85,7 +132,7 @@ func TestInspectNIMIdentity(t *testing.T) {
 	m.Model.Type = config.ProviderNIM
 	m.Model.Status = "untested"
 
-	out := Inspect(m, baseConfig())
+	out := Inspect(m, baseConfig(), "test-slug", "")
 
 	if !strings.Contains(out, "nim") {
 		t.Errorf("expected type 'nim' in output, got:\n%s", out)
@@ -109,7 +156,7 @@ func TestInspectNIMVolumesAndEnv(t *testing.T) {
 	m.Serve.ExtraVolumes = []string{"/data/models:/models"}
 	m.Serve.ExtraEnv = []string{"EXTRA_VAR=val"}
 
-	out := Inspect(m, baseConfig())
+	out := Inspect(m, baseConfig(), "test-slug", "")
 
 	if !strings.Contains(out, "/data/models:/models") {
 		t.Errorf("expected extra volume, got:\n%s", out)
@@ -131,7 +178,7 @@ func TestInspectNIMDockerRunPort(t *testing.T) {
 	cfg := baseConfig()
 	cfg.Server.Port = 9000
 
-	out := Inspect(m, cfg)
+	out := Inspect(m, cfg, "test-slug", "")
 
 	if !strings.Contains(out, "9000:8000") {
 		t.Errorf("expected port mapping 9000:8000, got:\n%s", out)

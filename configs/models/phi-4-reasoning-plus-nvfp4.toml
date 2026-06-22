@@ -1,11 +1,12 @@
 [model]
-id     = "nvidia/Phi-4-reasoning-plus-NVFP4"
-type   = "vllm"
-status = "untested"
-notes  = "Phi-4 reasoning+ 14B in NVFP4 precision. --quantization is omitted; vLLM auto-detects from model config."
+  type   = "vllm"
+  id     = "nvidia/Phi-4-reasoning-plus-NVFP4"
+  image  = "nvcr.io/nvidia/vllm:26.05.post1-py3"
+  status = "untested"
+  notes  = "Phi-4 reasoning+ 14B NVFP4. Reasoning model — consider max_model_len >= 131072 for long chains. --quantization omitted; vLLM auto-detects."
 
 [serve]
-quantization           = "nvfp4"
-gpu_memory_utilization = 0.90
-max_model_len          = 32768
-served_model_name      = ["local", "phi-4-reasoning-plus"]
+  tool_call_parser       = "hermes"
+  served_model_name      = ["local", "gn100", "phi-4-reasoning"]
+  gpu_memory_utilization = 0.824
+  max_model_len          = 131072

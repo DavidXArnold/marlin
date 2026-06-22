@@ -1,11 +1,12 @@
 [model]
-id     = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
-type   = "vllm"
-status = "untested"
-notes  = "Nemotron Super 120B MoE with 12B active params in NVFP4. --quantization is omitted; vLLM auto-detects from model config."
+  type   = "vllm"
+  id     = "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
+  image  = "nvcr.io/nvidia/vllm:26.05.post1-py3"
+  status = "untested"
+  notes  = "Nemotron Super 120B MoE (12B active) NVFP4. Verify fits within 128 GiB UMA at 0.824 util. --quantization omitted; vLLM auto-detects."
 
 [serve]
-quantization           = "nvfp4"
-gpu_memory_utilization = 0.90
-max_model_len          = 32768
-served_model_name      = ["local", "nemotron-super-120b"]
+  tool_call_parser       = "hermes"
+  served_model_name      = ["local", "gn100", "nemotron-120b"]
+  gpu_memory_utilization = 0.824
+  max_model_len          = 131072

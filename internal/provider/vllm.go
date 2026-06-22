@@ -27,16 +27,19 @@ type VLLMProvider struct {
 	cfg       *config.Config
 	svc       *service.SystemdManager
 	w         io.Writer // for privilege prompts; defaults to os.Stderr
+	hfToken   string    // injected into the env file so vLLM can pull gated HF models
 	loadModel func(slug string) (*config.ModelConfig, error)
 }
 
 // NewVLLMProvider builds a VLLMProvider that searches dirs for model configs.
 // dirs should be ordered by preference (user dir first, then global dir).
-func NewVLLMProvider(cfg *config.Config, dirs []string) *VLLMProvider {
+// hfToken is written to the env file as HF_TOKEN when non-empty.
+func NewVLLMProvider(cfg *config.Config, dirs []string, hfToken string) *VLLMProvider {
 	return &VLLMProvider{
-		cfg: cfg,
-		svc: service.NewSystemdManager(cfg.Service.SystemdUnit),
-		w:   os.Stderr,
+		cfg:     cfg,
+		svc:     service.NewSystemdManager(cfg.Service.SystemdUnit),
+		w:       os.Stderr,
+		hfToken: hfToken,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
 			return config.ResolveModel(slug, dirs...)
 		},
@@ -50,7 +53,7 @@ func (v *VLLMProvider) Switch(ctx context.Context, modelSlug string) error {
 	}
 
 	envPath := filepath.Join(v.cfg.Paths.ModelsDir, modelSlug+".env")
-	envContent := []byte(render.Env(m))
+	envContent := []byte(render.Env(m, v.hfToken))
 
 	written, err := privilege.PromptAndWriteFile(v.w, filepath.Dir(envPath), envPath, envContent)
 	if err != nil {

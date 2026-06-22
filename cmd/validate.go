@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/secrets"
 	"github.com/DavidXArnold/marlin/internal/validate"
 	"github.com/DavidXArnold/marlin/pkg/render"
 )
@@ -51,7 +52,8 @@ func runValidate(cmd *cobra.Command, args []string) error {
 
 	showConfig, _ := cmd.Flags().GetBool("show-config")
 	if showConfig {
-		_, err = fmt.Fprint(w, render.Inspect(m, cfg))
+		sec, _ := secrets.Load(cfg.Paths.SecretsEnv)
+		_, err = fmt.Fprint(w, render.Inspect(m, cfg, slug, sec["HF_TOKEN"]))
 	}
 	return err
 }

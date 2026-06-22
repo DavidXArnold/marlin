@@ -11,7 +11,10 @@ import (
 // will be used when the model is started. For vLLM this includes the env file
 // content and the systemd ExecStart line. For NIM it includes the container
 // image, ports, volumes, and environment.
-func Inspect(m *config.ModelConfig, cfg *config.Config) string {
+//
+// slug is the model's config file stem (used in file path display).
+// hfToken is shown as a placeholder when non-empty; the actual token is not printed.
+func Inspect(m *config.ModelConfig, cfg *config.Config, slug, hfToken string) string {
 	var b strings.Builder
 
 	writef := func(format string, args ...any) {
@@ -31,7 +34,7 @@ func Inspect(m *config.ModelConfig, cfg *config.Config) string {
 
 	switch m.Model.Type {
 	case config.ProviderVLLM:
-		inspectVLLM(&b, m, cfg)
+		inspectVLLM(&b, m, cfg, slug, hfToken)
 	case config.ProviderNIM:
 		inspectNIM(&b, m, cfg)
 	}
@@ -39,7 +42,7 @@ func Inspect(m *config.ModelConfig, cfg *config.Config) string {
 	return b.String()
 }
 
-func inspectVLLM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config) {
+func inspectVLLM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config, slug, hfToken string) {
 	writef := func(format string, args ...any) { fmt.Fprintf(b, format, args...) }
 
 	writef("\n=== serve flags ===\n")
@@ -59,12 +62,18 @@ func inspectVLLM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config) 
 	if m.Serve.MaxModelLen > 0 {
 		writef("max_model_len         : %d\n", m.Serve.MaxModelLen)
 	}
+	if m.Serve.TrustRemoteCode {
+		writef("trust_remote_code     : true\n")
+	}
 	if len(m.Serve.ExtraFlags) > 0 {
 		writef("extra_flags           : %s\n", strings.Join(m.Serve.ExtraFlags, " "))
 	}
 
-	writef("\n=== env file (%s/%s.env) ===\n", cfg.Paths.ModelsDir, "slug")
-	writef("%s", Env(m))
+	writef("\n=== env file (%s/%s.env) ===\n", cfg.Paths.ModelsDir, slug)
+	writef("%s", Env(m, ""))
+	if hfToken != "" {
+		writef("HF_TOKEN=*** (from secrets)\n")
+	}
 
 	writef("\n=== systemd ExecStart ===\n")
 	writef("/bin/bash -c 'exec vllm serve \"$VLLM_MODEL\" --host %s --port %d ${VLLM_EXTRA_ARGS:-}'\n",

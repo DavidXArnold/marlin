@@ -73,7 +73,11 @@ func globalConfig() (*config.Config, error) {
 var buildProvider = func(pt config.ProviderType, cfg *config.Config) (provider.Provider, error) {
 	switch pt {
 	case config.ProviderVLLM, "":
-		return provider.NewVLLMProvider(cfg, effectiveDirs(cfg)), nil
+		sec, err := secrets.Load(cfg.Paths.SecretsEnv)
+		if err != nil {
+			return nil, fmt.Errorf("loading secrets: %w", err)
+		}
+		return provider.NewVLLMProvider(cfg, effectiveDirs(cfg), sec["HF_TOKEN"]), nil
 	case config.ProviderNIM:
 		sec, err := secrets.Load(cfg.Paths.SecretsEnv)
 		if err != nil {

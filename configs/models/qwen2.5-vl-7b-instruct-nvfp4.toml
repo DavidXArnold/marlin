@@ -1,11 +1,13 @@
 [model]
-id     = "nvidia/Qwen2.5-VL-7B-Instruct-NVFP4"
-type   = "vllm"
-status = "untested"
-notes  = "Qwen2.5 VL 7B vision-language model in NVFP4 precision. --quantization is omitted; vLLM auto-detects from model config."
+  type   = "vllm"
+  id     = "nvidia/Qwen2.5-VL-7B-Instruct-NVFP4"
+  image  = "nvcr.io/nvidia/vllm:26.05.post1-py3"
+  status = "untested"
+  notes  = "Qwen2.5 VL 7B vision-language NVFP4. Requires trust_remote_code. --quantization omitted; vLLM auto-detects."
 
 [serve]
-quantization           = "nvfp4"
-gpu_memory_utilization = 0.90
-max_model_len          = 32768
-served_model_name      = ["local", "qwen2.5-vl-7b"]
+  tool_call_parser       = "hermes"
+  served_model_name      = ["local", "gn100", "qwen2.5-vl-7b"]
+  gpu_memory_utilization = 0.824
+  max_model_len          = 131072
+  trust_remote_code      = true

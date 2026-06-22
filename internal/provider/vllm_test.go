@@ -28,7 +28,7 @@ func testVLLMProvider(t *testing.T, execRunner service.ExecRunner) (*VLLMProvide
 	cfg.Paths.ActiveSymlink = filepath.Join(dir, "model.env")
 	cfg.Service.SystemdUnit = "vllm-test"
 
-	p := NewVLLMProvider(cfg, []string{modelsDir})
+	p := NewVLLMProvider(cfg, []string{modelsDir}, "")
 	p.svc = service.NewSystemdManagerWithRunner("vllm-test", execRunner)
 	p.w = io.Discard // suppress privilege prompts in tests
 	return p, dir

@@ -53,6 +53,9 @@ type ServeConfig struct {
 	GGUFPath    string `toml:"gguf_path"`    // path to the .gguf model file
 	NGL         int    `toml:"ngl"`          // GPU layers to offload (-ngl flag)
 	ContextSize int    `toml:"context_size"` // context window size (-c flag)
+
+	// vLLM optional flags
+	TrustRemoteCode bool `toml:"trust_remote_code"` // pass --trust-remote-code to vllm serve
 }
 
 func LoadModel(path string) (*ModelConfig, error) {

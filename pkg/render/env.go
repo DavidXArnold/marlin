@@ -8,10 +8,15 @@ import (
 )
 
 // Env renders a ModelConfig to the .env format consumed by the vLLM systemd service.
-func Env(m *config.ModelConfig) string {
+// hfToken is written as HF_TOKEN when non-empty, so vLLM can pull gated HF models.
+func Env(m *config.ModelConfig, hfToken string) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "VLLM_MODEL=%s\n", m.Model.ID)
+
+	if hfToken != "" {
+		fmt.Fprintf(&b, "HF_TOKEN=%s\n", hfToken)
+	}
 
 	args := buildExtraArgs(m)
 	if len(args) > 0 {
@@ -64,6 +69,10 @@ func buildExtraArgs(m *config.ModelConfig) []string {
 
 	if m.Serve.MaxModelLen > 0 {
 		args = append(args, fmt.Sprintf("--max-model-len %d", m.Serve.MaxModelLen))
+	}
+
+	if m.Serve.TrustRemoteCode {
+		args = append(args, "--trust-remote-code")
 	}
 
 	args = append(args, m.Serve.ExtraFlags...)

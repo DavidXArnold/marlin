@@ -50,7 +50,7 @@ func TestEnvSingleLineExtraArgs(t *testing.T) {
 			MaxModelLen:          131072,
 		},
 	}
-	out := Env(m)
+	out := Env(m, "")
 	// All args must appear on a single VLLM_EXTRA_ARGS line (no backslash continuation).
 	for _, line := range splitLines(out) {
 		if len(line) > 15 && line[:15] == "VLLM_EXTRA_ARGS" {
