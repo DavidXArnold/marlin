@@ -52,7 +52,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	enable, _ := cmd.Flags().GetBool("enable")
 
 	unitPath := installUnitPathFunc(cfg)
-	unitContent := []byte(render.SystemdUnit(cfg))
+	vllmBin, found := render.ResolveVLLMBin(cfg.Service.VLLMBin)
+	if !found {
+		_, _ = fmt.Fprintf(w, "warning: vllm not found in PATH — unit will use bare name %q\n", vllmBin)
+		_, _ = fmt.Fprintln(w, "  set service.vllm_bin in config.toml to the full path if vllm is in a venv")
+	} else {
+		_, _ = fmt.Fprintf(w, "using vllm binary: %s\n", vllmBin)
+	}
+	unitContent := []byte(render.SystemdUnit(cfg, vllmBin))
 
 	// Warn if the unit file already exists.
 	if !force {

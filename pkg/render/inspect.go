@@ -75,9 +75,10 @@ func inspectVLLM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config, 
 		writef("HF_TOKEN=*** (from secrets)\n")
 	}
 
+	vllmBin, _ := ResolveVLLMBin(cfg.Service.VLLMBin)
 	writef("\n=== systemd ExecStart ===\n")
-	writef("/bin/bash -c 'exec vllm serve \"$VLLM_MODEL\" --host %s --port %d ${VLLM_EXTRA_ARGS:-}'\n",
-		cfg.Server.Host, cfg.Server.Port)
+	writef("/bin/bash -c 'exec %s serve \"$VLLM_MODEL\" --host %s --port %d ${VLLM_EXTRA_ARGS:-}'\n",
+		vllmBin, cfg.Server.Host, cfg.Server.Port)
 }
 
 func inspectNIM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config) {

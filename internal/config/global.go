@@ -83,6 +83,7 @@ type ServiceConfig struct {
 	ContainerSocket  string `toml:"container_socket"`  // optional custom socket path (docker/podman)
 	VLLMImage        string `toml:"vllm_image"`        // Docker image used for ad-hoc vLLM runs
 	LlamaCppUnit     string `toml:"llamacpp_unit"`     // systemd unit for llama-server
+	VLLMBin          string `toml:"vllm_bin"`          // full path to vllm binary; empty = auto-detect at install time
 }
 
 type ServerConfig struct {
