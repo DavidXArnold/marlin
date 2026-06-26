@@ -63,6 +63,34 @@ type ServeConfig struct {
 
 	// vLLM optional flags
 	TrustRemoteCode bool `toml:"trust_remote_code"` // pass --trust-remote-code to vllm serve
+
+	// Health check endpoint override. When empty, DefaultHealthPath(provider) is used.
+	HealthPath string `toml:"health_path"`
+}
+
+// DefaultHealthPath returns the well-known health endpoint for a provider type.
+// NIM containers expose /v1/health/live; everything else uses /health.
+func DefaultHealthPath(t ProviderType) string {
+	if t == ProviderNIM {
+		return "/v1/health/live"
+	}
+	return "/health"
+}
+
+// EffectiveHealthPath returns the health endpoint to use for m.
+// Priority: model-explicit health_path > provider default > fallback.
+// fallback is used only when m is nil (no active model loaded).
+func EffectiveHealthPath(m *ModelConfig, fallback string) string {
+	if m == nil {
+		if fallback != "" {
+			return fallback
+		}
+		return "/health"
+	}
+	if m.Serve.HealthPath != "" {
+		return m.Serve.HealthPath
+	}
+	return DefaultHealthPath(m.Model.Type)
 }
 
 // IsBundled reports whether slug names a bundled model profile embedded in the binary.

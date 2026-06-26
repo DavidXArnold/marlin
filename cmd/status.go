@@ -47,6 +47,9 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 
+		// Load model config to pick the right health endpoint for this provider.
+		activeM, _ := config.ResolveModel(cur.ActiveModel, effectiveDirs(cfg)...)
+
 		// Live status from the provider (works for all provider types).
 		var liveStatus *provider.Status
 		if p, err := buildProvider(cur.ActiveProvider, cfg); err == nil {
@@ -94,7 +97,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		// the API state and last log lines to help diagnose the failure.
 		deliberatelyStopped := cur.StoppedAt != nil && notRunning
 		if !deliberatelyStopped {
-			client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", cfg.Server.HealthPath)
+			client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", config.EffectiveHealthPath(activeM, cfg.Server.HealthPath))
 			health, healthErr := client.Health(cmd.Context())
 			apiReady := healthErr == nil && health.Ready
 			if healthErr != nil {

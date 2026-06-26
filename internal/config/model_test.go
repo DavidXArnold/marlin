@@ -199,6 +199,34 @@ func TestModelConfigToBytes(t *testing.T) {
 	assert.Contains(t, string(b), "meta/llama-3.1-8b")
 }
 
+func TestDefaultHealthPath(t *testing.T) {
+	assert.Equal(t, "/v1/health/live", DefaultHealthPath(ProviderNIM))
+	assert.Equal(t, "/health", DefaultHealthPath(ProviderVLLM))
+	assert.Equal(t, "/health", DefaultHealthPath(ProviderLlamaCpp))
+	assert.Equal(t, "/health", DefaultHealthPath(""))
+}
+
+func TestEffectiveHealthPathNilModel(t *testing.T) {
+	assert.Equal(t, "/custom", EffectiveHealthPath(nil, "/custom"))
+	assert.Equal(t, "/health", EffectiveHealthPath(nil, ""))
+}
+
+func TestEffectiveHealthPathExplicit(t *testing.T) {
+	m := &ModelConfig{
+		Model: ModelMeta{Type: ProviderVLLM},
+		Serve: ServeConfig{HealthPath: "/readyz"},
+	}
+	assert.Equal(t, "/readyz", EffectiveHealthPath(m, "/health"))
+}
+
+func TestEffectiveHealthPathProviderDefault(t *testing.T) {
+	nim := &ModelConfig{Model: ModelMeta{Type: ProviderNIM}}
+	assert.Equal(t, "/v1/health/live", EffectiveHealthPath(nim, "/health"))
+
+	vllm := &ModelConfig{Model: ModelMeta{Type: ProviderVLLM}}
+	assert.Equal(t, "/health", EffectiveHealthPath(vllm, "/other"))
+}
+
 func writeTempModelFile(t *testing.T, name, content string) string {
 	t.Helper()
 	dir := t.TempDir()

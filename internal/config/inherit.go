@@ -131,5 +131,8 @@ func mergeServeConfig(parent, child ServeConfig) ServeConfig {
 	if child.TrustRemoteCode {
 		result.TrustRemoteCode = true
 	}
+	if child.HealthPath != "" {
+		result.HealthPath = child.HealthPath
+	}
 	return result
 }

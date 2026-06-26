@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/bench"
+	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/vllm"
 )
 
@@ -46,7 +48,9 @@ func defaultRunBench(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("--runs must be >= 1")
 	}
 
-	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", cfg.Server.HealthPath)
+	cur, _ := state.Load(cfg.Paths.StateFile)
+	activeM, _ := config.ResolveModel(cur.ActiveModel, effectiveDirs(cfg)...)
+	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", config.EffectiveHealthPath(activeM, cfg.Server.HealthPath))
 
 	// Verify the model is up before benchmarking.
 	health, err := client.Health(cmd.Context())

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/vllm"
 	"github.com/DavidXArnold/marlin/internal/watchdog"
@@ -76,7 +77,8 @@ func runWatch(cmd *cobra.Command, args []string) error {
 		RestartDelay:  restartDelay,
 	}
 
-	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", cfg.Server.HealthPath)
+	activeM, _ := config.ResolveModel(slug, effectiveDirs(cfg)...)
+	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", config.EffectiveHealthPath(activeM, cfg.Server.HealthPath))
 	isHealthy := func(ctx context.Context) bool {
 		h, herr := client.Health(ctx)
 		return herr == nil && h.Ready
