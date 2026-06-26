@@ -2,7 +2,10 @@ package config
 
 import (
 	"fmt"
+	"io/fs"
 	"strings"
+
+	"github.com/BurntSushi/toml"
 )
 
 const maxInheritDepth = 16
@@ -25,10 +28,16 @@ func resolveChain(slug string, dirs []string, visited []string) (*ModelConfig, e
 	}
 
 	path, err := FindModelPath(slug, dirs...)
+	var child *ModelConfig
 	if err != nil {
-		return nil, err
+		// Disk lookup failed — try the embedded bundled profiles as a fallback.
+		child, err = loadEmbeddedModel(slug)
+		if err != nil {
+			return nil, fmt.Errorf("model %q not found", slug)
+		}
+	} else {
+		child, err = LoadModel(path)
 	}
-	child, err := LoadModel(path)
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +52,21 @@ func resolveChain(slug string, dirs []string, visited []string) (*ModelConfig, e
 	}
 
 	return mergeModelConfigs(parent, child), nil
+}
+
+func loadEmbeddedModel(slug string) (*ModelConfig, error) {
+	if BundledModels == nil {
+		return nil, fmt.Errorf("no bundled models")
+	}
+	data, err := fs.ReadFile(BundledModels, "models/"+slug+".toml")
+	if err != nil {
+		return nil, err
+	}
+	var m ModelConfig
+	if _, err := toml.Decode(string(data), &m); err != nil {
+		return nil, fmt.Errorf("parsing embedded model %q: %w", slug, err)
+	}
+	return &m, nil
 }
 
 func mergeModelConfigs(parent, child *ModelConfig) *ModelConfig {

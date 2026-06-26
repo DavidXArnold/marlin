@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -208,6 +209,45 @@ trust_remote_code = true
 	m, err := ResolveModel("child", dir)
 	require.NoError(t, err)
 	assert.True(t, m.Serve.TrustRemoteCode)
+}
+
+func TestResolveModelFallsBackToEmbedded(t *testing.T) {
+	dir := t.TempDir()
+
+	fakeFS := fstest.MapFS{
+		"models/nvfp4-base.toml": &fstest.MapFile{
+			Data: []byte(`
+[model]
+type     = "vllm"
+abstract = true
+
+[serve]
+gpu_memory_utilization = 0.824
+max_model_len          = 131072
+`),
+		},
+	}
+
+	old := BundledModels
+	BundledModels = fakeFS
+	t.Cleanup(func() { BundledModels = old })
+
+	writeModelFile(t, dir, "my-model", `
+[model]
+id      = "nvidia/SomeModel-NVFP4"
+extends = "nvfp4-base"
+
+[serve]
+tool_call_parser  = "hermes"
+served_model_name = ["local"]
+`)
+
+	m, err := ResolveModel("my-model", dir)
+	require.NoError(t, err)
+	assert.Equal(t, "nvidia/SomeModel-NVFP4", m.Model.ID)
+	assert.InDelta(t, 0.824, m.Serve.GPUMemoryUtilization, 0.001)
+	assert.Equal(t, 131072, m.Serve.MaxModelLen)
+	assert.Equal(t, "hermes", m.Serve.ToolCallParser)
 }
 
 func TestResolveModelArraysFallThrough(t *testing.T) {

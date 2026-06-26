@@ -2,12 +2,19 @@ package config
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/BurntSushi/toml"
 )
+
+// BundledModels is an optional embedded FS containing factory model profiles.
+// When set, resolveChain falls back to it when a slug is not found on disk.
+// Files must be at "models/<slug>.toml" within the FS.
+// Set by the application entry point (cmd package).
+var BundledModels fs.FS
 
 
 type ModelStatus string
