@@ -134,6 +134,54 @@ func TestRunInstallExistingFileForce(t *testing.T) {
 	assert.NotContains(t, string(data), "old content")
 }
 
+// TestRunInstallContainerMode: default container mode — unit uses container run pattern.
+func TestRunInstallContainerMode(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+	injectNoopSystemdManager(t)
+	unitPath := injectTempUnitPath(t)
+
+	var buf bytes.Buffer
+	cmd := installCmdWithContext(&buf)
+	require.NoError(t, runInstall(cmd, nil))
+
+	data, err := os.ReadFile(unitPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "run")        // docker/podman/nerdctl run
+	assert.Contains(t, content, "vllm serve") // vllm serve inside container
+	assert.Contains(t, content, "VLLM_IMAGE") // image sourced from env file
+}
+
+// TestRunInstallBinaryMode: vllm_mode = "binary" produces a bare-binary unit.
+func TestRunInstallBinaryMode(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+	injectNoopSystemdManager(t)
+	unitPath := injectTempUnitPath(t)
+
+	// Override to binary mode by injecting a config with vllm_mode = "binary".
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`[service]
+vllm_mode = "binary"
+`), 0o644))
+	oldCfg := cfgFile
+	cfgFile = cfgPath
+	t.Cleanup(func() { cfgFile = oldCfg })
+
+	var buf bytes.Buffer
+	cmd := installCmdWithContext(&buf)
+	require.NoError(t, runInstall(cmd, nil))
+
+	data, err := os.ReadFile(unitPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "vllm serve")
+	assert.NotContains(t, content, "docker run")
+	assert.NotContains(t, content, "podman run")
+}
+
 // TestRunInstallHelp: --help does not error.
 func TestRunInstallHelp(t *testing.T) {
 	_, err := executeCmd("install", "--help")

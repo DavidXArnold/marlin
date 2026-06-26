@@ -89,6 +89,40 @@ func TestResolveVLLMBinSudoUserNotSet(t *testing.T) {
 	assert.NotEmpty(t, bin)
 }
 
+func TestSystemdUnitContainerizedKeyFields(t *testing.T) {
+	cfg := config.Defaults()
+	out := SystemdUnitContainerized(cfg, "docker")
+	assert.Contains(t, out, "[Unit]")
+	assert.Contains(t, out, "docker run")
+	assert.Contains(t, out, "--gpus all")
+	assert.Contains(t, out, "--ipc host")
+	assert.Contains(t, out, "${VLLM_IMAGE}")
+	assert.Contains(t, out, "vllm serve")
+	assert.Contains(t, out, "8000")
+	assert.Contains(t, out, cfg.Service.SystemdUnit)
+}
+
+func TestSystemdUnitContainerizedFullBinPath(t *testing.T) {
+	cfg := config.Defaults()
+	out := SystemdUnitContainerized(cfg, "/usr/bin/podman")
+	assert.Contains(t, out, "/usr/bin/podman run")
+	assert.NotContains(t, out, "exec docker run")
+}
+
+func TestResolveContainerBinConfiguredMissing(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Service.ContainerRuntime = "no-such-runtime-xyz"
+	bin, ok := ResolveContainerBin(cfg)
+	assert.Equal(t, "no-such-runtime-xyz", bin)
+	assert.False(t, ok)
+}
+
+func TestResolveContainerBinFallback(t *testing.T) {
+	cfg := config.Defaults()
+	bin, _ := ResolveContainerBin(cfg)
+	assert.NotEmpty(t, bin)
+}
+
 func TestEnvSingleLineExtraArgs(t *testing.T) {
 	m := &config.ModelConfig{
 		Model: config.ModelMeta{ID: "some/model"},

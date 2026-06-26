@@ -42,10 +42,13 @@ docker_container  = "marlin"                  # name given to managed NIM contai
 # vllm_image: NGC official ARM64/Blackwell build (default).
 # On x86_64, replace with: vllm_image = "vllm/vllm-openai:latest"
 vllm_image        = "nvcr.io/nvidia/vllm:26.05.post1-py3"
-# container_runtime = "docker"               # docker (default), podman, or containerd
+# vllm_mode: how the vllm systemd unit runs the model.
+#   "container" (default) — runs the vllm image via docker/podman/nerdctl; no local install needed.
+#   "binary"              — runs a locally installed vllm binary; see vllm_bin below.
+# vllm_mode         = "container"
+# container_runtime = "docker"               # docker (default), podman, or nerdctl
 # container_socket  = ""                     # custom socket path; leave empty for auto-detect
-# vllm_bin: full path to the vllm binary. Leave unset and marlin install auto-detects via PATH.
-# Required when vllm is in a venv not on systemd's PATH, e.g.:
+# vllm_bin: (binary mode only) full path to vllm binary; empty = auto-detect.
 # vllm_bin = "/home/user/.venv/bin/vllm"
 
 [server]

@@ -166,6 +166,25 @@ func TestEnvOmitsTrustRemoteCodeWhenFalse(t *testing.T) {
 	assert.NotContains(t, out, "--trust-remote-code")
 }
 
+func TestEnvIncludesVLLMImage(t *testing.T) {
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{
+			ID:    "nvidia/Qwen3-32B-NVFP4",
+			Image: "nvcr.io/nvidia/vllm:26.05.post1-py3",
+		},
+	}
+	out := Env(m, "")
+	assert.Contains(t, out, "VLLM_IMAGE=nvcr.io/nvidia/vllm:26.05.post1-py3")
+}
+
+func TestEnvOmitsVLLMImageWhenEmpty(t *testing.T) {
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{ID: "some/model"},
+	}
+	out := Env(m, "")
+	assert.NotContains(t, out, "VLLM_IMAGE")
+}
+
 func TestLlamaCppEnvBasic(t *testing.T) {
 	m := &config.ModelConfig{
 		Model: config.ModelMeta{ID: "llama-3b", Type: config.ProviderLlamaCpp},

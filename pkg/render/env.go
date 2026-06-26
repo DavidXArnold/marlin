@@ -14,6 +14,10 @@ func Env(m *config.ModelConfig, hfToken string) string {
 
 	fmt.Fprintf(&b, "VLLM_MODEL=%s\n", m.Model.ID)
 
+	if m.Model.Image != "" {
+		fmt.Fprintf(&b, "VLLM_IMAGE=%s\n", m.Model.Image)
+	}
+
 	if hfToken != "" {
 		fmt.Fprintf(&b, "HF_TOKEN=%s\n", hfToken)
 	}

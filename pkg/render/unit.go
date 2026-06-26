@@ -83,6 +83,55 @@ WantedBy=multi-user.target
 	)
 }
 
+// ResolveContainerBin returns the container runtime binary for the containerized vLLM unit.
+// If ContainerRuntime is configured it is used (LookPath for the full path when possible).
+// Otherwise probes docker → podman → nerdctl. Falls back to "docker" with ok=false.
+func ResolveContainerBin(cfg *config.Config) (string, bool) {
+	if rt := cfg.Service.ContainerRuntime; rt != "" {
+		if found, err := exec.LookPath(rt); err == nil {
+			return found, true
+		}
+		return rt, false
+	}
+	for _, name := range []string{"docker", "podman", "nerdctl"} {
+		if found, err := exec.LookPath(name); err == nil {
+			return found, true
+		}
+	}
+	return "docker", false
+}
+
+// SystemdUnitContainerized renders a systemd unit that runs vLLM inside a container.
+// The unit reads VLLM_IMAGE and VLLM_MODEL from the active model env file (written by
+// marlin start), so switching models updates the container automatically.
+// containerBin is the resolved path to docker/podman/nerdctl (see ResolveContainerBin).
+func SystemdUnitContainerized(cfg *config.Config, containerBin string) string {
+	return fmt.Sprintf(`[Unit]
+Description=Marlin vLLM inference service (containerized)
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=-%s
+EnvironmentFile=%s
+ExecStart=/bin/bash -c 'exec %s run --rm --gpus all --ipc host --name marlin-vllm -p %d:8000 -e "HF_TOKEN=${HF_TOKEN:-}" "${VLLM_IMAGE}" vllm serve "${VLLM_MODEL}" --host 0.0.0.0 --port 8000 ${VLLM_EXTRA_ARGS:-}'
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=%s
+
+[Install]
+WantedBy=multi-user.target
+`,
+		cfg.Paths.SecretsEnv,
+		cfg.Paths.ActiveSymlink,
+		containerBin,
+		cfg.Server.Port,
+		cfg.Service.SystemdUnit,
+	)
+}
+
 // SystemdUnitPath returns the filesystem path where the unit file should be installed.
 func SystemdUnitPath(cfg *config.Config) string {
 	return "/etc/systemd/system/" + cfg.Service.SystemdUnit + ".service"

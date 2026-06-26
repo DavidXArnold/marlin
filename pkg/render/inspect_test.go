@@ -125,6 +125,41 @@ func TestInspectVLLMTrustRemoteCode(t *testing.T) {
 	}
 }
 
+func TestInspectVLLMContainerizedExecStart(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.ID = "nvidia/Qwen3-32B-NVFP4"
+	m.Model.Image = "nvcr.io/nvidia/vllm:26.05.post1-py3"
+	m.Model.Type = config.ProviderVLLM
+	m.Model.Status = "untested"
+
+	cfg := baseConfig()
+	// Default VLLMMode is "container" (empty string falls through to container mode).
+	out := Inspect(m, cfg, "qwen3-32b-nvfp4", "")
+	if !strings.Contains(out, "docker run") && !strings.Contains(out, "podman run") && !strings.Contains(out, "nerdctl run") {
+		t.Errorf("expected container run command in ExecStart, got:\n%s", out)
+	}
+	if !strings.Contains(out, "${VLLM_IMAGE}") {
+		t.Errorf("expected VLLM_IMAGE variable in ExecStart, got:\n%s", out)
+	}
+}
+
+func TestInspectVLLMBinaryModeExecStart(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.ID = "Qwen/Qwen2.5-72B"
+	m.Model.Type = config.ProviderVLLM
+	m.Model.Status = "untested"
+
+	cfg := baseConfig()
+	cfg.Service.VLLMMode = "binary"
+	out := Inspect(m, cfg, "qwen25-72b", "")
+	if !strings.Contains(out, "vllm serve") {
+		t.Errorf("expected vllm serve in binary ExecStart, got:\n%s", out)
+	}
+	if strings.Contains(out, "docker run") {
+		t.Errorf("expected no docker run in binary mode, got:\n%s", out)
+	}
+}
+
 func TestInspectNIMIdentity(t *testing.T) {
 	m := &config.ModelConfig{}
 	m.Model.ID = "nim/llama3-8b"

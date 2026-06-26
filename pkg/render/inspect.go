@@ -75,10 +75,16 @@ func inspectVLLM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config, 
 		writef("HF_TOKEN=*** (from secrets)\n")
 	}
 
-	vllmBin, _ := ResolveVLLMBin(cfg.Service.VLLMBin)
 	writef("\n=== systemd ExecStart ===\n")
-	writef("/bin/bash -c 'exec %s serve \"$VLLM_MODEL\" --host %s --port %d ${VLLM_EXTRA_ARGS:-}'\n",
-		vllmBin, cfg.Server.Host, cfg.Server.Port)
+	if cfg.Service.VLLMMode != "binary" && m.Model.Image != "" {
+		containerBin, _ := ResolveContainerBin(cfg)
+		writef("/bin/bash -c 'exec %s run --rm --gpus all --ipc host --name marlin-vllm -p %d:8000 -e \"HF_TOKEN=${HF_TOKEN:-}\" \"${VLLM_IMAGE}\" vllm serve \"${VLLM_MODEL}\" --host 0.0.0.0 --port 8000 ${VLLM_EXTRA_ARGS:-}'\n",
+			containerBin, cfg.Server.Port)
+	} else {
+		vllmBin, _ := ResolveVLLMBin(cfg.Service.VLLMBin)
+		writef("/bin/bash -c 'exec %s serve \"$VLLM_MODEL\" --host %s --port %d ${VLLM_EXTRA_ARGS:-}'\n",
+			vllmBin, cfg.Server.Host, cfg.Server.Port)
+	}
 }
 
 func inspectNIM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config) {

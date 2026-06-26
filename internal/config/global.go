@@ -83,7 +83,8 @@ type ServiceConfig struct {
 	ContainerSocket  string `toml:"container_socket"`  // optional custom socket path (docker/podman)
 	VLLMImage        string `toml:"vllm_image"`        // Docker image used for ad-hoc vLLM runs
 	LlamaCppUnit     string `toml:"llamacpp_unit"`     // systemd unit for llama-server
-	VLLMBin          string `toml:"vllm_bin"`          // full path to vllm binary; empty = auto-detect at install time
+	VLLMBin          string `toml:"vllm_bin"`          // full path to vllm binary; empty = auto-detect (binary mode only)
+	VLLMMode         string `toml:"vllm_mode"`         // "container" (default) or "binary"
 }
 
 type ServerConfig struct {
@@ -142,6 +143,7 @@ func Defaults() *Config {
 			DockerContainer: "marlin",
 			VLLMImage:       "nvcr.io/nvidia/vllm:26.05.post1-py3",
 			LlamaCppUnit:    "marlin-llamacpp",
+			VLLMMode:        "container",
 		},
 		Server: ServerConfig{
 			Host:       "localhost",
