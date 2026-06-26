@@ -2,14 +2,28 @@ package render
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
 
 	"github.com/DavidXArnold/marlin/internal/config"
 )
 
+// lookupUserHomeFunc is injectable for tests.
+var lookupUserHomeFunc = func(username string) (string, error) {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return "", err
+	}
+	return u.HomeDir, nil
+}
+
 // ResolveVLLMBin returns the binary to use in the systemd ExecStart.
 // If configured is non-empty it is used as-is (absolute path or name).
 // Otherwise exec.LookPath resolves "vllm" against the current PATH.
+// When running under sudo, PATH is stripped; falls back to checking the
+// invoking user's common venv locations via SUDO_USER.
 // Falls back to the bare name "vllm" if nothing is found; callers that care
 // should warn the user in that case.
 func ResolveVLLMBin(configured string) (string, bool) {
@@ -18,6 +32,21 @@ func ResolveVLLMBin(configured string) (string, bool) {
 	}
 	if found, err := exec.LookPath("vllm"); err == nil {
 		return found, true
+	}
+	// sudo strips PATH; probe the invoking user's common venv locations.
+	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+		if home, err := lookupUserHomeFunc(sudoUser); err == nil {
+			for _, rel := range []string{
+				filepath.Join(".venv", "bin", "vllm"),
+				filepath.Join("venv", "bin", "vllm"),
+				filepath.Join(".local", "bin", "vllm"),
+			} {
+				c := filepath.Join(home, rel)
+				if _, statErr := os.Stat(c); statErr == nil {
+					return c, true
+				}
+			}
+		}
 	}
 	return "vllm", false
 }

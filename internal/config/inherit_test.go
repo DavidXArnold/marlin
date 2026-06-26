@@ -191,6 +191,25 @@ served_model_name = ["child-alias", "local"]
 	assert.Equal(t, []string{"child-alias", "local"}, m.Serve.ServedModelName)
 }
 
+func TestResolveModelTrustRemoteCodeInherited(t *testing.T) {
+	dir := t.TempDir()
+	writeModelFile(t, dir, "base", `
+[model]
+type = "vllm"
+`)
+	writeModelFile(t, dir, "child", `
+[model]
+id      = "some/model"
+extends = "base"
+
+[serve]
+trust_remote_code = true
+`)
+	m, err := ResolveModel("child", dir)
+	require.NoError(t, err)
+	assert.True(t, m.Serve.TrustRemoteCode)
+}
+
 func TestResolveModelArraysFallThrough(t *testing.T) {
 	dir := t.TempDir()
 	writeModelFile(t, dir, "base", `

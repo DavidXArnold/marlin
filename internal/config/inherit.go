@@ -104,5 +104,8 @@ func mergeServeConfig(parent, child ServeConfig) ServeConfig {
 	if len(child.ExtraVolumes) > 0 {
 		result.ExtraVolumes = child.ExtraVolumes
 	}
+	if child.TrustRemoteCode {
+		result.TrustRemoteCode = true
+	}
 	return result
 }

@@ -1,9 +1,12 @@
 package render
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/DavidXArnold/marlin/internal/config"
 )
@@ -60,6 +63,29 @@ func TestResolveVLLMBinFallback(t *testing.T) {
 	bin, _ := ResolveVLLMBin("")
 	// We can't assert ok since vllm may or may not be on CI PATH,
 	// but the returned string must always be non-empty.
+	assert.NotEmpty(t, bin)
+}
+
+func TestResolveVLLMBinSudoUserVenv(t *testing.T) {
+	dir := t.TempDir()
+	vllmBin := filepath.Join(dir, ".venv", "bin", "vllm")
+	require.NoError(t, os.MkdirAll(filepath.Dir(vllmBin), 0o755))
+	require.NoError(t, os.WriteFile(vllmBin, []byte("#!/bin/sh"), 0o755))
+
+	orig := lookupUserHomeFunc
+	t.Cleanup(func() { lookupUserHomeFunc = orig })
+	lookupUserHomeFunc = func(string) (string, error) { return dir, nil }
+
+	t.Setenv("SUDO_USER", "testuser")
+	bin, ok := ResolveVLLMBin("")
+	assert.Equal(t, vllmBin, bin)
+	assert.True(t, ok)
+}
+
+func TestResolveVLLMBinSudoUserNotSet(t *testing.T) {
+	t.Setenv("SUDO_USER", "")
+	// With no SUDO_USER and vllm not in PATH, should fall back gracefully.
+	bin, _ := ResolveVLLMBin("")
 	assert.NotEmpty(t, bin)
 }
 

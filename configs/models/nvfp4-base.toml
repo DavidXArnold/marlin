@@ -1,0 +1,10 @@
+[model]
+  type     = "vllm"
+  image    = "nvcr.io/nvidia/vllm:26.05.post1-py3"
+  status   = "untested"
+  abstract = true
+  notes    = "Abstract base for NVFP4 Blackwell models. Add 'extends = \"nvfp4-base\"' to inherit common settings."
+
+[serve]
+  gpu_memory_utilization = 0.824
+  max_model_len          = 131072
