@@ -114,7 +114,7 @@ After=network.target
 Type=simple
 EnvironmentFile=-%s
 EnvironmentFile=%s
-ExecStart=/bin/bash -c 'exec %s run --rm --gpus all --ipc host --name marlin-vllm -p %d:8000 -e "HF_TOKEN=${HF_TOKEN:-}" "${VLLM_IMAGE}" vllm serve "${VLLM_MODEL}" --host 0.0.0.0 --port 8000 ${VLLM_EXTRA_ARGS:-}'
+ExecStart=/bin/bash -c 'exec %s run --rm --gpus all --ipc host --network host --name marlin-vllm --label marlin.managed=true -e "HF_TOKEN=${HF_TOKEN:-}" "${VLLM_IMAGE}" vllm serve "${VLLM_MODEL}" --host 0.0.0.0 --port %d ${VLLM_EXTRA_ARGS:-}'
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal

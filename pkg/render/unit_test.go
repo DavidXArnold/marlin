@@ -96,9 +96,12 @@ func TestSystemdUnitContainerizedKeyFields(t *testing.T) {
 	assert.Contains(t, out, "docker run")
 	assert.Contains(t, out, "--gpus all")
 	assert.Contains(t, out, "--ipc host")
+	assert.Contains(t, out, "--network host")
+	assert.Contains(t, out, "--label marlin.managed=true")
 	assert.Contains(t, out, "${VLLM_IMAGE}")
 	assert.Contains(t, out, "vllm serve")
 	assert.Contains(t, out, "8000")
+	assert.NotContains(t, out, "-p 8000:8000") // network host replaces port mapping
 	assert.Contains(t, out, cfg.Service.SystemdUnit)
 }
 
