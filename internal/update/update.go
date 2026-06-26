@@ -1,15 +1,24 @@
 package update
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
 
-const apiURL = "https://api.github.com/repos/DavidXArnold/marlin/releases/latest"
+const (
+	apiURL    = "https://api.github.com/repos/DavidXArnold/marlin/releases/latest"
+	repoOwner = "DavidXArnold"
+	repoName  = "marlin"
+)
 
 // HTTPClient is injectable for tests.
 var HTTPClient = &http.Client{}
@@ -67,6 +76,79 @@ func IsNewer(current, candidate string) bool {
 		}
 	}
 	return false
+}
+
+// AssetURL returns the GitHub release download URL for the tar.gz archive
+// matching version, goos, and goarch. version may carry a leading "v".
+// The goreleaser archive template is: marlin_{semver}_{os}_{arch}.tar.gz
+func AssetURL(version, goos, goarch string) string {
+	v := strings.TrimPrefix(version, "v")
+	name := fmt.Sprintf("marlin_%s_%s_%s.tar.gz", v, goos, goarch)
+	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
+		repoOwner, repoName, version, name)
+}
+
+// Download fetches url and writes the body to destPath, overwriting any existing
+// file. The caller is responsible for removing destPath on error.
+func Download(ctx context.Context, url, destPath string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download %s: status %d", url, resp.StatusCode)
+	}
+	f, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	_, err = io.Copy(f, resp.Body)
+	return err
+}
+
+// ExtractBinary extracts the regular file named binName from a .tar.gz archive
+// at archivePath and writes it to destPath with mode 0o755.
+func ExtractBinary(archivePath, binName, destPath string) error {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf("opening gzip stream: %w", err)
+	}
+	defer func() { _ = gz.Close() }()
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("reading tar: %w", err)
+		}
+		if filepath.Base(hdr.Name) != binName || hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		out, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(out, tr)
+		closeErr := out.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	}
+	return fmt.Errorf("binary %q not found in archive %s", binName, archivePath)
 }
 
 func parseVer(v string) []int {

@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func fakeKey(s string) tea.KeyMsg {
@@ -117,6 +118,93 @@ func TestPickModelSingleReturnsDirectly(t *testing.T) {
 func TestPickModelEmpty(t *testing.T) {
 	_, err := PickModel([]string{}, nil, "", "", nil)
 	assert.Error(t, err)
+}
+
+func TestMultiPickModelEmpty(t *testing.T) {
+	_, err := MultiPickModel([]string{}, nil, "", nil)
+	assert.Error(t, err)
+}
+
+func TestMultiPickModelSingleReturnsDirectly(t *testing.T) {
+	result, err := MultiPickModel([]string{"only-model"}, nil, "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"only-model"}, result)
+}
+
+func TestMultiPickModelToggle(t *testing.T) {
+	items := buildModelItems([]string{"alpha", "beta"}, nil, "", nil)
+	m := multiPickModel{items: items, selected: make(map[int]bool)}
+
+	updated, _ := m.Update(fakeKey(" "))
+	m = updated.(multiPickModel)
+	assert.True(t, m.selected[0])
+
+	updated, _ = m.Update(fakeKey(" "))
+	m = updated.(multiPickModel)
+	assert.False(t, m.selected[0])
+}
+
+func TestMultiPickModelNavigate(t *testing.T) {
+	items := buildModelItems([]string{"alpha", "beta", "gamma"}, nil, "", nil)
+	m := multiPickModel{items: items, selected: make(map[int]bool)}
+
+	assert.Equal(t, 0, m.cursor)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(multiPickModel)
+	assert.Equal(t, 1, m.cursor)
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(multiPickModel)
+	assert.Equal(t, 0, m.cursor)
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(multiPickModel)
+	assert.Equal(t, 0, m.cursor)
+}
+
+func TestMultiPickModelConfirm(t *testing.T) {
+	items := buildModelItems([]string{"alpha", "beta"}, nil, "", nil)
+	m := multiPickModel{items: items, selected: map[int]bool{0: true, 1: true}}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = updated.(multiPickModel)
+	assert.True(t, m.done)
+	assert.Equal(t, []string{"alpha", "beta"}, m.Result())
+}
+
+func TestMultiPickModelQuit(t *testing.T) {
+	items := buildModelItems([]string{"alpha"}, nil, "", nil)
+	m := multiPickModel{items: items, selected: make(map[int]bool)}
+
+	updated, _ := m.Update(fakeKey("q"))
+	m = updated.(multiPickModel)
+	assert.True(t, m.quitting)
+}
+
+func TestMultiPickModelSelectAll(t *testing.T) {
+	items := buildModelItems([]string{"a", "b", "c"}, nil, "", nil)
+	m := multiPickModel{items: items, selected: make(map[int]bool)}
+
+	updated, _ := m.Update(fakeKey("a"))
+	m = updated.(multiPickModel)
+	assert.Len(t, m.selected, 3)
+
+	updated, _ = m.Update(fakeKey("a"))
+	m = updated.(multiPickModel)
+	assert.Len(t, m.selected, 0)
+}
+
+func TestMultiPickModelResult(t *testing.T) {
+	items := buildModelItems([]string{"alpha", "beta", "gamma"}, nil, "", nil)
+	m := multiPickModel{
+		items:    items,
+		selected: map[int]bool{0: true, 2: true},
+	}
+	result := m.Result()
+	assert.Len(t, result, 2)
+	assert.Contains(t, result, "alpha")
+	assert.Contains(t, result, "gamma")
 }
 
 func TestMaxHelper(t *testing.T) {

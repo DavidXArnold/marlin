@@ -111,7 +111,9 @@ func buildRootCmd() *cobra.Command {
 
 	stop := &cobra.Command{Use: "stop [model]", Args: cobra.MaximumNArgs(1), RunE: runStop}
 
-	rm := &cobra.Command{Use: "rm <model>", Args: cobra.ExactArgs(1), RunE: runRm}
+	rm := &cobra.Command{Use: "rm [model...]", Args: cobra.ArbitraryArgs, RunE: runRm}
+
+	upgrade := &cobra.Command{Use: "upgrade", Args: cobra.NoArgs, RunE: runUpgrade}
 
 	edit := &cobra.Command{Use: "edit <model>", Args: cobra.ExactArgs(1), RunE: runEdit}
 
@@ -133,7 +135,7 @@ func buildRootCmd() *cobra.Command {
 	install.Flags().Bool("enable", false, "")
 	install.Flags().Bool("force", false, "")
 
-	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop, rm, edit, completion, configure, start, install)
+	root.AddCommand(add, list, sw, search, validate, status, logs, run, ps, stop, rm, edit, completion, configure, start, install, upgrade)
 	return root
 }
 

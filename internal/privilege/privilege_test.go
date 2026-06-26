@@ -637,3 +637,120 @@ func TestRefreshNIMCachePermsChgrpError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "chgrp failed")
 }
+
+// — PromptAndInstallBinary —
+
+func TestPromptAndInstallBinaryNoRoot(t *testing.T) {
+	old := getuid
+	getuid = func() int { return 1000 }
+	defer func() { getuid = old }()
+
+	src := filepath.Join(t.TempDir(), "src-bin")
+	require.NoError(t, os.WriteFile(src, []byte("#!/bin/sh\necho hi\n"), 0o644))
+
+	destDir := t.TempDir()
+	dest := filepath.Join(destDir, "marlin")
+
+	var buf bytes.Buffer
+	ok, err := PromptAndInstallBinary(&buf, src, dest)
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	info, err := os.Stat(dest)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o755), info.Mode().Perm())
+
+	got, err := os.ReadFile(dest)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("#!/bin/sh\necho hi\n"), got)
+}
+
+func TestPromptAndInstallBinaryNeedsRootYes(t *testing.T) {
+	oldGetuid := getuid
+	getuid = func() int { return 1000 }
+	defer func() { getuid = oldGetuid }()
+
+	src := filepath.Join(t.TempDir(), "src-bin")
+	require.NoError(t, os.WriteFile(src, []byte("data"), 0o644))
+
+	// Point dest at a directory that NeedsRoot thinks is restricted.
+	restrictedDir := t.TempDir()
+	if err := os.Chmod(restrictedDir, 0o555); err != nil {
+		t.Skip("cannot restrict dir permissions")
+	}
+	defer func() { _ = os.Chmod(restrictedDir, 0o755) }()
+	dest := filepath.Join(restrictedDir, "marlin")
+
+	oldStdin := stdinR
+	stdinR = strings.NewReader("y\n")
+	defer func() { stdinR = oldStdin }()
+
+	var installed []string
+	oldSudo := sudoRun
+	sudoRun = func(args []string) error {
+		installed = args
+		return nil
+	}
+	defer func() { sudoRun = oldSudo }()
+
+	var buf bytes.Buffer
+	ok, err := PromptAndInstallBinary(&buf, src, dest)
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"install", "-m", "755", src, dest}, installed)
+}
+
+func TestPromptAndInstallBinaryNeedsRootNo(t *testing.T) {
+	oldGetuid := getuid
+	getuid = func() int { return 1000 }
+	defer func() { getuid = oldGetuid }()
+
+	restrictedDir := t.TempDir()
+	if err := os.Chmod(restrictedDir, 0o555); err != nil {
+		t.Skip("cannot restrict dir permissions")
+	}
+	defer func() { _ = os.Chmod(restrictedDir, 0o755) }()
+
+	src := filepath.Join(t.TempDir(), "src-bin")
+	require.NoError(t, os.WriteFile(src, []byte("data"), 0o644))
+	dest := filepath.Join(restrictedDir, "marlin")
+
+	oldStdin := stdinR
+	stdinR = strings.NewReader("n\n")
+	defer func() { stdinR = oldStdin }()
+
+	var buf bytes.Buffer
+	ok, err := PromptAndInstallBinary(&buf, src, dest)
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Contains(t, buf.String(), "cancelled")
+}
+
+func TestPromptAndInstallBinarySudoFails(t *testing.T) {
+	oldGetuid := getuid
+	getuid = func() int { return 1000 }
+	defer func() { getuid = oldGetuid }()
+
+	restrictedDir := t.TempDir()
+	if err := os.Chmod(restrictedDir, 0o555); err != nil {
+		t.Skip("cannot restrict dir permissions")
+	}
+	defer func() { _ = os.Chmod(restrictedDir, 0o755) }()
+
+	src := filepath.Join(t.TempDir(), "src-bin")
+	require.NoError(t, os.WriteFile(src, []byte("data"), 0o644))
+	dest := filepath.Join(restrictedDir, "marlin")
+
+	oldStdin := stdinR
+	stdinR = strings.NewReader("y\n")
+	defer func() { stdinR = oldStdin }()
+
+	oldSudo := sudoRun
+	sudoRun = func(_ []string) error { return fmt.Errorf("sudo: not found") }
+	defer func() { sudoRun = oldSudo }()
+
+	var buf bytes.Buffer
+	_, err := PromptAndInstallBinary(&buf, src, dest)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "sudo install")
+}

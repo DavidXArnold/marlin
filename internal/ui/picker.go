@@ -120,21 +120,9 @@ func FuzzyMatch(query string, names []string) []string {
 	return result
 }
 
-// PickModel presents an interactive fuzzy-searchable list of model slugs and
-// returns the user's selection. If names has exactly one entry it is returned
-// directly. prefilter is an optional initial search string. activeSlug marks
-// the currently-active model with a ◀ indicator and pre-positions the cursor
-// on it (pass "" to skip). history maps slug → last started time; models are
-// sorted most-recently-used first, then alphabetically.
-func PickModel(names []string, cfgs []*config.ModelConfig, prefilter, activeSlug string, history map[string]time.Time) (string, error) {
-	if len(names) == 0 {
-		return "", fmt.Errorf("no models found — run 'marlin add' to create one")
-	}
-	if len(names) == 1 {
-		return names[0], nil
-	}
-
-	// Build items with history metadata.
+// buildModelItems constructs a sorted slice of modelItems from parallel name/cfg slices.
+// Sorted most-recently-used first, then alphabetically.
+func buildModelItems(names []string, cfgs []*config.ModelConfig, activeSlug string, history map[string]time.Time) []modelItem {
 	items := make([]modelItem, len(names))
 	for i, slug := range names {
 		item := modelItem{slug: slug, provider: "vllm", status: "untested"}
@@ -150,21 +138,36 @@ func PickModel(names []string, cfgs []*config.ModelConfig, prefilter, activeSlug
 		}
 		items[i] = item
 	}
-
-	// Sort: most recently used first, then alphabetical.
 	sort.SliceStable(items, func(i, j int) bool {
 		a, b := items[i], items[j]
 		aZero, bZero := a.lastStarted.IsZero(), b.lastStarted.IsZero()
 		if aZero != bZero {
-			return bZero // items with history come before items without
+			return bZero
 		}
 		if !aZero {
 			return a.lastStarted.After(b.lastStarted)
 		}
 		return a.slug < b.slug
 	})
+	return items
+}
 
-	// Find the initial cursor position (active or most-recent-used).
+// PickModel presents an interactive fuzzy-searchable list of model slugs and
+// returns the user's selection. If names has exactly one entry it is returned
+// directly. prefilter is an optional initial search string. activeSlug marks
+// the currently-active model with a ◀ indicator and pre-positions the cursor
+// on it (pass "" to skip). history maps slug → last started time; models are
+// sorted most-recently-used first, then alphabetically.
+func PickModel(names []string, cfgs []*config.ModelConfig, prefilter, activeSlug string, history map[string]time.Time) (string, error) {
+	if len(names) == 0 {
+		return "", fmt.Errorf("no models found — run 'marlin add' to create one")
+	}
+	if len(names) == 1 {
+		return names[0], nil
+	}
+
+	items := buildModelItems(names, cfgs, activeSlug, history)
+
 	initialIndex := 0
 	for i, item := range items {
 		if item.active || (activeSlug == "" && i == 0) {
@@ -198,6 +201,117 @@ func PickModel(names []string, cfgs []*config.ModelConfig, prefilter, activeSlug
 		return "", fmt.Errorf("cancelled")
 	}
 	return pm.selected, nil
+}
+
+// multiPickModel is a bubbletea model for selecting multiple items from a list.
+// Space toggles the item under the cursor; Enter confirms; q/esc cancels.
+type multiPickModel struct {
+	items    []modelItem
+	cursor   int
+	selected map[int]bool
+	done     bool
+	quitting bool
+}
+
+func (m multiPickModel) Init() tea.Cmd { return nil }
+
+func (m multiPickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			m.quitting = true
+			return m, tea.Quit
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j":
+			if m.cursor < len(m.items)-1 {
+				m.cursor++
+			}
+		case " ":
+			m.selected[m.cursor] = !m.selected[m.cursor]
+		case "a":
+			if len(m.selected) == len(m.items) {
+				m.selected = make(map[int]bool)
+			} else {
+				for i := range m.items {
+					m.selected[i] = true
+				}
+			}
+		case "enter":
+			m.done = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m multiPickModel) View() string {
+	if m.done || m.quitting {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("Select models to remove") + "\n")
+	b.WriteString(dimStyle.Render("  ↑/↓ navigate  space=toggle  a=all  enter=confirm  q=cancel") + "\n\n")
+	for i, item := range m.items {
+		check := "◻"
+		if m.selected[i] {
+			check = "◼"
+		}
+		line := fmt.Sprintf("%s %s", check, item.slug)
+		desc := item.Description()
+		if i == m.cursor {
+			_, _ = fmt.Fprintln(&b, selStyle.Render("> "+line))
+			_, _ = fmt.Fprintln(&b, selStyle.Render("  "+desc))
+		} else {
+			_, _ = fmt.Fprintln(&b, itemStyle.Render("  "+line))
+			_, _ = fmt.Fprintln(&b, dimStyle.Render("  "+desc))
+		}
+	}
+	return lipgloss.NewStyle().Margin(1, 2).Render(b.String())
+}
+
+// Result returns the slugs of all selected items in list order.
+func (m multiPickModel) Result() []string {
+	var out []string
+	for i, item := range m.items {
+		if m.selected[i] {
+			out = append(out, item.slug)
+		}
+	}
+	return out
+}
+
+// MultiPickModel presents an interactive list where the user can toggle
+// multiple entries with space and confirm with enter. Returns the selected
+// slugs (empty slice is valid — means nothing was chosen). Returns an error
+// only when the user explicitly cancels (q/esc) or when no models exist.
+// If exactly one model is available it is returned without showing the TUI.
+func MultiPickModel(names []string, cfgs []*config.ModelConfig, activeSlug string, history map[string]time.Time) ([]string, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("no models found — run 'marlin add' to create one")
+	}
+	if len(names) == 1 {
+		return []string{names[0]}, nil
+	}
+
+	items := buildModelItems(names, cfgs, activeSlug, history)
+
+	m, err := tea.NewProgram(multiPickModel{
+		items:    items,
+		selected: make(map[int]bool),
+	}, tea.WithAltScreen()).Run()
+	if err != nil {
+		return nil, fmt.Errorf("picker: %w", err)
+	}
+
+	mpm := m.(multiPickModel)
+	if mpm.quitting {
+		return nil, fmt.Errorf("cancelled")
+	}
+	return mpm.Result(), nil
 }
 
 // Confirm shows a simple y/n prompt and returns true if the user confirmed.

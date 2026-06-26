@@ -1,10 +1,14 @@
 package update
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -129,4 +133,102 @@ func (t redirectTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	u.Host = t.base[len("http://"):]
 	req2.URL = &u
 	return http.DefaultTransport.RoundTrip(req2)
+}
+
+func TestAssetURL(t *testing.T) {
+	url := AssetURL("v0.2.4", "linux", "amd64")
+	assert.Equal(t, "https://github.com/DavidXArnold/marlin/releases/download/v0.2.4/marlin_0.2.4_linux_amd64.tar.gz", url)
+}
+
+func TestAssetURLNoLeadingV(t *testing.T) {
+	url := AssetURL("0.2.4", "linux", "arm64")
+	assert.Equal(t, "https://github.com/DavidXArnold/marlin/releases/download/0.2.4/marlin_0.2.4_linux_arm64.tar.gz", url)
+}
+
+func TestDownload(t *testing.T) {
+	content := []byte("fake binary data")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(content)
+	}))
+	defer srv.Close()
+
+	old := HTTPClient
+	HTTPClient = &http.Client{Transport: redirectToServer(srv)}
+	defer func() { HTTPClient = old }()
+
+	dest := filepath.Join(t.TempDir(), "downloaded")
+	require.NoError(t, Download(context.Background(), "https://example.com/asset", dest))
+
+	got, err := os.ReadFile(dest)
+	require.NoError(t, err)
+	assert.Equal(t, content, got)
+}
+
+func TestDownloadServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	old := HTTPClient
+	HTTPClient = &http.Client{Transport: redirectToServer(srv)}
+	defer func() { HTTPClient = old }()
+
+	dest := filepath.Join(t.TempDir(), "downloaded")
+	err := Download(context.Background(), "https://example.com/asset", dest)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "404")
+}
+
+func TestExtractBinary(t *testing.T) {
+	archivePath := filepath.Join(t.TempDir(), "fake.tar.gz")
+	binContent := []byte("#!/bin/sh\necho marlin\n")
+	require.NoError(t, writeFakeTarGz(archivePath, "marlin_0.2.4_linux_amd64/marlin", binContent))
+
+	destPath := filepath.Join(t.TempDir(), "marlin")
+	require.NoError(t, ExtractBinary(archivePath, "marlin", destPath))
+
+	got, err := os.ReadFile(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, binContent, got)
+
+	info, err := os.Stat(destPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o755), info.Mode().Perm())
+}
+
+func TestExtractBinaryNotFound(t *testing.T) {
+	archivePath := filepath.Join(t.TempDir(), "fake.tar.gz")
+	require.NoError(t, writeFakeTarGz(archivePath, "other-binary", []byte("data")))
+
+	destPath := filepath.Join(t.TempDir(), "marlin")
+	err := ExtractBinary(archivePath, "marlin", destPath)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func writeFakeTarGz(path, entryName string, data []byte) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	gw := gzip.NewWriter(f)
+	tw := tar.NewWriter(gw)
+	hdr := &tar.Header{
+		Name:     entryName,
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(data)),
+		Mode:     0o755,
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		return err
+	}
+	if _, err = tw.Write(data); err != nil {
+		return err
+	}
+	if err := tw.Close(); err != nil {
+		return err
+	}
+	return gw.Close()
 }

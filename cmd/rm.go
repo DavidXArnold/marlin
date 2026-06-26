@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -11,13 +13,19 @@ import (
 	"github.com/DavidXArnold/marlin/internal/ui"
 )
 
-// rmConfirmFunc is injectable for tests.
-var rmConfirmFunc = ui.Confirm
+// injectable for tests
+var (
+	rmConfirmFunc   = ui.Confirm
+	rmMultiPickFunc = func(names []string, cfgs []*config.ModelConfig, active string, history map[string]time.Time) ([]string, error) {
+		return ui.MultiPickModel(names, cfgs, active, history)
+	}
+	isBundledFunc = config.IsBundled
+)
 
 var rmCmd = &cobra.Command{
-	Use:   "rm [model]",
-	Short: "Remove a model profile",
-	Args:  cobra.MaximumNArgs(1),
+	Use:   "rm [model...]",
+	Short: "Remove one or more model profiles",
+	Args:  cobra.ArbitraryArgs,
 	RunE:  runRm,
 }
 
@@ -39,34 +47,66 @@ func runRm(cmd *cobra.Command, args []string) error {
 
 	cur, _ := state.Load(cfg.Paths.StateFile)
 
-	query := ""
+	var slugs []string
 	if len(args) > 0 {
-		query = args[0]
+		nameSet := make(map[string]bool, len(names))
+		for _, n := range names {
+			nameSet[n] = true
+		}
+		for _, arg := range args {
+			if !nameSet[arg] {
+				return fmt.Errorf("model %q not found", arg)
+			}
+		}
+		slugs = args
+	} else {
+		slugs, err = rmMultiPickFunc(names, models, cur.ActiveModel, cur.ModelHistory)
+		if err != nil {
+			return err
+		}
 	}
 
-	slug, err := resolveModel(query, names, models, cur.ActiveModel, cur.ModelHistory)
-	if err != nil {
-		return err
+	if len(slugs) == 0 {
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "nothing selected")
+		return nil
 	}
 
-	path, err := config.FindModelPath(slug, dirs...)
-	if err != nil {
-		return fmt.Errorf("model %q not found", slug)
+	// Warn when any selected profile is a bundled default.
+	var bundled []string
+	for _, s := range slugs {
+		if isBundledFunc(s) {
+			bundled = append(bundled, s)
+		}
+	}
+	if len(bundled) > 0 {
+		verb := "is"
+		if len(bundled) > 1 {
+			verb = "are"
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+			"warning: %s %s a bundled default profile — it will be recreated on next install\n",
+			strings.Join(bundled, ", "), verb)
 	}
 
-	ok, err := rmConfirmFunc(fmt.Sprintf("Remove %q (%s)?", slug, path))
+	ok, err := rmConfirmFunc(fmt.Sprintf("Remove %s?", strings.Join(slugs, ", ")))
 	if err != nil {
 		return err
 	}
 	if !ok {
-		_, err = fmt.Fprintln(cmd.OutOrStdout(), "cancelled")
-		return err
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "cancelled")
+		return nil
 	}
 
-	if err := privilege.PromptAndRemove(cmd.OutOrStdout(), path); err != nil {
-		return fmt.Errorf("removing %s: %w", path, err)
+	for _, slug := range slugs {
+		path, err := config.FindModelPath(slug, dirs...)
+		if err != nil {
+			return fmt.Errorf("model %q not found on disk", slug)
+		}
+		if err := privilege.PromptAndRemove(cmd.OutOrStdout(), path); err != nil {
+			return fmt.Errorf("removing %s: %w", path, err)
+		}
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", path)
 	}
 
-	_, err = fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", path)
-	return err
+	return nil
 }

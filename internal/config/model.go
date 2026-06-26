@@ -65,6 +65,15 @@ type ServeConfig struct {
 	TrustRemoteCode bool `toml:"trust_remote_code"` // pass --trust-remote-code to vllm serve
 }
 
+// IsBundled reports whether slug names a bundled model profile embedded in the binary.
+func IsBundled(slug string) bool {
+	if BundledModels == nil {
+		return false
+	}
+	_, err := fs.Stat(BundledModels, "models/"+slug+".toml")
+	return err == nil
+}
+
 func LoadModel(path string) (*ModelConfig, error) {
 	f, err := os.Open(path)
 	if err != nil {

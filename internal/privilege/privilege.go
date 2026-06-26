@@ -243,6 +243,40 @@ func PromptAndSymlink(w io.Writer, src, dst string) error {
 	return sudoRun([]string{"ln", "-sf", src, dst})
 }
 
+// PromptAndInstallBinary copies the binary at srcPath to destPath with
+// executable permissions (0o755). If the target directory requires root,
+// it warns on w, prompts for y/N confirmation, then uses "sudo install -m 755".
+// Returns (false, nil) if the user declines.
+func PromptAndInstallBinary(w io.Writer, srcPath, destPath string) (bool, error) {
+	dir := filepath.Dir(destPath)
+	if !NeedsRoot(dir) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return false, err
+		}
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			return false, err
+		}
+		if err := os.WriteFile(destPath, data, 0o755); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	_, _ = fmt.Fprintf(w, "\nwarning: installing to %s requires administrator privileges\n", destPath)
+	_, _ = fmt.Fprint(w, "continue with sudo? [y/N] ")
+	buf := make([]byte, 64)
+	n, _ := stdinR.Read(buf)
+	answer := strings.ToLower(strings.TrimSpace(string(buf[:n])))
+	if answer != "y" && answer != "yes" {
+		_, _ = fmt.Fprintln(w, "cancelled")
+		return false, nil
+	}
+	if err := sudoRun([]string{"install", "-m", "755", srcPath, destPath}); err != nil {
+		return false, fmt.Errorf("sudo install: %w", err)
+	}
+	return true, nil
+}
+
 // atomicSymlinkImpl replaces dst so it points at src, atomically via a
 // temp symlink + rename so the link is never absent during the swap.
 func atomicSymlinkImpl(src, dst string) error {
