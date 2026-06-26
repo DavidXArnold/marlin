@@ -4,11 +4,11 @@
 
 <h1 align="center">marlin</h1>
 
-<p align="center">An opinionated CLI for managing local LLM inference. Handles vLLM (systemd), NIM (Docker/Podman/nerdctl), and llama.cpp/GGUF model switching, live health checks, hardware detection, and registry searches.</p>
+<p align="center">An opinionated CLI for managing local LLM inference. Handles vLLM (containerized or bare-binary via systemd), NIM (Docker/Podman/nerdctl), and llama.cpp/GGUF model switching, live health checks, hardware detection, and registry searches.</p>
 
 ## Features
 
-- **Three provider types** — `vllm` (systemd + env-file symlink), `nim` (NIM containers via Docker, Podman, or nerdctl), and `llamacpp` (llama-server via a dedicated systemd unit)
+- **Three provider types** — `vllm` (containerized via Docker/Podman/nerdctl, or bare-binary systemd), `nim` (NIM containers via Docker, Podman, or nerdctl), and `llamacpp` (llama-server via a dedicated systemd unit)
 - **Interactive TUI** — fuzzy model picker, multi-step add wizard, search result picker, and live `marlin top` dashboard (bubbletea)
 - **Atomic symlink swap** — zero-gap `model.env` rotation for vLLM and llama.cpp
 - **NIM container lifecycle** — pull, stop old, start new; host cache dir prepared with correct GID=0 permissions
@@ -105,8 +105,10 @@ NGC_API_KEY=nvapi-...
 |---|---|---|
 | `systemd_unit` | `"marlin"` | Systemd unit name managed by `marlin start --enable` |
 | `docker_container` | `"marlin"` | Name given to managed NIM containers |
+| `vllm_mode` | `"container"` | How vLLM is run: `"container"` (Docker/Podman/nerdctl, default) or `"binary"` (bare local install) |
 | `vllm_image` | `"nvcr.io/nvidia/vllm:26.05.post1-py3"` | Docker image used for ad-hoc `marlin run` with vLLM |
-| `container_runtime` | `"docker"` | Container runtime: `docker`, `podman`, or `containerd` |
+| `vllm_bin` | `""` | Full path to vllm binary (binary mode only); empty = auto-detect via PATH and SUDO_USER venv locations |
+| `container_runtime` | `"docker"` | Container runtime: `docker`, `podman`, or `nerdctl` |
 | `container_socket` | `""` | Custom socket path for Docker/Podman; empty = auto-detect |
 | `llamacpp_unit` | `"marlin-llamacpp"` | Systemd unit for llama-server (llamacpp provider) |
 
@@ -487,8 +489,18 @@ marlin edit qwen25-72b-awq
 
 Install the vLLM systemd unit file. Run once before using `marlin start --enable` for boot-time autostart.
 
+In the default `container` mode the unit runs vLLM inside the official NVIDIA container — no local vLLM install required. `marlin install` probes for Docker, Podman, or nerdctl and warns with installation links if none is found. The image is read from `VLLM_IMAGE` in the active model env file, so switching models updates the container automatically without reinstalling the unit.
+
 ```bash
-marlin install
+marlin install          # container mode (default) — requires Docker/Podman/nerdctl
+sudo marlin install     # write to /etc/systemd/system/<unit>.service
+marlin install --enable # also enable at boot
+```
+
+To use a locally installed vLLM binary instead, set `service.vllm_mode = "binary"` in config and re-run `marlin install`. The binary mode unit resolves the vllm path at install time (including SUDO_USER venv locations) and bakes it into ExecStart.
+
+```bash
+marlin install --force  # overwrite an existing unit file
 ```
 
 ### `marlin restart`
@@ -519,7 +531,7 @@ Each model is a TOML file in `paths.models_dir`.
 [model]
 id     = "Qwen/Qwen2.5-72B-Instruct-AWQ"
 type   = "vllm"
-image  = "nvcr.io/nvidia/vllm:26.05.post1-py3"   # optional; overrides service.vllm_image
+image  = "nvcr.io/nvidia/vllm:26.05.post1-py3"   # required for container mode; written as VLLM_IMAGE to the env file
 status = "working"
 notes  = "Best for tool-calling"
 
@@ -532,9 +544,11 @@ tool_call_parser       = "hermes"
 trust_remote_code      = false   # set true for models requiring --trust-remote-code (e.g. Qwen2.5-VL)
 ```
 
-`HF_TOKEN` is read from `paths.secrets_env` and written into the rendered env file automatically — no manual wiring needed.
+`HF_TOKEN` is read from `paths.secrets_env` and passed into the container (or bare-binary process) automatically — no manual wiring needed.
 
 **NVFP4 models**: do not set `quantization = "nvfp4"` — vLLM auto-detects NVFP4 from the model config and does not accept `--quantization nvfp4` on the command line. The bundled profiles omit the field entirely. If you do set it, marlin silently drops it from the generated args.
+
+**Bundled NVFP4 profiles** extend `nvfp4-base` which carries the shared image, `gpu_memory_utilization`, and `max_model_len`. Custom NVFP4 profiles can do the same — add `extends = "nvfp4-base"` to inherit all common settings and stay in sync when the base image changes.
 
 ### NIM model
 
