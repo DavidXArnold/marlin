@@ -20,7 +20,7 @@ func doctorRunCmd(ctx context.Context, name string, args ...string) ([]byte, err
 func AllChecks(cfg *marlinConfig.Config, cfgPath string) []Check {
 	var checks []Check
 	checks = append(checks, configChecks(cfgPath)...)
-	checks = append(checks, runtimeChecks()...)
+	checks = append(checks, runtimeChecks(cfg)...)
 	checks = append(checks, gpuChecks()...)
 	checks = append(checks, secretsChecks(cfg)...)
 	checks = append(checks, pathsChecks(cfg)...)

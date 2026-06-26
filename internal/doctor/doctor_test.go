@@ -130,7 +130,7 @@ func TestRuntimeCheckPass(t *testing.T) {
 		return []byte(`{"Client":{"Version":"27.3.1"}}`), nil
 	})
 
-	checks := runtimeChecks()
+	checks := runtimeChecks(marlinConfig.Defaults())
 	var dockerCheck Check
 	for _, c := range checks {
 		if c.ID() == "runtime.docker" {
@@ -149,7 +149,7 @@ func TestRuntimeCheckFail(t *testing.T) {
 		return nil, &notFoundError{name: name}
 	})
 
-	checks := runtimeChecks()
+	checks := runtimeChecks(marlinConfig.Defaults())
 	var dockerCheck Check
 	for _, c := range checks {
 		if c.ID() == "runtime.docker" {
@@ -352,7 +352,50 @@ func TestRuntimeCheckNerdctl(t *testing.T) {
 	injectRunCmd(t, func(_ context.Context, name string, args ...string) ([]byte, error) {
 		return []byte("nerdctl version 1.7.3\n"), nil
 	})
-	checks := runtimeChecks()
+	checks := runtimeChecks(marlinConfig.Defaults())
 	result := findCheckResult(t, checks, "runtime.nerdctl")
 	assert.Equal(t, LevelPass, result.Level)
+}
+
+func TestVLLMContainerCheckNoRuntime(t *testing.T) {
+	cfg := marlinConfig.Defaults()
+	cfg.Service.ContainerRuntime = "no-such-runtime-xyz"
+	check := &funcCheck{id: "runtime.vllm_container", run: checkVLLMContainer(cfg)}
+	result := check.Run(context.Background())
+	assert.Equal(t, LevelFail, result.Level)
+	assert.Contains(t, result.Detail, "no-such-runtime-xyz")
+}
+
+func TestVLLMBinaryCheckConfiguredMissing(t *testing.T) {
+	cfg := marlinConfig.Defaults()
+	cfg.Service.VLLMMode = "binary"
+	cfg.Service.VLLMBin = "/nonexistent/path/to/vllm"
+	check := &funcCheck{id: "runtime.vllm", run: checkVLLMBin(cfg)}
+	result := check.Run(context.Background())
+	assert.Equal(t, LevelWarn, result.Level)
+	assert.Contains(t, result.Detail, "/nonexistent/path/to/vllm")
+}
+
+func TestVLLMBinaryCheckConfiguredPresent(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "vllm")
+	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh"), 0o755))
+
+	cfg := marlinConfig.Defaults()
+	cfg.Service.VLLMMode = "binary"
+	cfg.Service.VLLMBin = bin
+	check := &funcCheck{id: "runtime.vllm", run: checkVLLMBin(cfg)}
+	result := check.Run(context.Background())
+	assert.Equal(t, LevelPass, result.Level)
+	assert.Contains(t, result.Detail, bin)
+}
+
+func TestVLLMBinaryCheckNotInPath(t *testing.T) {
+	cfg := marlinConfig.Defaults()
+	cfg.Service.VLLMMode = "binary"
+	// VLLMBin empty + vllm not in PATH in CI → WARN
+	check := &funcCheck{id: "runtime.vllm", run: checkVLLMBin(cfg)}
+	result := check.Run(context.Background())
+	// May pass if vllm is installed; just verify it's not FAIL.
+	assert.NotEqual(t, LevelFail, result.Level)
 }
