@@ -76,6 +76,21 @@ func TestSwitchSuccess(t *testing.T) {
 	assert.Contains(t, string(content), "Qwen/Qwen2.5-72B-Instruct-AWQ")
 }
 
+// In container mode (the default), Switch must write VLLM_IMAGE to the env file
+// using the global default image when the model profile has no explicit image.
+func TestSwitchContainerModeWritesGlobalVLLMImage(t *testing.T) {
+	p, _ := testVLLMProvider(t, successRunner)
+	p.cfg.Service.VLLMImage = "nvcr.io/nvidia/vllm:26.05.post1-py3"
+	// VLLMMode defaults to "container" from config.Defaults()
+	writeTestModel(t, p.cfg.Paths.ModelsDir, "glm-5.2-nvfp4")
+
+	require.NoError(t, p.Switch(context.Background(), "glm-5.2-nvfp4"))
+
+	content, err := os.ReadFile(filepath.Join(p.cfg.Paths.ModelsDir, "glm-5.2-nvfp4.env"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "VLLM_IMAGE=nvcr.io/nvidia/vllm:26.05.post1-py3")
+}
+
 func TestSwitchModelNotFound(t *testing.T) {
 	p, _ := testVLLMProvider(t, successRunner)
 	err := p.Switch(context.Background(), "nonexistent")

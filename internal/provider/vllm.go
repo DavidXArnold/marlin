@@ -52,8 +52,17 @@ func (v *VLLMProvider) Switch(ctx context.Context, modelSlug string) error {
 		return fmt.Errorf("loading model %q: %w", modelSlug, err)
 	}
 
+	// In container mode, VLLM_IMAGE must be written to the env file.
+	// When the model profile omits model.image, fall back to the global default.
+	envModel := m
+	if v.cfg.Service.VLLMMode != "binary" && m.Model.Image == "" && v.cfg.Service.VLLMImage != "" {
+		m2 := *m
+		m2.Model.Image = v.cfg.Service.VLLMImage
+		envModel = &m2
+	}
+
 	envPath := filepath.Join(v.cfg.Paths.ModelsDir, modelSlug+".env")
-	envContent := []byte(render.Env(m, v.hfToken))
+	envContent := []byte(render.Env(envModel, v.hfToken))
 
 	written, err := privilege.PromptAndWriteFile(v.w, filepath.Dir(envPath), envPath, envContent)
 	if err != nil {

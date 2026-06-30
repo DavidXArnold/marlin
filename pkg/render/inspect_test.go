@@ -90,10 +90,10 @@ func TestInspectVLLMHFTokenPlaceholder(t *testing.T) {
 		t.Errorf("expected HF_TOKEN placeholder, got:\n%s", out)
 	}
 
-	// Without a token: no placeholder.
+	// Without a token: secrets placeholder must not appear (but ExecStart env passthrough is fine).
 	out = Inspect(m, baseConfig(), "llama-3.1-8b", "")
-	if strings.Contains(out, "HF_TOKEN") {
-		t.Errorf("expected no HF_TOKEN line, got:\n%s", out)
+	if strings.Contains(out, "HF_TOKEN=*** (from secrets)") {
+		t.Errorf("expected no HF_TOKEN secrets placeholder, got:\n%s", out)
 	}
 }
 
@@ -157,6 +157,33 @@ func TestInspectVLLMBinaryModeExecStart(t *testing.T) {
 	}
 	if strings.Contains(out, "docker run") {
 		t.Errorf("expected no docker run in binary mode, got:\n%s", out)
+	}
+}
+
+// When VLLMMode is "container" and the model has no explicit image, inspect should
+// show the global VLLMImage in the env section and the containerized ExecStart.
+func TestInspectVLLMContainerModeNoModelImage(t *testing.T) {
+	m := &config.ModelConfig{}
+	m.Model.ID = "nvidia/GLM-5.2-NVFP4"
+	m.Model.Type = config.ProviderVLLM
+	m.Model.Status = "untested"
+	// no m.Model.Image set
+
+	cfg := baseConfig() // VLLMMode = "container" by default
+	cfg.Service.VLLMImage = "nvcr.io/nvidia/vllm:26.05.post1-py3"
+
+	out := Inspect(m, cfg, "glm-5.2-nvfp4", "")
+
+	// Env section must include the global image so VLLM_IMAGE is set in the unit.
+	if !strings.Contains(out, "VLLM_IMAGE=nvcr.io/nvidia/vllm:26.05.post1-py3") {
+		t.Errorf("expected VLLM_IMAGE in env section, got:\n%s", out)
+	}
+	// ExecStart must be the containerized form.
+	if strings.Contains(out, "exec vllm serve") {
+		t.Errorf("expected containerized ExecStart, got binary form:\n%s", out)
+	}
+	if !strings.Contains(out, "${VLLM_IMAGE}") {
+		t.Errorf("expected VLLM_IMAGE variable in containerized ExecStart, got:\n%s", out)
 	}
 }
 

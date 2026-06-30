@@ -69,14 +69,23 @@ func inspectVLLM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config, 
 		writef("extra_flags           : %s\n", strings.Join(m.Serve.ExtraFlags, " "))
 	}
 
+	// In container mode, show VLLM_IMAGE even when the model profile omits
+	// model.image — fall back to the global default image for display.
+	mDisplay := m
+	if cfg.Service.VLLMMode != "binary" && m.Model.Image == "" && cfg.Service.VLLMImage != "" {
+		m2 := *m
+		m2.Model.Image = cfg.Service.VLLMImage
+		mDisplay = &m2
+	}
+
 	writef("\n=== env file (%s/%s.env) ===\n", cfg.Paths.ModelsDir, slug)
-	writef("%s", Env(m, ""))
+	writef("%s", Env(mDisplay, ""))
 	if hfToken != "" {
 		writef("HF_TOKEN=*** (from secrets)\n")
 	}
 
 	writef("\n=== systemd ExecStart ===\n")
-	if cfg.Service.VLLMMode != "binary" && m.Model.Image != "" {
+	if cfg.Service.VLLMMode != "binary" {
 		containerBin, _ := ResolveContainerBin(cfg)
 		writef("/bin/bash -c 'exec %s run --rm --gpus all --ipc host --network host --name marlin-vllm --label marlin.managed=true -e \"HF_TOKEN=${HF_TOKEN:-}\" \"${VLLM_IMAGE}\" vllm serve \"${VLLM_MODEL}\" --host 0.0.0.0 --port %d ${VLLM_EXTRA_ARGS:-}'\n",
 			containerBin, cfg.Server.Port)
