@@ -87,7 +87,7 @@ func inspectVLLM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config, 
 	writef("\n=== systemd ExecStart ===\n")
 	if cfg.Service.VLLMMode != "binary" {
 		containerBin, _ := ResolveContainerBin(cfg)
-		writef("/bin/bash -c 'exec %s run --rm --gpus all --ipc host --network host --name marlin-vllm --label marlin.managed=true -e \"HF_TOKEN=${HF_TOKEN:-}\" \"${VLLM_IMAGE}\" vllm serve \"${VLLM_MODEL}\" --host 0.0.0.0 --port %d ${VLLM_EXTRA_ARGS:-}'\n",
+		writef("/bin/bash -c 'exec %s run --rm --gpus all --ipc host --network host --name marlin-vllm --label marlin.managed=true --entrypoint vllm -e \"HF_TOKEN=${HF_TOKEN:-}\" \"${VLLM_IMAGE}\" serve \"${VLLM_MODEL}\" --host 0.0.0.0 --port %d ${VLLM_EXTRA_ARGS:-}'\n",
 			containerBin, cfg.Server.Port)
 	} else {
 		vllmBin, _ := ResolveVLLMBin(cfg.Service.VLLMBin)

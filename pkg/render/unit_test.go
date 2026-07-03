@@ -3,6 +3,7 @@ package render
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -99,10 +100,38 @@ func TestSystemdUnitContainerizedKeyFields(t *testing.T) {
 	assert.Contains(t, out, "--network host")
 	assert.Contains(t, out, "--label marlin.managed=true")
 	assert.Contains(t, out, "${VLLM_IMAGE}")
-	assert.Contains(t, out, "vllm serve")
+	assert.Contains(t, out, "--entrypoint vllm")
 	assert.Contains(t, out, "8000")
 	assert.NotContains(t, out, "-p 8000:8000") // network host replaces port mapping
 	assert.Contains(t, out, cfg.Service.SystemdUnit)
+}
+
+// TestSystemdUnitContainerizedEntrypointVLLM verifies that the rendered unit sets
+// --entrypoint vllm and passes "serve" exactly once, preventing double-invocation
+// when the image's own ENTRYPOINT already includes "vllm serve".
+func TestSystemdUnitContainerizedEntrypointVLLM(t *testing.T) {
+	cfg := config.Defaults()
+	out := SystemdUnitContainerized(cfg, "docker")
+
+	assert.Contains(t, out, "--entrypoint vllm")
+	assert.Equal(t, 1, strings.Count(out, " serve "), "expected exactly one 'serve' token in ExecStart")
+}
+
+// TestSystemdUnitContainerizedNoDoubleServe is a regression guard: after ${VLLM_IMAGE}
+// the immediate next token must be "serve", and no "vllm" token may follow the image.
+func TestSystemdUnitContainerizedNoDoubleServe(t *testing.T) {
+	cfg := config.Defaults()
+	out := SystemdUnitContainerized(cfg, "docker")
+
+	const imgMarker = `"${VLLM_IMAGE}"`
+	imgIdx := strings.Index(out, imgMarker)
+	require.NotEqual(t, -1, imgIdx, "expected ${VLLM_IMAGE} in unit")
+
+	afterImage := strings.TrimSpace(out[imgIdx+len(imgMarker):])
+	assert.True(t, strings.HasPrefix(afterImage, "serve "),
+		"expected 'serve' immediately after ${VLLM_IMAGE}, got: %q", afterImage)
+	assert.NotContains(t, afterImage, "vllm",
+		"no 'vllm' token should follow the image reference")
 }
 
 func TestSystemdUnitContainerizedFullBinPath(t *testing.T) {
