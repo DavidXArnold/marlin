@@ -227,6 +227,63 @@ func TestEffectiveHealthPathProviderDefault(t *testing.T) {
 	assert.Equal(t, "/health", EffectiveHealthPath(vllm, "/other"))
 }
 
+func TestPersistModelHealthPathUpdateInPlace(t *testing.T) {
+	dir := t.TempDir()
+	slug := "mymodel"
+	path := filepath.Join(dir, slug+".toml")
+	require.NoError(t, os.WriteFile(path, []byte("[model]\nid = \"org/mymodel\"\n\n[serve]\ngpu_memory_utilization = 0.9\n"), 0644))
+
+	require.NoError(t, PersistModelHealthPath(slug, "/v1/health/live", dir))
+
+	m, err := LoadModel(path)
+	require.NoError(t, err)
+	assert.Equal(t, "/v1/health/live", m.Serve.HealthPath)
+	assert.Equal(t, "org/mymodel", m.Model.ID, "other fields must be preserved")
+}
+
+func TestPersistModelHealthPathNoOpWhenAlreadySet(t *testing.T) {
+	dir := t.TempDir()
+	slug := "mymodel"
+	path := filepath.Join(dir, slug+".toml")
+	original := "[model]\nid = \"org/mymodel\"\n\n[serve]\nhealth_path = \"/health\"\n"
+	require.NoError(t, os.WriteFile(path, []byte(original), 0644))
+
+	require.NoError(t, PersistModelHealthPath(slug, "/health", dir))
+
+	// File should be unchanged.
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, original, string(data))
+}
+
+func TestPersistModelHealthPathFallbackToWritableDir(t *testing.T) {
+	// readonlyDir simulates a system models dir: file exists but parent is read-only.
+	readonlyDir := t.TempDir()
+	userDir := t.TempDir()
+	slug := "sysmodel"
+	sysPath := filepath.Join(readonlyDir, slug+".toml")
+	require.NoError(t, os.WriteFile(sysPath, []byte("[model]\nid = \"org/sysmodel\"\ntype = \"vllm\"\n"), 0644))
+
+	// Make the file itself read-only (simulate non-writable system file).
+	require.NoError(t, os.Chmod(sysPath, 0444))
+	t.Cleanup(func() { _ = os.Chmod(sysPath, 0644) })
+
+	// dirs: userDir first (precedence), then readonlyDir (source).
+	require.NoError(t, PersistModelHealthPath(slug, "/v1/health/live", userDir, readonlyDir))
+
+	// Should have written a copy to userDir.
+	dst := filepath.Join(userDir, slug+".toml")
+	m, err := LoadModel(dst)
+	require.NoError(t, err)
+	assert.Equal(t, "/v1/health/live", m.Serve.HealthPath)
+	assert.Equal(t, "org/sysmodel", m.Model.ID)
+}
+
+func TestPersistModelHealthPathNotFound(t *testing.T) {
+	// Should return nil (not error) when the slug doesn't exist anywhere.
+	assert.NoError(t, PersistModelHealthPath("ghost-model", "/health", t.TempDir()))
+}
+
 func writeTempModelFile(t *testing.T, name, content string) string {
 	t.Helper()
 	dir := t.TempDir()

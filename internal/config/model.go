@@ -205,3 +205,52 @@ func FindModelPath(slug string, dirs ...string) (string, error) {
 	}
 	return "", fmt.Errorf("model %q not found", slug)
 }
+
+// PersistModelHealthPath records healthPath as serve.health_path in the model's
+// config file so future runs use it directly without probing. It is a no-op when
+// the raw file already has that path set.
+//
+// If the file exists in a non-writable directory (e.g. a system models dir), the
+// raw file is copied to the first writable directory with health_path added — that
+// user-level file takes precedence via effectiveDirs ordering, and any extends chain
+// in the raw file still resolves correctly because the parent slug is different.
+func PersistModelHealthPath(slug, healthPath string, dirs ...string) error {
+	// Find the raw (not merged) file and decode it.
+	rawPath, err := FindModelPath(slug, dirs...)
+	if err != nil {
+		return nil // model not on disk (e.g. embedded only); skip
+	}
+	data, err := os.ReadFile(rawPath)
+	if err != nil {
+		return nil
+	}
+	var raw ModelConfig
+	if _, err := toml.Decode(string(data), &raw); err != nil {
+		return nil
+	}
+	if raw.Serve.HealthPath == healthPath {
+		return nil // already explicit and correct; nothing to do
+	}
+
+	raw.Serve.HealthPath = healthPath
+
+	// Try to write to the file where it lives.
+	if err := SaveModel(rawPath, &raw); err == nil {
+		return nil
+	}
+
+	// rawPath not writable (likely a system dir). Copy to first writable dir.
+	for _, dir := range dirs {
+		dst := filepath.Join(dir, slug+".toml")
+		if dst == rawPath {
+			continue // already tried this one
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			continue
+		}
+		if err := SaveModel(dst, &raw); err == nil {
+			return nil
+		}
+	}
+	return nil // no writable dir available; skip silently
+}

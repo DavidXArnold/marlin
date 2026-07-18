@@ -48,7 +48,8 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		}
 
 		// Load model config to pick the right health endpoint for this provider.
-		activeM, _ := config.ResolveModel(cur.ActiveModel, effectiveDirs(cfg)...)
+		activeDirs := effectiveDirs(cfg)
+		activeM, _ := config.ResolveModel(cur.ActiveModel, activeDirs...)
 
 		// Live status from the provider (works for all provider types).
 		var liveStatus *provider.Status
@@ -100,7 +101,10 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			primaryPath := config.EffectiveHealthPath(activeM, cfg.Server.HealthPath)
 			probePaths := append([]string{primaryPath}, vllm.KnownHealthPaths...)
 			client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", primaryPath)
-			_, apiReady := client.HealthProbe(cmd.Context(), probePaths...)
+			found, apiReady := client.HealthProbe(cmd.Context(), probePaths...)
+			if apiReady && found != "" && (activeM == nil || activeM.Serve.HealthPath != found) {
+				_ = config.PersistModelHealthPath(cur.ActiveModel, found, activeDirs...)
+			}
 			if apiReady {
 				if err := out.printf("api health   : ready at http://%s:%d/v1\n", cfg.Server.Host, cfg.Server.Port); err != nil {
 					return err

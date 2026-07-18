@@ -156,14 +156,22 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 
 	// Derive probe paths: model-specific primary first, then all known alternates.
 	// HealthProbe deduplicates, so overlap between primary and KnownHealthPaths is fine.
-	m, _ := config.ResolveModel(slug, effectiveDirs(cfg)...)
+	dirs := effectiveDirs(cfg)
+	m, _ := config.ResolveModel(slug, dirs...)
 	primaryPath := config.EffectiveHealthPath(m, cfg.Server.HealthPath)
 	probePaths := append([]string{primaryPath}, vllm.KnownHealthPaths...)
+
+	persistHealthPath := func(found string) {
+		if found != "" && (m == nil || m.Serve.HealthPath != found) {
+			_ = config.PersistModelHealthPath(slug, found, dirs...)
+		}
+	}
 
 	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", primaryPath)
 
 	// Fast path: already ready (e.g., vLLM process already healthy after systemd restart).
-	if _, ready := client.HealthProbe(ctx, probePaths...); ready {
+	if found, ready := client.HealthProbe(ctx, probePaths...); ready {
+		persistHealthPath(found)
 		_, _ = fmt.Fprintf(w, "%s ready at http://%s:%d/v1\n", slug, cfg.Server.Host, cfg.Server.Port)
 		return true
 	}
@@ -203,7 +211,8 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 			return false
 
 		case <-ticker.C:
-			if _, ready := client.HealthProbe(cmd.Context(), probePaths...); ready {
+			if found, ready := client.HealthProbe(cmd.Context(), probePaths...); ready {
+				persistHealthPath(found)
 				if isTTY {
 					_, _ = fmt.Fprintf(w, "\r\033[K") // clear spinner line
 				}
