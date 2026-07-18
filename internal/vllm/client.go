@@ -43,6 +43,38 @@ type HealthStatus struct {
 	Ready bool
 }
 
+// KnownHealthPaths is the ordered list of well-known health endpoints probed
+// when the model-derived primary path does not respond 200.
+var KnownHealthPaths = []string{"/health", "/v1/health/live", "/v1/health/ready"}
+
+// HealthProbe tries each path in order and returns the first that responds 200.
+// Duplicate paths are skipped. Returns ("", false) when all paths fail or the
+// server is unreachable.
+func (c *Client) HealthProbe(ctx context.Context, paths ...string) (path string, ready bool) {
+	seen := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+p, nil)
+		if err != nil {
+			return "", false
+		}
+		resp, err := c.http.Do(req)
+		if err != nil {
+			continue // server not yet up; try next path
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// Health checks the configured health path. Use HealthProbe to try multiple
+// known paths when the primary path may vary by model or container image.
 func (c *Client) Health(ctx context.Context) (*HealthStatus, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+c.healthPath, nil)
 	if err != nil {

@@ -44,6 +44,73 @@ func TestHealthUnreachable(t *testing.T) {
 	assert.False(t, status.Ready)
 }
 
+func TestHealthProbePrimaryHits(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := clientFromTestServer(srv)
+	path, ready := c.HealthProbe(context.Background(), "/health", "/v1/health/live")
+	assert.True(t, ready)
+	assert.Equal(t, "/health", path)
+}
+
+func TestHealthProbeFallback(t *testing.T) {
+	// Primary path returns 404; fallback /v1/health/live returns 200.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/health/live" {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	c := clientFromTestServer(srv)
+	path, ready := c.HealthProbe(context.Background(), "/health", "/v1/health/live")
+	assert.True(t, ready)
+	assert.Equal(t, "/v1/health/live", path)
+}
+
+func TestHealthProbeAllFail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	c := clientFromTestServer(srv)
+	path, ready := c.HealthProbe(context.Background(), "/health", "/v1/health/live")
+	assert.False(t, ready)
+	assert.Empty(t, path)
+}
+
+func TestHealthProbeDeduplicates(t *testing.T) {
+	var callCount int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := clientFromTestServer(srv)
+	path, ready := c.HealthProbe(context.Background(), "/health", "/health", "/health")
+	assert.True(t, ready)
+	assert.Equal(t, "/health", path)
+	assert.Equal(t, 1, callCount, "duplicate paths must not be probed more than once")
+}
+
+func TestHealthProbeUnreachable(t *testing.T) {
+	c := NewClient("127.0.0.1", 19999, "", "/health")
+	path, ready := c.HealthProbe(context.Background(), "/health", "/v1/health/live")
+	assert.False(t, ready)
+	assert.Empty(t, path)
+}
+
 func TestModels(t *testing.T) {
 	response := ModelsResponse{
 		Data: []Model{

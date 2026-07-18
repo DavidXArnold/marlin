@@ -97,14 +97,11 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		// the API state and last log lines to help diagnose the failure.
 		deliberatelyStopped := cur.StoppedAt != nil && notRunning
 		if !deliberatelyStopped {
-			client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", config.EffectiveHealthPath(activeM, cfg.Server.HealthPath))
-			health, healthErr := client.Health(cmd.Context())
-			apiReady := healthErr == nil && health.Ready
-			if healthErr != nil {
-				if err := out.printf("api health   : error (%v)\n", healthErr); err != nil {
-					return err
-				}
-			} else if apiReady {
+			primaryPath := config.EffectiveHealthPath(activeM, cfg.Server.HealthPath)
+			probePaths := append([]string{primaryPath}, vllm.KnownHealthPaths...)
+			client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", primaryPath)
+			_, apiReady := client.HealthProbe(cmd.Context(), probePaths...)
+			if apiReady {
 				if err := out.printf("api health   : ready at http://%s:%d/v1\n", cfg.Server.Host, cfg.Server.Port); err != nil {
 					return err
 				}

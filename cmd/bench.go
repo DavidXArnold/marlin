@@ -50,11 +50,12 @@ func defaultRunBench(cmd *cobra.Command, _ []string) error {
 
 	cur, _ := state.Load(cfg.Paths.StateFile)
 	activeM, _ := config.ResolveModel(cur.ActiveModel, effectiveDirs(cfg)...)
-	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", config.EffectiveHealthPath(activeM, cfg.Server.HealthPath))
+	primaryPath := config.EffectiveHealthPath(activeM, cfg.Server.HealthPath)
+	probePaths := append([]string{primaryPath}, vllm.KnownHealthPaths...)
+	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", primaryPath)
 
 	// Verify the model is up before benchmarking.
-	health, err := client.Health(cmd.Context())
-	if err != nil || !health.Ready {
+	if _, ready := client.HealthProbe(cmd.Context(), probePaths...); !ready {
 		return fmt.Errorf("model not ready — start a model with 'marlin switch' first")
 	}
 

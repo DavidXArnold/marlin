@@ -19,6 +19,7 @@ import (
 
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/provider"
+	"github.com/DavidXArnold/marlin/internal/vllm"
 )
 
 // noopEnableUnit disables enableUnit side-effects for the duration of the test.
@@ -152,13 +153,18 @@ func TestStartProviderError(t *testing.T) {
 
 // --- waitForReady unit tests ---
 
-// makeReadyServer returns an httptest.Server whose /health always responds 200.
+// makeReadyServer returns an httptest.Server that responds 200 to all
+// vllm.KnownHealthPaths and 404 to everything else.
 func makeReadyServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
-			w.WriteHeader(http.StatusOK)
+		for _, p := range vllm.KnownHealthPaths {
+			if r.URL.Path == p {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(srv.Close)
 	return srv
@@ -199,6 +205,8 @@ func TestWaitForReadyEventuallyReady(t *testing.T) {
 			} else {
 				w.WriteHeader(http.StatusServiceUnavailable)
 			}
+		} else {
+			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	t.Cleanup(srv.Close)

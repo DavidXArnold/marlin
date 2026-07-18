@@ -78,10 +78,12 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	}
 
 	activeM, _ := config.ResolveModel(slug, effectiveDirs(cfg)...)
-	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", config.EffectiveHealthPath(activeM, cfg.Server.HealthPath))
+	primaryPath := config.EffectiveHealthPath(activeM, cfg.Server.HealthPath)
+	probePaths := append([]string{primaryPath}, vllm.KnownHealthPaths...)
+	client := vllm.NewClient(cfg.Server.Host, cfg.Server.Port, "", primaryPath)
 	isHealthy := func(ctx context.Context) bool {
-		h, herr := client.Health(ctx)
-		return herr == nil && h.Ready
+		_, ready := client.HealthProbe(ctx, probePaths...)
+		return ready
 	}
 	restart := func(ctx context.Context) error {
 		return p.Switch(ctx, slug)
