@@ -16,7 +16,13 @@ func defaultModelsDir() string {
 	return filepath.Join(home, ".config", "marlin", "models")
 }
 
+// getuid is a var so tests can override it.
+var getuid = os.Getuid
+
 func defaultStateFile() string {
+	if getuid() == 0 {
+		return "/var/lib/marlin/state.toml"
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "/var/lib/marlin/state.toml"
@@ -25,6 +31,9 @@ func defaultStateFile() string {
 }
 
 func defaultHistoryFile() string {
+	if getuid() == 0 {
+		return "/var/lib/marlin/history.jsonl"
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "/var/lib/marlin/history.jsonl"

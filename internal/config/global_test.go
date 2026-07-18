@@ -90,6 +90,22 @@ func TestMaxRuntimeDurationInvalid(t *testing.T) {
 	assert.Equal(t, time.Duration(0), b.MaxRuntimeDuration())
 }
 
+func TestDefaultStateFileAsRoot(t *testing.T) {
+	orig := getuid
+	t.Cleanup(func() { getuid = orig })
+	getuid = func() int { return 0 }
+	assert.Equal(t, "/var/lib/marlin/state.toml", defaultStateFile())
+	assert.Equal(t, "/var/lib/marlin/history.jsonl", defaultHistoryFile())
+}
+
+func TestDefaultStateFileAsUser(t *testing.T) {
+	orig := getuid
+	t.Cleanup(func() { getuid = orig })
+	getuid = func() int { return 1000 }
+	assert.Contains(t, defaultStateFile(), ".local/share/marlin/state.toml")
+	assert.Contains(t, defaultHistoryFile(), ".local/share/marlin/history.jsonl")
+}
+
 func writeTempFile(t *testing.T, name, content string) string {
 	t.Helper()
 	dir := t.TempDir()
