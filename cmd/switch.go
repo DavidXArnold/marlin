@@ -9,6 +9,7 @@ import (
 
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/history"
+	"github.com/DavidXArnold/marlin/internal/mesh"
 	"github.com/DavidXArnold/marlin/internal/state"
 	"github.com/DavidXArnold/marlin/internal/ui"
 	"github.com/DavidXArnold/marlin/internal/validate"
@@ -191,6 +192,27 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: history: %v\n", herr)
 	}
 
+	// Integration 1: auto-register the new endpoint with a running mesh-llm peer.
+	meshAutoRegisterFunc(cmd, cfg, targetModel.Model.Type)
+
 	_, err = fmt.Fprintf(cmd.OutOrStdout(), "switched to %s (%s)\n", targetSlug, targetModel.Model.Type)
 	return err
+}
+
+// meshAutoRegisterFunc is injectable for tests.
+var meshAutoRegisterFunc = func(cmd *cobra.Command, cfg *config.Config, pt config.ProviderType) {
+	if !cfg.Mesh.AutoRegister || pt == config.ProviderMesh {
+		return
+	}
+	vLLMURL := fmt.Sprintf("http://%s:%d/v1", cfg.Server.Host, cfg.Server.Port)
+	changed, err := mesh.PatchOpenAIEndpoint(cfg.Mesh.ConfigPath, vLLMURL)
+	if err != nil {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: mesh auto-register: %v\n", err)
+		return
+	}
+	if changed {
+		if err := mesh.NewClient(cfg.Mesh.ManagementURL).ApplyConfig(cmd.Context()); err != nil {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: mesh apply-config: %v\n", err)
+		}
+	}
 }

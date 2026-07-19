@@ -47,6 +47,17 @@ type Config struct {
 	Service    ServiceConfig    `toml:"service"`
 	Server     ServerConfig     `toml:"server"`
 	Registries RegistriesConfig `toml:"registries"`
+	Mesh       MeshConfig       `toml:"mesh"`
+}
+
+// MeshConfig controls marlin's integration with a local mesh-llm peer.
+type MeshConfig struct {
+	ConfigPath    string `toml:"config_path"`    // path to mesh-llm config; default: ~/.mesh-llm/config.toml
+	ManagementURL string `toml:"management_url"` // mesh-llm management API; default: http://localhost:3131
+	InferenceURL  string `toml:"inference_url"`  // mesh-llm inference API; default: http://localhost:9337
+	SystemdUnit   string `toml:"systemd_unit"`   // systemd unit name; default: mesh-llm
+	AutoRegister  bool   `toml:"auto_register"`  // register vLLM/NIM with mesh-llm after marlin switch
+	MeshBin       string `toml:"mesh_bin"`       // path to mesh-llm binary; default: mesh-llm
 }
 
 type BehaviorConfig struct {
@@ -116,6 +127,14 @@ type RegistryConfig struct {
 // defaultSecretsPath returns the user-local secrets path so that marlin
 // configure works without sudo. Falls back to the system path when the home
 // directory cannot be determined (e.g. headless service contexts).
+func defaultMeshConfigPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".mesh-llm", "config.toml")
+}
+
 func defaultSecretsPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -164,6 +183,14 @@ func Defaults() *Config {
 			HuggingFace: RegistryConfig{Enabled: true},
 			NGC:         RegistryConfig{Enabled: true},
 			ModelScope:  RegistryConfig{Enabled: false},
+		},
+		Mesh: MeshConfig{
+			ConfigPath:    defaultMeshConfigPath(),
+			ManagementURL: "http://localhost:3131",
+			InferenceURL:  "http://localhost:9337",
+			SystemdUnit:   "mesh-llm",
+			AutoRegister:  false,
+			MeshBin:       "mesh-llm",
 		},
 	}
 }
