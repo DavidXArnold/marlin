@@ -89,6 +89,8 @@ var buildProvider = func(pt config.ProviderType, cfg *config.Config) (provider.P
 		return provider.NewNIMProvider(cfg, sec["NGC_API_KEY"])
 	case config.ProviderLlamaCpp:
 		return provider.NewLlamaCppProvider(cfg, effectiveDirs(cfg)), nil
+	case config.ProviderMesh:
+		return provider.NewMeshProvider(cfg, effectiveDirs(cfg)), nil
 	default:
 		return nil, fmt.Errorf("unknown provider type %q", pt)
 	}

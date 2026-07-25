@@ -28,6 +28,7 @@ const (
 	ProviderVLLM     ProviderType = "vllm"
 	ProviderNIM      ProviderType = "nim"
 	ProviderLlamaCpp ProviderType = "llamacpp"
+	ProviderMesh     ProviderType = "mesh"
 )
 
 type ModelConfig struct {

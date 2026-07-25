@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/mesh"
 	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/service"
 	"github.com/DavidXArnold/marlin/internal/state"
@@ -257,6 +259,13 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Integration 2: mesh-llm status — soft call, silent when not running.
+	if meshInfo := meshStatusSection(cmd.Context(), cfg); meshInfo != "" {
+		if err := out.printf("%s", meshInfo); err != nil {
+			return err
+		}
+	}
+
 	// Unmanaged container warning — soft failure, configurable.
 	if cfg.Behavior.WarnUnmanagedContainers {
 		runner, err := buildAdhocRunner(cfg)
@@ -282,6 +291,18 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
+}
+
+// meshStatusSection returns a status line for the mesh-llm peer when it is
+// reachable, or an empty string when mesh-llm is not running (soft no-op).
+func meshStatusSection(ctx context.Context, cfg *config.Config) string {
+	client := mesh.NewClient(cfg.Mesh.ManagementURL)
+	info, err := client.Runtime(ctx)
+	if err != nil || info == nil {
+		return ""
+	}
+	return fmt.Sprintf("mesh         : %d peer(s)  (%s/v1)\n",
+		len(info.Peers), cfg.Mesh.InferenceURL)
 }
 
 func diskLabel(path, modelsDir, nimCache string) string {
