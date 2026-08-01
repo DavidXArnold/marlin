@@ -101,6 +101,62 @@ func TestIsActive_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestActiveState_Active(t *testing.T) {
+	m := &SystemdManager{unit: "vllm.service", execRunner: successRunner}
+	state, err := m.ActiveState(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "active", state)
+}
+
+func TestActiveState_Inactive(t *testing.T) {
+	m := &SystemdManager{unit: "vllm.service", execRunner: inactiveRunner}
+	state, err := m.ActiveState(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "inactive", state)
+}
+
+func TestActiveState_Activating(t *testing.T) {
+	activatingRunner := func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+		return []byte("activating"), &inactiveErr{}
+	}
+	m := &SystemdManager{unit: "vllm.service", execRunner: activatingRunner}
+	state, err := m.ActiveState(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "activating", state)
+}
+
+func TestActiveState_Deactivating(t *testing.T) {
+	deactivatingRunner := func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+		return []byte("deactivating"), &inactiveErr{}
+	}
+	m := &SystemdManager{unit: "vllm.service", execRunner: deactivatingRunner}
+	state, err := m.ActiveState(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "deactivating", state)
+}
+
+func TestActiveState_Error(t *testing.T) {
+	m := &SystemdManager{unit: "vllm.service", execRunner: failRunner}
+	_, err := m.ActiveState(context.Background())
+	assert.Error(t, err)
+}
+
+func TestFriendlyState(t *testing.T) {
+	cases := map[string]string{
+		"active":       "running",
+		"reloading":    "running",
+		"activating":   "starting",
+		"deactivating": "stopping",
+		"inactive":     "stopped",
+		"failed":       "failed",
+		"":             "unknown",
+		"bogus":        "unknown",
+	}
+	for raw, want := range cases {
+		assert.Equal(t, want, FriendlyState(raw), "raw=%q", raw)
+	}
+}
+
 func TestEnable(t *testing.T) {
 	m := &SystemdManager{unit: "vllm.service", execRunner: successRunner}
 	require.NoError(t, m.Enable(context.Background()))

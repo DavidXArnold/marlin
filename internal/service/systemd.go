@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // ExecRunner is the function signature used to run external commands.
@@ -60,6 +61,46 @@ func (s *SystemdManager) IsActive(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("systemctl is-active %s: %w\n%s", s.unit, err, out)
 	}
 	return true, nil
+}
+
+// ActiveState returns systemd's raw ActiveState for the unit: "active",
+// "activating", "deactivating", "inactive", "failed", "reloading", or
+// "unknown". systemctl is-active exits 0 only for "active"/"reloading" and
+// exit code 3 for every other substate alike — the specific word only shows
+// up in stdout, so on exit code 3 we read stdout to tell starting/stopping
+// apart from a plain stop.
+func (s *SystemdManager) ActiveState(ctx context.Context) (string, error) {
+	out, err := s.execRunner(ctx, "systemctl", "is-active", s.unit)
+	if err == nil {
+		return "active", nil
+	}
+	if ec, ok := err.(exitCoder); ok && ec.ExitCode() == 3 {
+		if state := strings.TrimSpace(string(out)); state != "" {
+			return state, nil
+		}
+		return "inactive", nil
+	}
+	return "", fmt.Errorf("systemctl is-active %s: %w\n%s", s.unit, err, out)
+}
+
+// FriendlyState maps a raw systemd ActiveState to a short, user-facing word.
+func FriendlyState(raw string) string {
+	switch raw {
+	case "active":
+		return "running"
+	case "activating":
+		return "starting"
+	case "deactivating":
+		return "stopping"
+	case "inactive":
+		return "stopped"
+	case "failed":
+		return "failed"
+	case "reloading":
+		return "running"
+	default:
+		return "unknown"
+	}
 }
 
 // Enable enables the unit to start automatically at boot.

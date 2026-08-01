@@ -84,12 +84,13 @@ func (v *VLLMProvider) Stop(ctx context.Context) error {
 }
 
 func (v *VLLMProvider) Status(ctx context.Context) (*Status, error) {
-	active, err := v.svc.IsActive(ctx)
+	raw, err := v.svc.ActiveState(ctx)
 	if err != nil {
 		return nil, err
 	}
+	active := raw == "active" || raw == "reloading"
 
-	s := &Status{Running: active}
+	s := &Status{Running: active, State: service.FriendlyState(raw)}
 
 	if active {
 		target, err := os.Readlink(v.cfg.Paths.ActiveSymlink)

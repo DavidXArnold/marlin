@@ -8,6 +8,7 @@ import (
 // Status is a snapshot of what the active inference server is doing.
 type Status struct {
 	Running        bool
+	State          string // "running", "starting", "stopping", "stopped", "failed", "unknown" (systemd-backed providers)
 	ModelID        string // model ID currently loaded, empty if not running
 	ContainerID    string // populated for NIM providers
 	ContainerState string // "running", "exited", "not found", etc. (NIM providers)

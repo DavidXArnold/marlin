@@ -72,10 +72,14 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 				return err
 			}
 		} else if liveStatus != nil {
-			// Service provider (vLLM): show running/stopped.
-			svcState := "stopped"
-			if liveStatus.Running {
-				svcState = "running"
+			// Service provider (vLLM/llama.cpp): show the systemd substate so
+			// transitions (starting/stopping) are visible, not just active/inactive.
+			svcState := liveStatus.State
+			if svcState == "" {
+				svcState = "stopped"
+				if liveStatus.Running {
+					svcState = "running"
+				}
 			}
 			if err := out.printf("service      : %s\n", svcState); err != nil {
 				return err
