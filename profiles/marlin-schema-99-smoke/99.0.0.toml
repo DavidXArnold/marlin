@@ -1,0 +1,16 @@
+[meta]
+schema_version = 99
+profile_version = "99.0.0"
+
+[model]
+type = "llamacpp"
+id = "marlin-schema-99-smoke"
+status = "untested"
+notes = "Synthetic profile with schema_version 99, for exercising 'marlin profile pull --allow-newer-schema'. Points at a nonexistent gguf_path deliberately — for testing pull/checksum/decode/write mechanics only."
+
+[serve]
+gguf_path = "/nonexistent/smoke-test.gguf"
+ngl = 0
+context_size = 2048
+moe_backend = "triton"
+attention_backend = "flashinfer"

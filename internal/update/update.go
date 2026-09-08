@@ -10,8 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
+
+	"github.com/DavidXArnold/marlin/internal/semver"
 )
 
 const (
@@ -62,20 +63,7 @@ func Check(ctx context.Context, current string) (string, bool, error) {
 // IsNewer reports whether candidate is a higher semver than current.
 // Both may optionally carry a leading "v". Non-semver strings return false.
 func IsNewer(current, candidate string) bool {
-	c := parseVer(current)
-	n := parseVer(candidate)
-	if c == nil || n == nil {
-		return false
-	}
-	for i := range c {
-		if n[i] > c[i] {
-			return true
-		}
-		if n[i] < c[i] {
-			return false
-		}
-	}
-	return false
+	return semver.IsNewer(current, candidate)
 }
 
 // AssetURL returns the GitHub release download URL for the tar.gz archive
@@ -149,21 +137,4 @@ func ExtractBinary(archivePath, binName, destPath string) error {
 		return closeErr
 	}
 	return fmt.Errorf("binary %q not found in archive %s", binName, archivePath)
-}
-
-func parseVer(v string) []int {
-	v = strings.TrimPrefix(v, "v")
-	parts := strings.Split(v, ".")
-	if len(parts) != 3 {
-		return nil
-	}
-	nums := make([]int, 3)
-	for i, p := range parts {
-		n, err := strconv.Atoi(p)
-		if err != nil {
-			return nil
-		}
-		nums[i] = n
-	}
-	return nums
 }

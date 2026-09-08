@@ -25,6 +25,7 @@
 - **Environment health checks** — `marlin doctor` audits runtime, GPU, secrets, paths, disk, and config
 - **Disk reclamation** — `marlin prune` scans HuggingFace and NIM caches and removes stale data
 - **Post-start smoke tests** — optional completion/streaming/tool-call validation after the API becomes ready
+- **Versioned profile distribution** — `marlin profile pull` fetches model profiles from a GitHub-hosted repo independent of marlin's release cycle, refusing (or warning, with an explicit override) when a profile's schema is newer than this build understands
 
 ## Installation
 
@@ -129,6 +130,18 @@ NGC_API_KEY=nvapi-...
 | `registries.ngc.enabled` | `true` | Include NGC/NIM catalog in `marlin search` |
 | `registries.modelscope.enabled` | `false` | Include ModelScope in `marlin search` |
 
+### `[profiles]`
+
+Controls where `marlin profile list`/`pull` fetch versioned model profiles from — see [`marlin profile list`](#marlin-profile-list) below. Profiles are read unauthenticated from `raw.githubusercontent.com`, independent of marlin's own release cycle.
+
+| Key | Default | Description |
+|---|---|---|
+| `profiles.repo_owner` | `"DavidXArnold"` | GitHub owner of the profile repo |
+| `profiles.repo_name` | `"marlin"` | GitHub repo name |
+| `profiles.repo_ref` | `"main"` | Branch or tag to fetch from |
+| `profiles.subdir` | `"profiles"` | Subdirectory holding `manifest.json` and the profile `.toml` files |
+| `profiles.cache_ttl` | `"1h"` | How long `marlin profile list`/`pull` reuse a cached manifest before re-fetching; force a re-fetch with `--refresh` |
+
 ## Commands
 
 ### `marlin configure`
@@ -193,6 +206,38 @@ Interactive wizard for creating a new model config. For vLLM: `provider type →
 ```bash
 marlin add
 marlin add Qwen/Qwen2.5-72B-Instruct-AWQ
+```
+
+### `marlin profile list`
+
+Lists profiles available in the configured profile repository (see [`[profiles]`](#profiles) above) — decoupled from marlin's own release cycle, so new/updated profiles can be published without a new marlin version. Each profile declares a `schema_version`; any profile whose schema exceeds what this build understands is visibly flagged, not hidden.
+
+```bash
+marlin profile list
+marlin profile list --refresh   # bypass the manifest cache
+```
+
+### `marlin profile pull <profile-id>[@<profile_version>]`
+
+Fetches a profile and writes it to `paths.models_dir` (or the global dir with `--global`), same as `marlin add`. Without a pinned version, pulls the latest `profile_version` whose `schema_version` this build supports; if every available version exceeds local support, it refuses rather than silently applying one it can't fully render:
+
+```
+Error: profile "some-profile" requires schema_version 3, this Marlin build supports up to 1.
+Upgrade Marlin, or re-run with --allow-newer-schema to force (unsupported fields will be ignored).
+```
+
+`--allow-newer-schema` overrides the check — it downloads and applies the profile using only the fields this build recognizes, warning about the rest:
+
+```
+Warning: profile uses fields unsupported by this Marlin build and they will be ignored: [serve].attention_backend, [serve].moe_backend
+```
+
+Every downloaded profile's SHA-256 is verified against the manifest before it's written; a mismatch is refused with the expected and actual checksums.
+
+```bash
+marlin profile pull qwen3.6-35b-a3b-nvfp4
+marlin profile pull qwen3.6-35b-a3b-nvfp4@1.2.0
+marlin profile pull qwen3.6-35b-a3b-nvfp4 --allow-newer-schema
 ```
 
 ### `marlin validate <model>`

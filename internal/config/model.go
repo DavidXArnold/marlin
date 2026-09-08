@@ -32,6 +32,7 @@ const (
 )
 
 type ModelConfig struct {
+	Meta  ProfileMeta `toml:"meta,omitempty"`
 	Model ModelMeta   `toml:"model"`
 	Serve ServeConfig `toml:"serve"`
 }
