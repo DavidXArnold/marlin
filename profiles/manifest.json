@@ -1,0 +1,22 @@
+{
+  "profiles": {
+    "marlin-smoke-test-tiny": {
+      "versions": {
+        "1.0.0": {
+          "schema_version": 1,
+          "sha256": "f80e3040b8ac06569a20e3c4607060f0977aa042f379194efc90de79fdab0912",
+          "path": "marlin-smoke-test-tiny/1.0.0.toml"
+        }
+      }
+    },
+    "marlin-schema-99-smoke": {
+      "versions": {
+        "99.0.0": {
+          "schema_version": 99,
+          "sha256": "40dd545ba8f4062d35ae6aaa1ff35e6caa24243120dc97a570c481f776def2e9",
+          "path": "marlin-schema-99-smoke/99.0.0.toml"
+        }
+      }
+    }
+  }
+}

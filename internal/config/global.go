@@ -41,6 +41,20 @@ func defaultHistoryFile() string {
 	return filepath.Join(home, ".local", "share", "marlin", "history.jsonl")
 }
 
+// defaultProfileCacheFile returns where `marlin profile`'s manifest TTL cache
+// lives — a pure cache, never privilege-gated, so non-root always uses
+// ~/.cache (never requires sudo just to speed up `marlin profile list`).
+func defaultProfileCacheFile() string {
+	if getuid() == 0 {
+		return "/var/cache/marlin/profile-manifest.json"
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/var/cache/marlin/profile-manifest.json"
+	}
+	return filepath.Join(home, ".cache", "marlin", "profile-manifest.json")
+}
+
 type Config struct {
 	Behavior   BehaviorConfig   `toml:"behavior"`
 	Paths      PathsConfig      `toml:"paths"`
@@ -48,6 +62,34 @@ type Config struct {
 	Server     ServerConfig     `toml:"server"`
 	Registries RegistriesConfig `toml:"registries"`
 	Mesh       MeshConfig       `toml:"mesh"`
+	Profiles   ProfilesConfig   `toml:"profiles"`
+}
+
+// ProfilesConfig controls where `marlin profile list`/`pull` fetch versioned
+// model profiles from. Profiles are read unauthenticated from
+// raw.githubusercontent.com/{repo_owner}/{repo_name}/{repo_ref}/{subdir}/...,
+// so an operator can point this at a private fork by overriding repo_owner/
+// repo_name (a private repo would need an authenticated fetch path, not
+// supported in v1 — see README).
+type ProfilesConfig struct {
+	RepoOwner string `toml:"repo_owner"`
+	RepoName  string `toml:"repo_name"`
+	RepoRef   string `toml:"repo_ref"`
+	Subdir    string `toml:"subdir"`
+	CacheTTL  string `toml:"cache_ttl"` // Go duration string, e.g. "1h"; "" or invalid = 1h default
+}
+
+// CacheTTLDuration parses CacheTTL as a Go duration, defaulting to 1 hour
+// when unset or invalid.
+func (p ProfilesConfig) CacheTTLDuration() time.Duration {
+	if p.CacheTTL == "" {
+		return time.Hour
+	}
+	d, err := time.ParseDuration(p.CacheTTL)
+	if err != nil {
+		return time.Hour
+	}
+	return d
 }
 
 // MeshConfig controls marlin's integration with a local mesh-llm peer.
@@ -61,19 +103,19 @@ type MeshConfig struct {
 }
 
 type BehaviorConfig struct {
-	SwitchPrompt              bool    `toml:"switch_prompt"`
-	AddAutoDetect             bool    `toml:"add_auto_detect"`
-	LogTailLines              int     `toml:"log_tail_lines"`
-	AllowTypeSwitch           bool    `toml:"allow_type_switch"`
-	WarnUnmanagedContainers   bool    `toml:"warn_unmanaged_containers"`
-	CheckUpdates              bool    `toml:"check_updates"`
-	GlobalInstall             bool    `toml:"global_install"`
-	WarnOnSystemResources     bool    `toml:"warn_on_system_resources"`
-	SystemLoadThreshold       float64 `toml:"system_load_threshold"`
-	MaxRuntime                string   `toml:"max_runtime"`          // e.g. "15m", "1h", "" = disabled
-	SmokeTest                 bool     `toml:"smoke_test"`           // run API smoke test after ready
-	SmokeTestTimeout          string   `toml:"smoke_test_timeout"`   // default "30s"
-	SmokeTestSkip             []string `toml:"smoke_test_skip"`      // e.g. ["streaming","tool_call"]
+	SwitchPrompt            bool     `toml:"switch_prompt"`
+	AddAutoDetect           bool     `toml:"add_auto_detect"`
+	LogTailLines            int      `toml:"log_tail_lines"`
+	AllowTypeSwitch         bool     `toml:"allow_type_switch"`
+	WarnUnmanagedContainers bool     `toml:"warn_unmanaged_containers"`
+	CheckUpdates            bool     `toml:"check_updates"`
+	GlobalInstall           bool     `toml:"global_install"`
+	WarnOnSystemResources   bool     `toml:"warn_on_system_resources"`
+	SystemLoadThreshold     float64  `toml:"system_load_threshold"`
+	MaxRuntime              string   `toml:"max_runtime"`        // e.g. "15m", "1h", "" = disabled
+	SmokeTest               bool     `toml:"smoke_test"`         // run API smoke test after ready
+	SmokeTestTimeout        string   `toml:"smoke_test_timeout"` // default "30s"
+	SmokeTestSkip           []string `toml:"smoke_test_skip"`    // e.g. ["streaming","tool_call"]
 }
 
 // MaxRuntimeDuration parses MaxRuntime as a Go duration. Returns 0 if unset or invalid.
@@ -86,14 +128,15 @@ func (b BehaviorConfig) MaxRuntimeDuration() time.Duration {
 }
 
 type PathsConfig struct {
-	ModelsDir          string `toml:"models_dir"`
-	GlobalModelsDir    string `toml:"global_models_dir"`
-	ActiveSymlink      string `toml:"active_symlink"`
-	SecretsEnv         string `toml:"secrets_env"`
-	StateFile          string `toml:"state_file"`
-	NIMCache           string `toml:"nim_cache"`           // host path mounted into NIM containers
-	HistoryFile        string `toml:"history_file"`        // append-only JSONL event log
-	LlamaCppEnvFile    string `toml:"llamacpp_env_file"`   // env file symlink for llama-server unit
+	ModelsDir        string `toml:"models_dir"`
+	GlobalModelsDir  string `toml:"global_models_dir"`
+	ActiveSymlink    string `toml:"active_symlink"`
+	SecretsEnv       string `toml:"secrets_env"`
+	StateFile        string `toml:"state_file"`
+	NIMCache         string `toml:"nim_cache"`          // host path mounted into NIM containers
+	HistoryFile      string `toml:"history_file"`       // append-only JSONL event log
+	LlamaCppEnvFile  string `toml:"llamacpp_env_file"`  // env file symlink for llama-server unit
+	ProfileCacheFile string `toml:"profile_cache_file"` // TTL cache for `marlin profile`'s manifest fetch
 }
 
 type ServiceConfig struct {
@@ -157,14 +200,15 @@ func Defaults() *Config {
 			SystemLoadThreshold:     0.8,
 		},
 		Paths: PathsConfig{
-			ModelsDir:       defaultModelsDir(),
-			GlobalModelsDir: "/etc/marlin/models",
-			ActiveSymlink:   "/etc/marlin/model.env",
-			SecretsEnv:      defaultSecretsPath(),
-			StateFile:       defaultStateFile(),
-			NIMCache:        "/var/cache/nim",
-			HistoryFile:     defaultHistoryFile(),
-			LlamaCppEnvFile: "/etc/marlin/llamacpp.env",
+			ModelsDir:        defaultModelsDir(),
+			GlobalModelsDir:  "/etc/marlin/models",
+			ActiveSymlink:    "/etc/marlin/model.env",
+			SecretsEnv:       defaultSecretsPath(),
+			StateFile:        defaultStateFile(),
+			NIMCache:         "/var/cache/nim",
+			HistoryFile:      defaultHistoryFile(),
+			LlamaCppEnvFile:  "/etc/marlin/llamacpp.env",
+			ProfileCacheFile: defaultProfileCacheFile(),
 		},
 		Service: ServiceConfig{
 			SystemdUnit:     "marlin",
@@ -191,6 +235,13 @@ func Defaults() *Config {
 			SystemdUnit:   "mesh-llm",
 			AutoRegister:  false,
 			MeshBin:       "mesh-llm",
+		},
+		Profiles: ProfilesConfig{
+			RepoOwner: "DavidXArnold",
+			RepoName:  "marlin",
+			RepoRef:   "main",
+			Subdir:    "profiles",
+			CacheTTL:  "1h",
 		},
 	}
 }

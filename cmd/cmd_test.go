@@ -61,6 +61,7 @@ state_file = %q
 secrets_env = %q
 active_symlink = %q
 nim_cache = %q
+profile_cache_file = %q
 
 [server]
 alias = "gn100"
@@ -69,6 +70,7 @@ alias = "gn100"
 		filepath.Join(dir, "secrets.env"),
 		filepath.Join(dir, "model.env"),
 		nimCache,
+		filepath.Join(dir, "profile-manifest-cache.json"),
 	)
 
 	cfgPath := filepath.Join(dir, "config.toml")
