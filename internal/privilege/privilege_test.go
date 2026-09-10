@@ -2,11 +2,15 @@ package privilege
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -663,6 +667,60 @@ func TestPromptAndInstallBinaryNoRoot(t *testing.T) {
 	got, err := os.ReadFile(dest)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("#!/bin/sh\necho hi\n"), got)
+}
+
+// TestHelperProcessSleep is a real running process for
+// TestPromptAndInstallBinaryOverwritesRunningBinary to overwrite while it's
+// executing — the classic Go "TestHelperProcess" subprocess idiom (see
+// os/exec's own tests). It only sleeps when invoked with the env var below;
+// otherwise it's a no-op so it doesn't affect a normal test run.
+func TestHelperProcessSleep(t *testing.T) {
+	if os.Getenv("MARLIN_HELPER_SLEEP") != "1" {
+		return
+	}
+	time.Sleep(5 * time.Second)
+	os.Exit(0)
+}
+
+// TestPromptAndInstallBinaryOverwritesRunningBinary reproduces the exact
+// failure a user hit running `sudo marlin upgrade` (already root, so the
+// no-root branch below ran): overwriting a binary that is itself currently
+// executing fails with ETXTBSY on Linux unless the write goes through a
+// temp file + rename instead of an in-place truncate+write.
+func TestPromptAndInstallBinaryOverwritesRunningBinary(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("ETXTBSY is Linux-specific; this reproduces the real self-upgrade failure mode")
+	}
+	old := getuid
+	getuid = func() int { return 1000 }
+	defer func() { getuid = old }()
+
+	self, err := os.Executable()
+	require.NoError(t, err)
+	selfBytes, err := os.ReadFile(self)
+	require.NoError(t, err)
+
+	destDir := t.TempDir()
+	dest := filepath.Join(destDir, "marlin")
+	require.NoError(t, os.WriteFile(dest, selfBytes, 0o755))
+
+	cmd := exec.CommandContext(context.Background(), dest, "-test.run=TestHelperProcessSleep")
+	cmd.Env = append(os.Environ(), "MARLIN_HELPER_SLEEP=1")
+	require.NoError(t, cmd.Start())
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	time.Sleep(200 * time.Millisecond) // give it time to actually be executing
+
+	src := filepath.Join(t.TempDir(), "src-bin")
+	require.NoError(t, os.WriteFile(src, []byte("new content"), 0o644))
+
+	var buf bytes.Buffer
+	ok, err := PromptAndInstallBinary(&buf, src, dest)
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	got, err := os.ReadFile(dest)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("new content"), got)
 }
 
 func TestPromptAndInstallBinaryNeedsRootYes(t *testing.T) {
