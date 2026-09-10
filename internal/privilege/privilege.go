@@ -247,6 +247,13 @@ func PromptAndSymlink(w io.Writer, src, dst string) error {
 // executable permissions (0o755). If the target directory requires root,
 // it warns on w, prompts for y/N confirmation, then uses "sudo install -m 755".
 // Returns (false, nil) if the user declines.
+//
+// destPath is very often the binary currently executing (a self-upgrade),
+// so this always replaces it via a temp file + rename rather than an
+// in-place truncate+write — Linux refuses to open a running executable's
+// own file for writing (ETXTBSY), but rename() only touches the directory
+// entry and is always safe, matching what "sudo install" already does in
+// the needs-root branch below.
 func PromptAndInstallBinary(w io.Writer, srcPath, destPath string) (bool, error) {
 	dir := filepath.Dir(destPath)
 	if !NeedsRoot(dir) {
@@ -257,7 +264,13 @@ func PromptAndInstallBinary(w io.Writer, srcPath, destPath string) (bool, error)
 		if err != nil {
 			return false, err
 		}
-		if err := os.WriteFile(destPath, data, 0o755); err != nil {
+		tmp := destPath + ".tmp"
+		if err := os.WriteFile(tmp, data, 0o755); err != nil {
+			_ = os.Remove(tmp)
+			return false, err
+		}
+		if err := os.Rename(tmp, destPath); err != nil {
+			_ = os.Remove(tmp)
 			return false, err
 		}
 		return true, nil
