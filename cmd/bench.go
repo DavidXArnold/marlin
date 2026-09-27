@@ -16,7 +16,7 @@ const defaultBenchPrompt = "Describe the water cycle in exactly 50 words."
 
 var benchCmd = &cobra.Command{
 	Use:   "bench",
-	Short: "Benchmark the active model: TTFT and decode throughput",
+	Short: "Benchmark the active model: TTFT, prefill throughput, and decode throughput",
 	Args:  cobra.NoArgs,
 	RunE:  runBench,
 }
@@ -68,7 +68,7 @@ func defaultRunBench(cmd *cobra.Command, _ []string) error {
 	// Adapter: wrap vllm.Client.ChatStream to match bench.StreamFn.
 	stream := func(ctx context.Context, m, p string, mt int, fn func(bench.TokenEvent) error) error {
 		return client.ChatStream(ctx, m, p, mt, func(sc vllm.StreamChunk) error {
-			return fn(bench.TokenEvent{Content: sc.Content, FinishReason: sc.FinishReason})
+			return fn(bench.TokenEvent{Content: sc.Content, FinishReason: sc.FinishReason, PromptTokens: sc.PromptTokens})
 		})
 	}
 
@@ -83,8 +83,8 @@ func defaultRunBench(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("run %d: %w", i+1, runErr)
 		}
 		results = append(results, r)
-		_, _ = fmt.Fprintf(w, "TTFT %s  tok/s %.1f\n",
-			r.TTFT.Round(1*1000*1000), r.DecodeToksPerSec)
+		_, _ = fmt.Fprintf(w, "TTFT %s  prefill tok/s %.1f  decode tok/s %.1f\n",
+			r.TTFT.Round(1*1000*1000), r.PrefillToksPerSec, r.DecodeToksPerSec)
 	}
 
 	_, _ = fmt.Fprintln(w)
