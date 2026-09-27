@@ -249,6 +249,42 @@ func TestChatStreamOK(t *testing.T) {
 	assert.Equal(t, []string{"Hello", " world"}, got)
 }
 
+func TestChatStreamUsageChunk(t *testing.T) {
+	events := []string{
+		`data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}`,
+		`data: {"choices":[],"usage":{"prompt_tokens":42,"completion_tokens":1,"total_tokens":43}}`,
+		`data: [DONE]`,
+	}
+	var sawStreamOptions bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		so, ok := body["stream_options"].(map[string]any)
+		sawStreamOptions = ok && so["include_usage"] == true
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		for _, e := range events {
+			_, _ = w.Write([]byte(e + "\n"))
+		}
+	}))
+	defer srv.Close()
+
+	c := clientFromTestServer(srv)
+	var got []StreamChunk
+	err := c.ChatStream(context.Background(), "llama", "hi", 64, func(sc StreamChunk) error {
+		got = append(got, sc)
+		return nil
+	})
+	require.NoError(t, err)
+	assert.True(t, sawStreamOptions, "request should ask for stream_options.include_usage")
+	require.Len(t, got, 2)
+	assert.Equal(t, "Hello", got[0].Content)
+	assert.Equal(t, 0, got[0].PromptTokens)
+	assert.Empty(t, got[1].Content)
+	assert.Equal(t, 42, got[1].PromptTokens)
+}
+
 func TestChatStreamServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)

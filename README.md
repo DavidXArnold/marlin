@@ -15,7 +15,7 @@
 - **NIM digest pinning** — `marlin update` pulls the latest image, detects digest changes, and auto-switches when a new version lands
 - **Model config inheritance** — `extends = "slug"` to inherit shared settings; `abstract = true` hides base configs from the picker
 - **Quant advisor** — `marlin advise <model>` shows per-quantization VRAM estimates with GPU-fit indicators
-- **Benchmark suite** — `marlin bench` measures TTFT and decode throughput across multiple runs
+- **Benchmark suite** — `marlin bench` measures TTFT, prefill throughput, and decode throughput across multiple runs, using server-reported token counts
 - **Registry search** — HuggingFace and NGC/NIM catalog with VRAM estimates and fit indicators
 - **Hardware detection** — GPU VRAM, compute capability, UMA/unified-memory architecture (GB10, GH200, GB200), RAM, disk; plus live power draw, temperature, and clock via nvidia-smi
 - **Validation** — quantization mismatch, GPU memory, served-model-name alias checks
@@ -471,24 +471,32 @@ GPU[0]  NVIDIA H100 80GB HBM3  sm_9.0
 
 ### `marlin bench`
 
-Benchmark the active model's inference performance — measures time-to-first-token (TTFT) and decode throughput across multiple runs.
+Benchmark the active model's inference performance — time-to-first-token (TTFT), prefill throughput, and decode throughput, averaged across multiple runs. Prefill throughput (`prompt tokens / TTFT`) and decode throughput (`(output tokens - 1) / (total time - TTFT)`) are both requested from the server via `stream_options.include_usage`, so they reflect the actual prompt/completion token counts the model reports, not an estimate.
 
 ```bash
-marlin bench                              # single run, default prompt
-marlin bench --runs 5                     # 5 runs, report mean ± stddev
+marlin bench                              # 3 runs (default), default prompt
+marlin bench --runs 5                     # 5 runs
 marlin bench --prompt "Write a haiku"     # custom prompt
-marlin bench --max-tokens 200             # limit output tokens
+marlin bench --max-tokens 200             # limit output tokens per run
 ```
 
 ```
-run 1/3  ttft 89ms   tokens 128  throughput 142 tok/s
-run 2/3  ttft 91ms   tokens 128  throughput 139 tok/s
-run 3/3  ttft 87ms   tokens 128  throughput 145 tok/s
+benchmarking local (3 run(s))…
 
-ttft     89.0ms ± 2.0ms
-tokens   128.0 ± 0.0
-tok/s    142.0 ± 3.1
+run 1/3… TTFT 91ms  prefill tok/s 693.4  decode tok/s 41.2
+run 2/3… TTFT 88ms  prefill tok/s 715.9  decode tok/s 42.0
+run 3/3… TTFT 90ms  prefill tok/s 700.0  decode tok/s 41.6
+
+model            : local
+runs             : 3
+TTFT avg/min/max : 90ms / 88ms / 91ms
+prefill tok/s    : 703.1
+decode tok/s     : 41.6
+total prompt toks: 189
+total output toks: 384
 ```
+
+Note: on a reasoning model (e.g. one configured with `--reasoning-parser`), a small `--max-tokens` budget can be consumed entirely by reasoning tokens before any visible content is emitted — in that case decode/prefill tok/s will show `0.0` for that run since no output tokens streamed. Raise `--max-tokens` to see real throughput on those models.
 
 ### `marlin advise <model-id>`
 

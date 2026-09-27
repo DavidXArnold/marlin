@@ -129,20 +129,26 @@ func (c *Client) Models(ctx context.Context) ([]Model, error) {
 }
 
 // StreamChunk holds one SSE event's token content and finish reason.
+// PromptTokens is 0 on every chunk except the final usage-carrying one
+// (requested via stream_options.include_usage), which has empty Choices.
 type StreamChunk struct {
 	Content      string
 	FinishReason string
+	PromptTokens int
 }
 
 // ChatStream sends a streaming /v1/chat/completions request and calls fn for
 // each received content chunk. The context deadline governs the entire stream.
 // maxTokens caps the generated output; model selects the served model.
+// stream_options.include_usage asks the server for a final usage-only chunk
+// so callers can compute prefill throughput (prompt tokens / TTFT).
 func (c *Client) ChatStream(ctx context.Context, model, prompt string, maxTokens int, fn func(StreamChunk) error) error {
 	body, err := json.Marshal(map[string]any{
-		"model":     model,
-		"stream":    true,
-		"max_tokens": maxTokens,
-		"messages":  []map[string]string{{"role": "user", "content": prompt}},
+		"model":           model,
+		"stream":          true,
+		"max_tokens":      maxTokens,
+		"messages":        []map[string]string{{"role": "user", "content": prompt}},
+		"stream_options":  map[string]bool{"include_usage": true},
 	})
 	if err != nil {
 		return fmt.Errorf("encoding request: %w", err)
@@ -178,8 +184,12 @@ func (c *Client) ChatStream(ctx context.Context, model, prompt string, maxTokens
 		Delta        delta  `json:"delta"`
 		FinishReason string `json:"finish_reason"`
 	}
+	type usage struct {
+		PromptTokens int `json:"prompt_tokens"`
+	}
 	type chunk struct {
 		Choices []choice `json:"choices"`
+		Usage   *usage   `json:"usage"`
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -193,12 +203,19 @@ func (c *Client) ChatStream(ctx context.Context, model, prompt string, maxTokens
 			break
 		}
 		var ch chunk
-		if jsonErr := json.Unmarshal([]byte(payload), &ch); jsonErr != nil || len(ch.Choices) == 0 {
+		if jsonErr := json.Unmarshal([]byte(payload), &ch); jsonErr != nil {
 			continue
 		}
-		sc := StreamChunk{
-			Content:      ch.Choices[0].Delta.Content,
-			FinishReason: ch.Choices[0].FinishReason,
+		if len(ch.Choices) == 0 && ch.Usage == nil {
+			continue
+		}
+		var sc StreamChunk
+		if len(ch.Choices) > 0 {
+			sc.Content = ch.Choices[0].Delta.Content
+			sc.FinishReason = ch.Choices[0].FinishReason
+		}
+		if ch.Usage != nil {
+			sc.PromptTokens = ch.Usage.PromptTokens
 		}
 		if callErr := fn(sc); callErr != nil {
 			return callErr
