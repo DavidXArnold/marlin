@@ -496,7 +496,22 @@ total prompt toks: 189
 total output toks: 384
 ```
 
-Note: on a reasoning model (e.g. one configured with `--reasoning-parser`), a small `--max-tokens` budget can be consumed entirely by reasoning tokens before any visible content is emitted — in that case decode/prefill tok/s will show `0.0` for that run since no output tokens streamed. Raise `--max-tokens` to see real throughput on those models.
+**Reasoning models** (served with `--reasoning-parser`) stream their thinking separately from the answer. `marlin bench` reads both, so:
+
+- **TTFT** is time to the first generated token of either kind — a true prefill measurement, unaffected by how long the model thinks.
+- **decode tok/s** counts reasoning and content tokens together, since both cost the same decode step.
+- An extra section breaks out reasoning vs. content tokens and **time to content** (when visible output began — what a user actually waits for):
+
+```
+run 1/3… TTFT 102ms  prefill tok/s 617.5  decode tok/s 15.5  (reasoning 256 toks, content at n/a)
+...
+total output toks: 768
+  reasoning toks : 768
+  content toks   : 0
+time to content  : n/a (no run got past reasoning — raise --max-tokens)
+```
+
+Throughput numbers stay valid even when a small `--max-tokens` budget is spent entirely on reasoning; raise it only if you want a time-to-content reading.
 
 ### `marlin advise <model-id>`
 

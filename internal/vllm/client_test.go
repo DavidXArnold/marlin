@@ -285,6 +285,37 @@ func TestChatStreamUsageChunk(t *testing.T) {
 	assert.Equal(t, 42, got[1].PromptTokens)
 }
 
+func TestChatStreamReasoningFields(t *testing.T) {
+	// Newer vLLM uses "reasoning"; older builds use "reasoning_content".
+	events := []string{
+		`data: {"choices":[{"delta":{"role":"assistant","content":""}}]}`,
+		`data: {"choices":[{"delta":{"reasoning":"We"}}]}`,
+		`data: {"choices":[{"delta":{"reasoning_content":" need"}}]}`,
+		`data: {"choices":[{"delta":{"content":"Answer"}}]}`,
+		`data: [DONE]`,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		for _, e := range events {
+			_, _ = w.Write([]byte(e + "\n"))
+		}
+	}))
+	defer srv.Close()
+
+	var got []StreamChunk
+	err := clientFromTestServer(srv).ChatStream(context.Background(), "m", "hi", 64, func(sc StreamChunk) error {
+		got = append(got, sc)
+		return nil
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 4)
+	assert.Equal(t, "", got[0].Reasoning+got[0].Content)
+	assert.Equal(t, "We", got[1].Reasoning)
+	assert.Equal(t, " need", got[2].Reasoning)
+	assert.Equal(t, "Answer", got[3].Content)
+	assert.Empty(t, got[3].Reasoning)
+}
+
 func TestChatStreamServerError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)

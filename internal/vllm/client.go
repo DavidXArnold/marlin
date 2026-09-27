@@ -129,10 +129,13 @@ func (c *Client) Models(ctx context.Context) ([]Model, error) {
 }
 
 // StreamChunk holds one SSE event's token content and finish reason.
+// Reasoning carries thinking-phase text from models served with a
+// --reasoning-parser, which vLLM streams separately from Content.
 // PromptTokens is 0 on every chunk except the final usage-carrying one
 // (requested via stream_options.include_usage), which has empty Choices.
 type StreamChunk struct {
 	Content      string
+	Reasoning    string
 	FinishReason string
 	PromptTokens int
 }
@@ -177,8 +180,12 @@ func (c *Client) ChatStream(ctx context.Context, model, prompt string, maxTokens
 		return fmt.Errorf("chat completions: status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 
+	// vLLM's field name for reasoning text differs by version/parser:
+	// newer builds use "reasoning", older ones "reasoning_content".
 	type delta struct {
-		Content string `json:"content"`
+		Content          string `json:"content"`
+		Reasoning        string `json:"reasoning"`
+		ReasoningContent string `json:"reasoning_content"`
 	}
 	type choice struct {
 		Delta        delta  `json:"delta"`
@@ -211,7 +218,12 @@ func (c *Client) ChatStream(ctx context.Context, model, prompt string, maxTokens
 		}
 		var sc StreamChunk
 		if len(ch.Choices) > 0 {
-			sc.Content = ch.Choices[0].Delta.Content
+			d := ch.Choices[0].Delta
+			sc.Content = d.Content
+			sc.Reasoning = d.Reasoning
+			if sc.Reasoning == "" {
+				sc.Reasoning = d.ReasoningContent
+			}
 			sc.FinishReason = ch.Choices[0].FinishReason
 		}
 		if ch.Usage != nil {
