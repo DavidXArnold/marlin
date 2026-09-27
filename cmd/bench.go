@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -68,7 +69,12 @@ func defaultRunBench(cmd *cobra.Command, _ []string) error {
 	// Adapter: wrap vllm.Client.ChatStream to match bench.StreamFn.
 	stream := func(ctx context.Context, m, p string, mt int, fn func(bench.TokenEvent) error) error {
 		return client.ChatStream(ctx, m, p, mt, func(sc vllm.StreamChunk) error {
-			return fn(bench.TokenEvent{Content: sc.Content, FinishReason: sc.FinishReason, PromptTokens: sc.PromptTokens})
+			return fn(bench.TokenEvent{
+				Content:      sc.Content,
+				Reasoning:    sc.Reasoning,
+				FinishReason: sc.FinishReason,
+				PromptTokens: sc.PromptTokens,
+			})
 		})
 	}
 
@@ -83,8 +89,16 @@ func defaultRunBench(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("run %d: %w", i+1, runErr)
 		}
 		results = append(results, r)
-		_, _ = fmt.Fprintf(w, "TTFT %s  prefill tok/s %.1f  decode tok/s %.1f\n",
-			r.TTFT.Round(1*1000*1000), r.PrefillToksPerSec, r.DecodeToksPerSec)
+		_, _ = fmt.Fprintf(w, "TTFT %s  prefill tok/s %.1f  decode tok/s %.1f",
+			r.TTFT.Round(time.Millisecond), r.PrefillToksPerSec, r.DecodeToksPerSec)
+		if r.ReasoningToks > 0 {
+			ttc := "n/a"
+			if r.TimeToContent > 0 {
+				ttc = r.TimeToContent.Round(time.Millisecond).String()
+			}
+			_, _ = fmt.Fprintf(w, "  (reasoning %d toks, content at %s)", r.ReasoningToks, ttc)
+		}
+		_, _ = fmt.Fprintln(w)
 	}
 
 	_, _ = fmt.Fprintln(w)
