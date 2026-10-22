@@ -167,7 +167,7 @@ func (a *AdhocRunner) RunForeground(ctx context.Context, slug string, w io.Write
 func (a *AdhocRunner) List(ctx context.Context) ([]AdhocInfo, error) {
 	containers, err := a.docker.ContainerList(ctx, container.ListOptions{
 		All:     true,
-		Filters: filters.NewArgs(filters.Arg("label", labelManaged+"=true")),
+		Filters: adhocFilters(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("listing ad-hoc containers: %w", err)
@@ -193,14 +193,24 @@ func (a *AdhocRunner) List(ctx context.Context) ([]AdhocInfo, error) {
 	return result, nil
 }
 
+// adhocFilters matches containers started by `marlin run`. The systemd unit's
+// marlin-vllm container also carries marlin.managed=true (so unmanaged-container
+// detection skips it) but not marlin.mode=adhoc; filtering on managed alone
+// made `status`/`logs` show it as a nameless ad-hoc container and let
+// StopAll remove the service's container out from under systemd.
+func adhocFilters(extra ...filters.KeyValuePair) filters.Args {
+	args := []filters.KeyValuePair{
+		filters.Arg("label", labelManaged+"=true"),
+		filters.Arg("label", labelMode+"=adhoc"),
+	}
+	return filters.NewArgs(append(args, extra...)...)
+}
+
 // Stop stops and removes all ad-hoc containers matching slug.
 func (a *AdhocRunner) Stop(ctx context.Context, slug string) error {
 	containers, err := a.docker.ContainerList(ctx, container.ListOptions{
-		All: true,
-		Filters: filters.NewArgs(
-			filters.Arg("label", labelManaged+"=true"),
-			filters.Arg("label", labelModel+"="+slug),
-		),
+		All:     true,
+		Filters: adhocFilters(filters.Arg("label", labelModel+"="+slug)),
 	})
 	if err != nil {
 		return fmt.Errorf("listing containers: %w", err)
@@ -221,11 +231,8 @@ func (a *AdhocRunner) DetectUnmanaged(ctx context.Context) ([]UnmanagedContainer
 // Stopped containers are included so callers can inspect last-run output.
 func (a *AdhocRunner) LogsFor(ctx context.Context, slug string, w io.Writer, follow bool, lines int) error {
 	containers, err := a.docker.ContainerList(ctx, container.ListOptions{
-		All: true,
-		Filters: filters.NewArgs(
-			filters.Arg("label", labelManaged+"=true"),
-			filters.Arg("label", labelModel+"="+slug),
-		),
+		All:     true,
+		Filters: adhocFilters(filters.Arg("label", labelModel+"="+slug)),
 	})
 	if err != nil {
 		return fmt.Errorf("listing containers: %w", err)
@@ -257,7 +264,7 @@ func (a *AdhocRunner) LogsFor(ctx context.Context, slug string, w io.Writer, fol
 func (a *AdhocRunner) StopAll(ctx context.Context) error {
 	containers, err := a.docker.ContainerList(ctx, container.ListOptions{
 		All:     true,
-		Filters: filters.NewArgs(filters.Arg("label", labelManaged+"=true")),
+		Filters: adhocFilters(),
 	})
 	if err != nil {
 		return fmt.Errorf("listing containers: %w", err)

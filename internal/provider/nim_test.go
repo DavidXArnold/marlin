@@ -23,6 +23,7 @@ import (
 
 // stubDocker is a fully controllable in-process Docker client stub.
 type stubDocker struct {
+	listOpts      []container.ListOptions // every ContainerList call's options, in order
 	stopErr       error
 	removeErr     error
 	createResp    container.CreateResponse
@@ -51,7 +52,8 @@ func (s *stubDocker) ContainerCreate(_ context.Context, _ *container.Config, _ *
 func (s *stubDocker) ContainerStart(_ context.Context, _ string, _ container.StartOptions) error {
 	return s.startErr
 }
-func (s *stubDocker) ContainerList(_ context.Context, _ container.ListOptions) ([]container.Summary, error) {
+func (s *stubDocker) ContainerList(_ context.Context, opts container.ListOptions) ([]container.Summary, error) {
+	s.listOpts = append(s.listOpts, opts)
 	return s.listResult, s.listErr
 }
 func (s *stubDocker) ContainerLogs(_ context.Context, _ string, _ container.LogsOptions) (io.ReadCloser, error) {
