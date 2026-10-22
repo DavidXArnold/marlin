@@ -43,7 +43,18 @@ func installCmdWithContext(buf *bytes.Buffer) *cobra.Command {
 	cmd := cmdWithContext(buf)
 	cmd.Flags().Bool("enable", false, "")
 	cmd.Flags().Bool("force", false, "")
+	cmd.Flags().String("provider", "vllm", "")
 	return cmd
+}
+
+// injectTempLlamaCppUnitPath makes installLlamaCppUnitPathFunc return a writable temp path.
+func injectTempLlamaCppUnitPath(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "marlin-llamacpp.service")
+	old := installLlamaCppUnitPathFunc
+	installLlamaCppUnitPathFunc = func(_ *config.Config) string { return path }
+	t.Cleanup(func() { installLlamaCppUnitPathFunc = old })
+	return path
 }
 
 // TestRunInstallWritesUnitFile: happy path — writes file and reloads daemon.
@@ -180,6 +191,70 @@ vllm_mode = "binary"
 	assert.Contains(t, content, "vllm serve")
 	assert.NotContains(t, content, "docker run")
 	assert.NotContains(t, content, "podman run")
+}
+
+// TestRunInstallLlamaCppContainerMode: --provider llamacpp writes the containerized llama.cpp unit.
+func TestRunInstallLlamaCppContainerMode(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+	injectNoopSystemdManager(t)
+	vllmPath := injectTempUnitPath(t)
+	unitPath := injectTempLlamaCppUnitPath(t)
+
+	var buf bytes.Buffer
+	cmd := installCmdWithContext(&buf)
+	require.NoError(t, cmd.Flags().Set("provider", "llamacpp"))
+	require.NoError(t, runInstall(cmd, nil))
+
+	data, err := os.ReadFile(unitPath)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "--name marlin-llamacpp")
+	assert.Contains(t, content, "LLAMA_IMAGE")
+	assert.Contains(t, content, "/root/.cache/huggingface")
+	assert.Contains(t, buf.String(), "mounting Hugging Face cache")
+	_, err = os.Stat(vllmPath)
+	assert.True(t, os.IsNotExist(err), "vLLM unit must not be touched")
+}
+
+// TestRunInstallLlamaCppBinaryMode: llamacpp_mode = "binary" runs a host llama-server.
+func TestRunInstallLlamaCppBinaryMode(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+	injectNoopSystemdManager(t)
+	unitPath := injectTempLlamaCppUnitPath(t)
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.toml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(`[service]
+llamacpp_mode = "binary"
+llamacpp_bin = "/opt/llama/llama-server"
+`), 0o644))
+	oldCfg := cfgFile
+	cfgFile = cfgPath
+	t.Cleanup(func() { cfgFile = oldCfg })
+
+	var buf bytes.Buffer
+	cmd := installCmdWithContext(&buf)
+	require.NoError(t, cmd.Flags().Set("provider", "llamacpp"))
+	require.NoError(t, runInstall(cmd, nil))
+
+	data, err := os.ReadFile(unitPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "exec /opt/llama/llama-server ${LLAMA_MODEL_ARGS}")
+	assert.Contains(t, buf.String(), "using llama-server binary")
+}
+
+// TestRunInstallUnknownProvider: an unsupported --provider is rejected.
+func TestRunInstallUnknownProvider(t *testing.T) {
+	cleanup := tempEnv(t)
+	defer cleanup()
+	var buf bytes.Buffer
+	cmd := installCmdWithContext(&buf)
+	require.NoError(t, cmd.Flags().Set("provider", "nim"))
+	err := runInstall(cmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown --provider")
 }
 
 // TestRunInstallHelp: --help does not error.

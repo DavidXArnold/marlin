@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/DavidXArnold/marlin/internal/config"
@@ -30,19 +31,56 @@ func Env(m *config.ModelConfig, hfToken string) string {
 	return b.String()
 }
 
+// llamaCppAllLayers is the -ngl value used when a profile leaves ngl unset;
+// llama-server clamps it to the model's layer count, so it means "all".
+const llamaCppAllLayers = 999
+
 // LlamaCppEnv renders a ModelConfig to the .env format consumed by the
 // marlin-llamacpp systemd service (llama-server).
-func LlamaCppEnv(m *config.ModelConfig) string {
+//
+// The model source is serve.gguf_path when set (a local file, passed as -m),
+// otherwise model.id as a Hugging Face "<repo>[:<quant>]" reference (passed as
+// -hf, so llama-server downloads it into the HF cache on first start).
+// image is written as LLAMA_IMAGE for the containerized unit and may be empty
+// in binary mode. hfToken is written as HF_TOKEN when non-empty.
+func LlamaCppEnv(m *config.ModelConfig, image, hfToken string) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "LLAMA_MODEL=%s\n", m.Serve.GGUFPath)
+	if image != "" {
+		fmt.Fprintf(&b, "LLAMA_IMAGE=%s\n", image)
+	}
+	if hfToken != "" {
+		fmt.Fprintf(&b, "HF_TOKEN=%s\n", hfToken)
+	}
+
+	if m.Serve.GGUFPath != "" {
+		fmt.Fprintf(&b, "LLAMA_MODEL_ARGS=-m %s\n", m.Serve.GGUFPath)
+		// A local file is only visible inside the container if its directory is mounted.
+		dir := filepath.Dir(m.Serve.GGUFPath)
+		fmt.Fprintf(&b, "LLAMA_CONTAINER_ARGS=-v %s:%s:ro\n", dir, dir)
+	} else {
+		fmt.Fprintf(&b, "LLAMA_MODEL_ARGS=-hf %s\n", m.Model.ID)
+	}
 
 	ngl := m.Serve.NGL
 	if ngl <= 0 {
-		ngl = 99 // default: offload all layers to GPU
+		ngl = llamaCppAllLayers
+	}
+	args := []string{fmt.Sprintf("-ngl %d", ngl)}
+	if len(m.Serve.ServedModelName) > 0 {
+		args = append(args, "--alias "+strings.Join(m.Serve.ServedModelName, ","))
+	}
+	if m.Serve.ContextSize > 0 {
+		args = append(args, fmt.Sprintf("-c %d", m.Serve.ContextSize))
+	}
+	args = append(args, m.Serve.ExtraFlags...)
+	fmt.Fprintf(&b, "LLAMA_EXTRA_ARGS=%s\n", strings.Join(args, " "))
+
+	// Legacy variables, kept for hand-written units that predate the args above.
+	if m.Serve.GGUFPath != "" {
+		fmt.Fprintf(&b, "LLAMA_MODEL=%s\n", m.Serve.GGUFPath)
 	}
 	fmt.Fprintf(&b, "LLAMA_NGL=%d\n", ngl)
-
 	if m.Serve.ContextSize > 0 {
 		fmt.Fprintf(&b, "LLAMA_CONTEXT=%d\n", m.Serve.ContextSize)
 	}

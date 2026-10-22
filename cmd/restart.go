@@ -27,6 +27,7 @@ func init() {
 	restartCmd.Flags().Bool("enable", false, "Also enable the systemd unit to start at boot")
 	restartCmd.Flags().BoolP("logs", "l", false, "Stream container/service logs while waiting for the API")
 	restartCmd.Flags().String("max-runtime", "", "Stop the model after this duration (e.g. 15m, 1h); 0 = disabled")
+	restartCmd.Flags().Duration("timeout", startWaitTimeout, "How long to wait for the API (raise it for a first start that downloads weights)")
 }
 
 func runRestart(cmd *cobra.Command, args []string) error {

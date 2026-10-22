@@ -27,14 +27,17 @@ type LlamaCppProvider struct {
 	svc       *service.SystemdManager
 	w         io.Writer
 	loadModel func(slug string) (*config.ModelConfig, error)
+	hfToken   string // written as HF_TOKEN so -hf can pull gated repos
 }
 
 // NewLlamaCppProvider builds a LlamaCppProvider that searches dirs for model configs.
-func NewLlamaCppProvider(cfg *config.Config, dirs []string) *LlamaCppProvider {
+// hfToken is written to the env file as HF_TOKEN when non-empty.
+func NewLlamaCppProvider(cfg *config.Config, dirs []string, hfToken string) *LlamaCppProvider {
 	return &LlamaCppProvider{
-		cfg: cfg,
-		svc: service.NewSystemdManager(cfg.Service.LlamaCppUnit),
-		w:   os.Stderr,
+		cfg:     cfg,
+		svc:     service.NewSystemdManager(cfg.Service.LlamaCppUnit),
+		w:       os.Stderr,
+		hfToken: hfToken,
 		loadModel: func(slug string) (*config.ModelConfig, error) {
 			return config.ResolveModel(slug, dirs...)
 		},
@@ -47,12 +50,21 @@ func (l *LlamaCppProvider) Switch(ctx context.Context, modelSlug string) error {
 		return fmt.Errorf("loading model %q: %w", modelSlug, err)
 	}
 
-	if m.Serve.GGUFPath == "" {
-		return fmt.Errorf("model %q has no gguf_path configured", modelSlug)
+	if m.Serve.GGUFPath == "" && m.Model.ID == "" {
+		return fmt.Errorf("model %q needs model.id (a Hugging Face GGUF repo) or serve.gguf_path", modelSlug)
+	}
+
+	// The containerized unit needs an image; the profile's wins over the global default.
+	image := ""
+	if l.cfg.Service.LlamaCppMode != "binary" {
+		image = m.Model.Image
+		if image == "" {
+			image = l.cfg.Service.LlamaCppImage
+		}
 	}
 
 	envPath := filepath.Join(l.cfg.Paths.ModelsDir, modelSlug+".llamacpp.env")
-	envContent := []byte(render.LlamaCppEnv(m))
+	envContent := []byte(render.LlamaCppEnv(m, image, l.hfToken))
 
 	written, err := privilege.PromptAndWriteFile(l.w, filepath.Dir(envPath), envPath, envContent)
 	if err != nil {

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/DavidXArnold/marlin/internal/config"
 )
 
@@ -245,4 +247,33 @@ func TestInspectNIMDockerRunPort(t *testing.T) {
 	if !strings.Contains(out, "9000:8000") {
 		t.Errorf("expected port mapping 9000:8000, got:\n%s", out)
 	}
+}
+
+func TestInspectLlamaCppContainer(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Paths.HFCache = "/hf"
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{Type: config.ProviderLlamaCpp, ID: "org/Model-GGUF:Q4_K_M"},
+		Serve: config.ServeConfig{ServedModelName: []string{"local"}},
+	}
+	out := Inspect(m, cfg, "gguf-model", "hf_secret")
+	assert.Contains(t, out, "gguf-model.llamacpp.env")
+	assert.Contains(t, out, "LLAMA_IMAGE="+cfg.Service.LlamaCppImage)
+	assert.Contains(t, out, "LLAMA_MODEL_ARGS=-hf org/Model-GGUF:Q4_K_M")
+	assert.Contains(t, out, "HF_TOKEN=*** (from secrets)")
+	assert.NotContains(t, out, "hf_secret")
+	assert.Contains(t, out, "--name marlin-llamacpp")
+	assert.Contains(t, out, `-v "/hf:/root/.cache/huggingface"`)
+}
+
+func TestInspectLlamaCppBinary(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Service.LlamaCppMode = "binary"
+	cfg.Service.LlamaCppBin = "/opt/llama-server"
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{Type: config.ProviderLlamaCpp, ID: "org/Model-GGUF"},
+	}
+	out := Inspect(m, cfg, "g", "")
+	assert.NotContains(t, out, "LLAMA_IMAGE")
+	assert.Contains(t, out, "exec /opt/llama-server ${LLAMA_MODEL_ARGS}")
 }

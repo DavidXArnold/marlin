@@ -27,7 +27,7 @@ func testLlamaCppProvider(t *testing.T, runner service.ExecRunner) (*LlamaCppPro
 	cfg.Paths.LlamaCppEnvFile = filepath.Join(dir, "llamacpp.env")
 	cfg.Service.LlamaCppUnit = "llamacpp-test"
 
-	p := NewLlamaCppProvider(cfg, []string{modelsDir})
+	p := NewLlamaCppProvider(cfg, []string{modelsDir}, "")
 	p.svc = service.NewSystemdManagerWithRunner("llamacpp-test", runner)
 	p.w = io.Discard
 	return p, dir
@@ -71,10 +71,10 @@ func TestLlamaCppSwitchSuccess(t *testing.T) {
 	assert.Contains(t, string(content), "LLAMA_CONTEXT=4096")
 }
 
-func TestLlamaCppSwitchNoGGUFPath(t *testing.T) {
+func TestLlamaCppSwitchNoModelSource(t *testing.T) {
 	p, _ := testLlamaCppProvider(t, successRunner)
 	m := &config.ModelConfig{
-		Model: config.ModelMeta{Type: config.ProviderLlamaCpp, ID: "no-path"},
+		Model: config.ModelMeta{Type: config.ProviderLlamaCpp},
 		Serve: config.ServeConfig{},
 	}
 	require.NoError(t, config.SaveModel(filepath.Join(p.cfg.Paths.ModelsDir, "no-path.toml"), m))
@@ -82,6 +82,54 @@ func TestLlamaCppSwitchNoGGUFPath(t *testing.T) {
 	err := p.Switch(context.Background(), "no-path")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "gguf_path")
+}
+
+func TestLlamaCppSwitchHuggingFaceRef(t *testing.T) {
+	p, _ := testLlamaCppProvider(t, successRunner)
+	p.hfToken = "hf_test"
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{Type: config.ProviderLlamaCpp, ID: "org/Model-GGUF:Q4_K_M"},
+		Serve: config.ServeConfig{ServedModelName: []string{"local"}},
+	}
+	require.NoError(t, config.SaveModel(filepath.Join(p.cfg.Paths.ModelsDir, "hf.toml"), m))
+
+	require.NoError(t, p.Switch(context.Background(), "hf"))
+
+	content, err := os.ReadFile(filepath.Join(p.cfg.Paths.ModelsDir, "hf.llamacpp.env"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "LLAMA_MODEL_ARGS=-hf org/Model-GGUF:Q4_K_M")
+	assert.Contains(t, string(content), "LLAMA_IMAGE="+p.cfg.Service.LlamaCppImage)
+	assert.Contains(t, string(content), "HF_TOKEN=hf_test")
+	assert.Contains(t, string(content), "--alias local")
+}
+
+func TestLlamaCppSwitchImageOverride(t *testing.T) {
+	p, _ := testLlamaCppProvider(t, successRunner)
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{Type: config.ProviderLlamaCpp, ID: "org/Model-GGUF", Image: "example/llama:custom"},
+	}
+	require.NoError(t, config.SaveModel(filepath.Join(p.cfg.Paths.ModelsDir, "img.toml"), m))
+
+	require.NoError(t, p.Switch(context.Background(), "img"))
+
+	content, err := os.ReadFile(filepath.Join(p.cfg.Paths.ModelsDir, "img.llamacpp.env"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "LLAMA_IMAGE=example/llama:custom")
+}
+
+func TestLlamaCppSwitchBinaryModeOmitsImage(t *testing.T) {
+	p, _ := testLlamaCppProvider(t, successRunner)
+	p.cfg.Service.LlamaCppMode = "binary"
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{Type: config.ProviderLlamaCpp, ID: "org/Model-GGUF"},
+	}
+	require.NoError(t, config.SaveModel(filepath.Join(p.cfg.Paths.ModelsDir, "bin.toml"), m))
+
+	require.NoError(t, p.Switch(context.Background(), "bin"))
+
+	content, err := os.ReadFile(filepath.Join(p.cfg.Paths.ModelsDir, "bin.llamacpp.env"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(content), "LLAMA_IMAGE")
 }
 
 func TestLlamaCppSwitchModelNotFound(t *testing.T) {
@@ -112,8 +160,8 @@ func TestLlamaCppSwitchDefaultNGL(t *testing.T) {
 
 	content, err := os.ReadFile(filepath.Join(p.cfg.Paths.ModelsDir, "llama-3b.llamacpp.env"))
 	require.NoError(t, err)
-	// Default NGL is 99 when not set.
-	assert.Contains(t, string(content), "LLAMA_NGL=99")
+	// Default NGL offloads every layer when not set.
+	assert.Contains(t, string(content), "LLAMA_NGL=999")
 }
 
 // --- Stop ---

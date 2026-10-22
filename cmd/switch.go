@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -42,8 +44,42 @@ func preflightForProvider(targetType config.ProviderType, cfg *config.Config) er
 		if _, err := os.Stat(unitPath); os.IsNotExist(err) {
 			return fmt.Errorf("systemd unit %q is not installed — run 'marlin install' first", cfg.Service.SystemdUnit)
 		}
+	case config.ProviderLlamaCpp:
+		unitPath := render.LlamaCppUnitPath(cfg)
+		if _, err := os.Stat(unitPath); os.IsNotExist(err) {
+			return fmt.Errorf("systemd unit %q is not installed — run 'marlin install --provider llamacpp' first", cfg.Service.LlamaCppUnit)
+		}
 	}
 	return nil
+}
+
+// portSharingProviders are the systemd-managed providers that all bind
+// server.port, so at most one of them can be serving at a time.
+var portSharingProviders = []config.ProviderType{config.ProviderVLLM, config.ProviderLlamaCpp}
+
+// stopConflictingServices stops any other port-sharing provider whose unit is
+// live, judged by systemd rather than state.toml: state can be stale (a manual
+// systemctl start, a failed state write), and a forgotten service would hold
+// the port and crash-loop the new one.
+func stopConflictingServices(ctx context.Context, w io.Writer, cfg *config.Config, target config.ProviderType) {
+	for _, pt := range portSharingProviders {
+		if pt == target {
+			continue
+		}
+		p, err := buildProvider(pt, cfg)
+		if err != nil {
+			continue
+		}
+		st, err := p.Status(ctx)
+		if err != nil || (!st.Running && st.State != "starting") {
+			continue
+		}
+		if err := p.Stop(ctx); err != nil {
+			_, _ = fmt.Fprintf(w, "warning: stopping %s service: %v\n", pt, err)
+			continue
+		}
+		_, _ = fmt.Fprintf(w, "stopped running %s service\n", pt)
+	}
 }
 
 func runSwitch(cmd *cobra.Command, args []string) error {
@@ -138,6 +174,8 @@ func runSwitch(cmd *cobra.Command, args []string) error {
 			}
 		}
 	}
+
+	stopConflictingServices(cmd.Context(), cmd.OutOrStdout(), cfg, targetModel.Model.Type)
 
 	// Execute the switch.
 	p, err := buildProvider(targetModel.Model.Type, cfg)

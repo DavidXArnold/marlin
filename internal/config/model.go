@@ -39,7 +39,7 @@ type ModelConfig struct {
 type ModelMeta struct {
 	Type     ProviderType `toml:"type"`
 	ID       string       `toml:"id"`
-	Image    string       `toml:"image"`    // NIM only: nvcr.io/nim/<org>/<model>:tag
+	Image    string       `toml:"image"`    // NIM: nvcr.io/nim/<org>/<model>:tag; vLLM/llama.cpp: container image override
 	Registry string       `toml:"registry"` // vLLM only: huggingface, ngc
 	Status   ModelStatus  `toml:"status"`
 	Notes    string       `toml:"notes"`
@@ -53,13 +53,13 @@ type ServeConfig struct {
 	ServedModelName      []string `toml:"served_model_name"`
 	GPUMemoryUtilization float64  `toml:"gpu_memory_utilization"`
 	MaxModelLen          int      `toml:"max_model_len"`
-	ExtraFlags           []string `toml:"extra_flags"`   // vLLM: extra CLI flags passed to vllm serve
+	ExtraFlags           []string `toml:"extra_flags"`   // vLLM/llama.cpp: extra CLI flags passed to vllm serve / llama-server
 	ExtraEnv             []string `toml:"extra_env"`     // NIM: extra KEY=VALUE env vars for the container
 	ExtraVolumes         []string `toml:"extra_volumes"` // NIM: extra /host:/container volume mounts
 
 	// llama.cpp-specific fields
-	GGUFPath    string `toml:"gguf_path"`    // path to the .gguf model file
-	NGL         int    `toml:"ngl"`          // GPU layers to offload (-ngl flag)
+	GGUFPath    string `toml:"gguf_path"`    // local .gguf file; overrides model.id (an HF "<repo>:<quant>" ref)
+	NGL         int    `toml:"ngl"`          // GPU layers to offload (-ngl flag); 0 = all
 	ContextSize int    `toml:"context_size"` // context window size (-c flag)
 
 	// vLLM optional flags

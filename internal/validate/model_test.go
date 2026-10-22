@@ -5,6 +5,7 @@ import (
 
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func validModel() *config.ModelConfig {
@@ -179,4 +180,28 @@ func contains(s, sub string) bool {
 			}
 			return false
 		}())
+}
+
+func TestModelLlamaCppHFRefValid(t *testing.T) {
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{Type: config.ProviderLlamaCpp, ID: "org/Model-GGUF:Q4_K_M"},
+		Serve: config.ServeConfig{ServedModelName: []string{"local"}, ToolCallParser: "anything"},
+	}
+	assert.Empty(t, Model(m, "local"))
+}
+
+func TestModelLlamaCppGGUFPathValid(t *testing.T) {
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{Type: config.ProviderLlamaCpp},
+		Serve: config.ServeConfig{GGUFPath: "/models/x.gguf", ServedModelName: []string{"local"}},
+	}
+	assert.Empty(t, Model(m, "local"))
+}
+
+func TestModelLlamaCppNoSource(t *testing.T) {
+	m := &config.ModelConfig{Model: config.ModelMeta{Type: config.ProviderLlamaCpp}}
+	issues := Model(m, "local")
+	require.NotEmpty(t, issues)
+	assert.Equal(t, LevelError, issues[0].Level)
+	assert.Contains(t, issues[0].Message, "gguf_path")
 }

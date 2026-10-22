@@ -193,6 +193,8 @@ func TestSystemdUnitsLimitCrashLoops(t *testing.T) {
 	for name, unit := range map[string]string{
 		"binary":        SystemdUnit(cfg, "/usr/bin/vllm"),
 		"containerized": SystemdUnitContainerized(cfg, "/usr/bin/docker"),
+		"llamacpp":      SystemdUnitLlamaCpp(cfg, "/usr/bin/llama-server"),
+		"llamacpp-ctr":  SystemdUnitLlamaCppContainerized(cfg, "/usr/bin/docker", "/hf"),
 	} {
 		assert.Contains(t, unit, "StartLimitIntervalSec=300", name)
 		assert.Contains(t, unit, "StartLimitBurst=5", name)
@@ -202,4 +204,73 @@ func TestSystemdUnitsLimitCrashLoops(t *testing.T) {
 	c := SystemdUnitContainerized(cfg, "/usr/bin/docker")
 	assert.Contains(t, c, "ExecStartPre=-/usr/bin/docker rm -f marlin-vllm")
 	assert.Less(t, strings.Index(c, "ExecStartPre"), strings.Index(c, "ExecStart="))
+}
+
+func TestSystemdUnitLlamaCppContainerized(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Server.Port = 8123
+	u := SystemdUnitLlamaCppContainerized(cfg, "/usr/bin/docker", "/home/u/.cache/huggingface")
+
+	assert.Contains(t, u, "EnvironmentFile=/etc/marlin/llamacpp.env")
+	assert.Contains(t, u, "ExecStartPre=-/usr/bin/docker rm -f marlin-llamacpp")
+	assert.Contains(t, u, "exec /usr/bin/docker run --rm --gpus all --ipc host --network host --name marlin-llamacpp")
+	assert.Contains(t, u, "--label marlin.managed=true")
+	assert.Contains(t, u, `-v "/home/u/.cache/huggingface:/root/.cache/huggingface"`)
+	assert.Contains(t, u, `-e "HF_TOKEN=${HF_TOKEN:-}"`)
+	assert.Contains(t, u, `${LLAMA_CONTAINER_ARGS:-} "${LLAMA_IMAGE}" ${LLAMA_MODEL_ARGS} --host 0.0.0.0 --port 8123 ${LLAMA_EXTRA_ARGS:-}`)
+	// Health check must follow the configured port, not the image's 8080 default.
+	assert.Contains(t, u, `--health-cmd "curl -fsS http://localhost:8123/health || exit 1"`)
+	assert.Contains(t, u, "SyslogIdentifier=marlin-llamacpp")
+}
+
+func TestSystemdUnitLlamaCppContainerizedNerdctlNoHealthCmd(t *testing.T) {
+	u := SystemdUnitLlamaCppContainerized(config.Defaults(), "/usr/local/bin/nerdctl", "/hf")
+	assert.NotContains(t, u, "--health-cmd")
+}
+
+func TestSystemdUnitLlamaCppBinary(t *testing.T) {
+	cfg := config.Defaults()
+	u := SystemdUnitLlamaCpp(cfg, "/opt/llama/llama-server")
+	assert.Contains(t, u, "exec /opt/llama/llama-server ${LLAMA_MODEL_ARGS} --host localhost --port 8000 ${LLAMA_EXTRA_ARGS:-}")
+	assert.NotContains(t, u, "LLAMA_IMAGE")
+}
+
+func TestLlamaCppUnitPath(t *testing.T) {
+	cfg := config.Defaults()
+	assert.Equal(t, "/etc/systemd/system/marlin-llamacpp.service", LlamaCppUnitPath(cfg))
+}
+
+func TestResolveLlamaCppBin(t *testing.T) {
+	got, ok := ResolveLlamaCppBin("/x/llama-server")
+	assert.True(t, ok)
+	assert.Equal(t, "/x/llama-server", got)
+
+	t.Setenv("PATH", t.TempDir())
+	got, ok = ResolveLlamaCppBin("")
+	assert.False(t, ok)
+	assert.Equal(t, "llama-server", got)
+}
+
+func TestResolveHFCache(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Paths.HFCache = "/data/hf"
+	assert.Equal(t, "/data/hf", ResolveHFCache(cfg))
+
+	cfg.Paths.HFCache = ""
+	orig := lookupUserHomeFunc
+	t.Cleanup(func() { lookupUserHomeFunc = orig })
+	lookupUserHomeFunc = func(string) (string, error) { return "/home/alice", nil }
+	t.Setenv("SUDO_USER", "alice")
+	assert.Equal(t, "/home/alice/.cache/huggingface", ResolveHFCache(cfg))
+
+	t.Setenv("SUDO_USER", "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	assert.Equal(t, filepath.Join(home, ".cache", "huggingface"), ResolveHFCache(cfg))
+}
+
+func TestLlamaCppEnvFileFallback(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Paths.LlamaCppEnvFile = ""
+	assert.Contains(t, SystemdUnitLlamaCpp(cfg, "llama-server"), "EnvironmentFile=/etc/marlin/llamacpp.env")
 }
