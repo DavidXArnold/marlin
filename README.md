@@ -76,7 +76,7 @@ NGC_API_KEY=nvapi-...
 | `log_tail_lines` | `100` | Lines shown by `marlin logs` without `-f` |
 | `allow_type_switch` | `true` | Allow switching between vllm and nim providers |
 | `warn_unmanaged_containers` | `true` | Warn in `marlin status` if unmanaged inference containers are found |
-| `check_updates` | `true` | Notify when a newer marlin release is available on GitHub |
+| `check_updates` | `true` | Notify when a newer marlin release is available on GitHub (checked at most once a day; set `GITHUB_TOKEN` if you hit GitHub rate limits) |
 | `global_install` | `false` | Write new model configs to `global_models_dir` (requires sudo) |
 | `warn_on_system_resources` | `true` | Warn before switch if system load is high |
 | `system_load_threshold` | `0.8` | Load-average fraction that triggers the resource warning |
@@ -96,6 +96,7 @@ NGC_API_KEY=nvapi-...
 | `state_file` | `~/.local/share/marlin/state.toml` | Active model, provider, and container ID |
 | `nim_cache` | `/var/cache/nim` | Host path mounted into NIM containers as model cache |
 | `history_file` | `~/.local/share/marlin/history.jsonl` | Append-only JSONL event log; auto-rotated at 50 MiB |
+| `update_cache_file` | `~/.cache/marlin/update-check.json` | 24h cache for the new-release check |
 | `llamacpp_env_file` | `/etc/marlin/llamacpp.env` | Symlink → active llama.cpp model's rendered env file |
 
 `models_dir`, `secrets_env`, and `state_file` default to user-local paths (no sudo required). Override to `/etc/marlin/…` or `/var/lib/marlin/…` for shared system deployments.

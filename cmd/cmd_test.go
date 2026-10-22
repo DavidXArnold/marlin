@@ -1543,3 +1543,50 @@ func TestCheckForUpdateNoticeUsesCache(t *testing.T) {
 	assert.True(t, newer)
 	assert.Equal(t, "v99.0.0", latest)
 }
+
+// TestExecuteWaitsForInFlightUpdateCheck: a fast command must not exit before
+// a slightly slower update check finishes, or the cache is never written.
+func TestExecuteWaitsForInFlightUpdateCheck(t *testing.T) {
+	select {
+	case <-updateNoticeCh:
+	default:
+	}
+	cleanup := tempEnv(t)
+	defer cleanup()
+
+	finished := make(chan struct{})
+	old := checkForUpdateNotice
+	checkForUpdateNotice = func(_ context.Context, _ string, _ *config.Config) (string, bool, error) {
+		time.Sleep(150 * time.Millisecond)
+		close(finished)
+		return "v99.0.0", true, nil
+	}
+	defer func() { checkForUpdateNotice = old }()
+	defer func() { updateCheckDone = nil }()
+
+	oldExit := osExit
+	osExit = func(int) {}
+	defer func() { osExit = oldExit }()
+
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	oldStderr := os.Stderr
+	os.Stderr = w
+	defer func() { os.Stderr = oldStderr }()
+
+	rootCmd.SetArgs([]string{"list"})
+	rootCmd.SetOut(io.Discard)
+	Execute()
+	rootCmd.SetArgs(nil)
+
+	require.NoError(t, w.Close())
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+
+	select {
+	case <-finished:
+	default:
+		t.Fatal("Execute returned before the in-flight update check finished")
+	}
+	assert.Contains(t, buf.String(), "v99.0.0")
+}
