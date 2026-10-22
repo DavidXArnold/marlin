@@ -9,7 +9,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,7 +46,9 @@ func TestIsNewer(t *testing.T) {
 
 func TestCheck_UpdateAvailable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "application/vnd.github+json", r.Header.Get("Accept"))
+		if r.Method == http.MethodGet { // the API fallback; the HEAD is the redirect probe
+			assert.Equal(t, "application/vnd.github+json", r.Header.Get("Accept"))
+		}
 		w.Header().Set("Content-Type", "application/json")
 		require.NoError(t, json.NewEncoder(w).Encode(githubRelease{TagName: "v99.0.0"}))
 	}))
@@ -231,4 +236,127 @@ func writeFakeTarGz(path, entryName string, data []byte) error {
 		return err
 	}
 	return gw.Close()
+}
+
+// fakeGitHub serves both the web redirect and the REST API from one server.
+// webTag == "" makes the redirect probe fail (no Location), forcing the API path.
+type fakeGitHub struct {
+	webTag, apiTag string
+	apiStatus      int
+	apiHits        atomic.Int32
+	webHits        atomic.Int32
+	authHeader     atomic.Value
+}
+
+func (f *fakeGitHub) install(t *testing.T) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/repos/") {
+			f.apiHits.Add(1)
+			f.authHeader.Store(r.Header.Get("Authorization"))
+			if f.apiStatus != 0 {
+				w.WriteHeader(f.apiStatus)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(githubRelease{TagName: f.apiTag})
+			return
+		}
+		f.webHits.Add(1)
+		if f.webTag == "" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.Header().Set("Location", "https://github.com/DavidXArnold/marlin/releases/tag/"+f.webTag)
+		w.WriteHeader(http.StatusFound)
+	}))
+	t.Cleanup(srv.Close)
+	old := HTTPClient
+	HTTPClient = &http.Client{Transport: redirectToServer(srv)}
+	t.Cleanup(func() { HTTPClient = old })
+}
+
+func TestLatestTagPrefersRedirectOverAPI(t *testing.T) {
+	f := &fakeGitHub{webTag: "v0.2.19", apiStatus: http.StatusForbidden}
+	f.install(t)
+	tag, err := LatestTag(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "v0.2.19", tag)
+	assert.Zero(t, f.apiHits.Load(), "API must not be touched when the redirect works")
+}
+
+func TestLatestTagFallsBackToAPIWithToken(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "ghp_test")
+	f := &fakeGitHub{apiTag: "v0.2.19"}
+	f.install(t)
+	tag, err := LatestTag(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "v0.2.19", tag)
+	assert.Equal(t, "Bearer ghp_test", f.authHeader.Load())
+}
+
+func TestLatestTagRateLimitedErrorIsActionable(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	f := &fakeGitHub{apiStatus: http.StatusForbidden}
+	f.install(t)
+	_, err := LatestTag(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rate limited")
+	assert.Contains(t, err.Error(), "GITHUB_TOKEN")
+}
+
+func TestCheckCachedUsesFreshCacheWithoutNetwork(t *testing.T) {
+	f := &fakeGitHub{webTag: "v0.2.19"}
+	f.install(t)
+	path := filepath.Join(t.TempDir(), "update-check.json")
+
+	latest, newer, err := CheckCached(context.Background(), "0.2.18", path, time.Hour)
+	require.NoError(t, err)
+	assert.True(t, newer)
+	assert.Equal(t, "v0.2.19", latest)
+	assert.EqualValues(t, 1, f.webHits.Load())
+
+	for range 5 {
+		_, _, err = CheckCached(context.Background(), "0.2.18", path, time.Hour)
+		require.NoError(t, err)
+	}
+	assert.EqualValues(t, 1, f.webHits.Load(), "cached runs must not hit the network")
+}
+
+func TestCheckCachedRefreshesWhenStale(t *testing.T) {
+	f := &fakeGitHub{webTag: "v0.2.19"}
+	f.install(t)
+	path := filepath.Join(t.TempDir(), "update-check.json")
+	_, _, err := CheckCached(context.Background(), "0.2.18", path, time.Hour)
+	require.NoError(t, err)
+	_, _, err = CheckCached(context.Background(), "0.2.18", path, 0)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, f.webHits.Load())
+}
+
+func TestCheckCachedFallsBackToStaleCacheOnError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update-check.json")
+	stale, _ := json.Marshal(checkCache{CheckedAt: time.Now().Add(-48 * time.Hour), Latest: "v0.2.19"})
+	require.NoError(t, os.WriteFile(path, stale, 0o644))
+
+	t.Setenv("GITHUB_TOKEN", "")
+	(&fakeGitHub{apiStatus: http.StatusForbidden}).install(t)
+
+	latest, newer, err := CheckCached(context.Background(), "0.2.18", path, time.Hour)
+	require.NoError(t, err, "a stale cached answer beats an error")
+	assert.True(t, newer)
+	assert.Equal(t, "v0.2.19", latest)
+}
+
+func TestCheckCachedErrorWithoutCache(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	(&fakeGitHub{apiStatus: http.StatusForbidden}).install(t)
+	_, _, err := CheckCached(context.Background(), "0.2.18", filepath.Join(t.TempDir(), "x.json"), time.Hour)
+	assert.Error(t, err)
+}
+
+func TestCheckCachedUpToDate(t *testing.T) {
+	(&fakeGitHub{webTag: "v0.2.18"}).install(t)
+	_, newer, err := CheckCached(context.Background(), "0.2.18", filepath.Join(t.TempDir(), "x.json"), time.Hour)
+	require.NoError(t, err)
+	assert.False(t, newer)
 }

@@ -55,6 +55,12 @@ func defaultProfileCacheFile() string {
 	return filepath.Join(home, ".cache", "marlin", "profile-manifest.json")
 }
 
+// defaultUpdateCacheFile sits beside the profile manifest cache; like it, it's
+// a pure cache, so non-root uses ~/.cache and never needs sudo.
+func defaultUpdateCacheFile() string {
+	return filepath.Join(filepath.Dir(defaultProfileCacheFile()), "update-check.json")
+}
+
 type Config struct {
 	Behavior   BehaviorConfig   `toml:"behavior"`
 	Paths      PathsConfig      `toml:"paths"`
@@ -137,6 +143,7 @@ type PathsConfig struct {
 	HistoryFile      string `toml:"history_file"`       // append-only JSONL event log
 	LlamaCppEnvFile  string `toml:"llamacpp_env_file"`  // env file symlink for llama-server unit
 	ProfileCacheFile string `toml:"profile_cache_file"` // TTL cache for `marlin profile`'s manifest fetch
+	UpdateCacheFile  string `toml:"update_cache_file"`  // TTL cache for the background new-release check
 }
 
 type ServiceConfig struct {
@@ -209,6 +216,7 @@ func Defaults() *Config {
 			HistoryFile:      defaultHistoryFile(),
 			LlamaCppEnvFile:  "/etc/marlin/llamacpp.env",
 			ProfileCacheFile: defaultProfileCacheFile(),
+			UpdateCacheFile:  defaultUpdateCacheFile(),
 		},
 		Service: ServiceConfig{
 			SystemdUnit:     "marlin",

@@ -1360,12 +1360,12 @@ func TestPersistentPreRunE_UpdateEnabled(t *testing.T) {
 	}
 
 	done := make(chan struct{})
-	old := checkForUpdate
-	checkForUpdate = func(_ context.Context, _ string) (string, bool, error) {
+	old := checkForUpdateNotice
+	checkForUpdateNotice = func(_ context.Context, _ string, _ *config.Config) (string, bool, error) {
 		close(done)
 		return "v99.0.0", true, nil
 	}
-	defer func() { checkForUpdate = old }()
+	defer func() { checkForUpdateNotice = old }()
 
 	cleanup := tempEnv(t)
 	defer cleanup()
@@ -1379,7 +1379,7 @@ func TestPersistentPreRunE_UpdateEnabled(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("checkForUpdate goroutine not called")
+		t.Fatal("checkForUpdateNotice goroutine not called")
 	}
 	// Give the goroutine time to send on the channel.
 	time.Sleep(10 * time.Millisecond)
@@ -1393,19 +1393,19 @@ func TestPersistentPreRunE_UpdateEnabled(t *testing.T) {
 
 func TestPersistentPreRunE_UpdateDisabled(t *testing.T) {
 	called := false
-	old := checkForUpdate
-	checkForUpdate = func(_ context.Context, _ string) (string, bool, error) {
+	old := checkForUpdateNotice
+	checkForUpdateNotice = func(_ context.Context, _ string, _ *config.Config) (string, bool, error) {
 		called = true
 		return "", false, nil
 	}
-	defer func() { checkForUpdate = old }()
+	defer func() { checkForUpdateNotice = old }()
 
 	cleanup := tempEnvWithBehavior(t, "check_updates = false")
 	defer cleanup()
 
 	require.NoError(t, rootCmd.PersistentPreRunE(nil, nil))
 	time.Sleep(50 * time.Millisecond)
-	assert.False(t, called, "checkForUpdate should not be called when check_updates=false")
+	assert.False(t, called, "checkForUpdateNotice should not be called when check_updates=false")
 }
 
 // tempEnvWithBehavior creates a config with extra behavior lines appended.
@@ -1528,4 +1528,18 @@ func TestStartMaxRuntimeNotCalledWhenZero(t *testing.T) {
 	_, err := executeCmd("start", "llama-8b")
 	require.NoError(t, err)
 	assert.False(t, called)
+}
+
+func TestCheckForUpdateNoticeUsesCache(t *testing.T) {
+	// A fresh cache answer must be returned without any network access.
+	dir := t.TempDir()
+	cfg := config.Defaults()
+	cfg.Paths.UpdateCacheFile = filepath.Join(dir, "update-check.json")
+	require.NoError(t, os.WriteFile(cfg.Paths.UpdateCacheFile,
+		[]byte(`{"checked_at":"`+time.Now().Format(time.RFC3339)+`","latest":"v99.0.0"}`), 0o644))
+
+	latest, newer, err := checkForUpdateNotice(context.Background(), "0.0.1", cfg)
+	require.NoError(t, err)
+	assert.True(t, newer)
+	assert.Equal(t, "v99.0.0", latest)
 }

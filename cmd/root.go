@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/update"
 )
 
@@ -24,8 +25,22 @@ var currentVersion string
 var updateNoticeCh = make(chan string, 1)
 
 // checkForUpdate is a var so tests can stub it without hitting the network.
+// Used by `marlin upgrade`, which always wants a live answer.
 var checkForUpdate = func(ctx context.Context, current string) (string, bool, error) {
 	return update.Check(ctx, current)
+}
+
+// updateCheckTTL bounds the background notice to one network check per day.
+const updateCheckTTL = 24 * time.Hour
+
+// checkForUpdateNotice backs the background "new version available" notice
+// that runs on every command; it's cached so routine use (and scripts polling
+// `marlin status`) doesn't exhaust GitHub's unauthenticated rate limit.
+var checkForUpdateNotice = func(ctx context.Context, current string, cfg *config.Config) (string, bool, error) {
+	if cfg == nil || cfg.Paths.UpdateCacheFile == "" {
+		return update.Check(ctx, current)
+	}
+	return update.CheckCached(ctx, current, cfg.Paths.UpdateCacheFile, updateCheckTTL)
 }
 
 var rootCmd = &cobra.Command{
@@ -40,7 +55,7 @@ var rootCmd = &cobra.Command{
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			go func() {
 				defer cancel()
-				latest, newer, _ := checkForUpdate(ctx, currentVersion)
+				latest, newer, _ := checkForUpdateNotice(ctx, currentVersion, cfg)
 				if newer {
 					select {
 					case updateNoticeCh <- latest:
