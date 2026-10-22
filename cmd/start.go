@@ -83,6 +83,7 @@ func init() {
 	startCmd.Flags().Bool("enable", false, "Also enable the systemd unit to start at boot")
 	startCmd.Flags().BoolP("logs", "l", false, "Stream container/service logs while waiting for the API")
 	startCmd.Flags().String("max-runtime", "", "Stop the model after this duration (e.g. 15m, 1h); 0 = disabled")
+	startCmd.Flags().Duration("timeout", startWaitTimeout, "How long to wait for the API (raise it for a first start that downloads weights)")
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
@@ -153,7 +154,11 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 	w := cmd.OutOrStdout()
 	errW := cmd.ErrOrStderr()
 
-	ctx, cancel := context.WithTimeout(cmd.Context(), startWaitTimeout)
+	timeout := startWaitTimeout
+	if f := cmd.Flags().Lookup("timeout"); f != nil && f.Changed {
+		timeout, _ = cmd.Flags().GetDuration("timeout")
+	}
+	ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 	defer cancel()
 
 	// Derive probe paths: model-specific primary first, then all known alternates.
@@ -216,8 +221,9 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 			if isTTY {
 				_, _ = fmt.Fprintf(w, "\r\033[K") // clear spinner line
 			}
-			_, _ = fmt.Fprintf(w, "start timed out after %s — run 'marlin logs' for details\n",
+			_, _ = fmt.Fprintf(w, "not ready after %s — the service is still running (a first start may still be downloading weights)\n",
 				time.Since(start).Round(time.Second))
+			_, _ = fmt.Fprintln(w, "  follow progress with 'marlin logs -f', or wait longer with --timeout")
 			return false
 
 		case <-ticker.C:

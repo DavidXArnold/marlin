@@ -144,6 +144,7 @@ type PathsConfig struct {
 	LlamaCppEnvFile  string `toml:"llamacpp_env_file"`  // env file symlink for llama-server unit
 	ProfileCacheFile string `toml:"profile_cache_file"` // TTL cache for `marlin profile`'s manifest fetch
 	UpdateCacheFile  string `toml:"update_cache_file"`  // TTL cache for the background new-release check
+	HFCache          string `toml:"hf_cache"`           // host HF cache mounted into the llama.cpp container; empty = invoking user's ~/.cache/huggingface
 }
 
 type ServiceConfig struct {
@@ -155,6 +156,9 @@ type ServiceConfig struct {
 	LlamaCppUnit     string `toml:"llamacpp_unit"`     // systemd unit for llama-server
 	VLLMBin          string `toml:"vllm_bin"`          // full path to vllm binary; empty = auto-detect (binary mode only)
 	VLLMMode         string `toml:"vllm_mode"`         // "container" (default) or "binary"
+	LlamaCppImage    string `toml:"llamacpp_image"`    // llama-server image for the containerized llama.cpp unit
+	LlamaCppMode     string `toml:"llamacpp_mode"`     // "container" (default) or "binary"
+	LlamaCppBin      string `toml:"llamacpp_bin"`      // llama-server binary (binary mode only); empty = "llama-server"
 }
 
 type ServerConfig struct {
@@ -224,6 +228,8 @@ func Defaults() *Config {
 			VLLMImage:       "nvcr.io/nvidia/vllm:26.05.post1-py3",
 			LlamaCppUnit:    "marlin-llamacpp",
 			VLLMMode:        "container",
+			LlamaCppImage:   "ghcr.io/ggml-org/llama.cpp:server-cuda13",
+			LlamaCppMode:    "container",
 		},
 		Server: ServerConfig{
 			Host:       "localhost",

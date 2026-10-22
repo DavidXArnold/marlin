@@ -8,7 +8,7 @@
 
 ## Features
 
-- **Three provider types** — `vllm` (containerized via Docker/Podman/nerdctl, or bare-binary systemd), `nim` (NIM containers via Docker, Podman, or nerdctl), and `llamacpp` (llama-server via a dedicated systemd unit)
+- **Three provider types** — `vllm` (containerized via Docker/Podman/nerdctl, or bare-binary systemd), `nim` (NIM containers via Docker, Podman, or nerdctl), and `llamacpp` (llama-server in a container or as a host binary via a dedicated systemd unit; GGUF weights pulled straight from Hugging Face)
 - **Interactive TUI** — fuzzy model picker, multi-step add wizard, search result picker, and live `marlin top` dashboard (bubbletea)
 - **Atomic symlink swap** — zero-gap `model.env` rotation for vLLM and llama.cpp
 - **NIM container lifecycle** — pull, stop old, start new; host cache dir prepared with correct GID=0 permissions
@@ -98,6 +98,7 @@ NGC_API_KEY=nvapi-...
 | `history_file` | `~/.local/share/marlin/history.jsonl` | Append-only JSONL event log; auto-rotated at 50 MiB |
 | `update_cache_file` | `~/.cache/marlin/update-check.json` | 24h cache for the new-release check |
 | `llamacpp_env_file` | `/etc/marlin/llamacpp.env` | Symlink → active llama.cpp model's rendered env file |
+| `hf_cache` | `""` | Host Hugging Face cache mounted into the llama.cpp container; empty = the installing user's `~/.cache/huggingface` (via `SUDO_USER`) |
 
 `models_dir`, `secrets_env`, and `state_file` default to user-local paths (no sudo required). Override to `/etc/marlin/…` or `/var/lib/marlin/…` for shared system deployments.
 
@@ -113,6 +114,9 @@ NGC_API_KEY=nvapi-...
 | `container_runtime` | `"docker"` | Container runtime: `docker`, `podman`, or `nerdctl` |
 | `container_socket` | `""` | Custom socket path for Docker/Podman; empty = auto-detect |
 | `llamacpp_unit` | `"marlin-llamacpp"` | Systemd unit for llama-server (llamacpp provider) |
+| `llamacpp_mode` | `"container"` | How llama-server is run: `"container"` (default) or `"binary"` (host install) |
+| `llamacpp_image` | `"ghcr.io/ggml-org/llama.cpp:server-cuda13"` | llama-server image for container mode; a profile's `[model] image` overrides it |
+| `llamacpp_bin` | `""` | llama-server binary for binary mode; empty = `llama-server` from PATH |
 
 ### `[server]`
 
@@ -173,9 +177,10 @@ marlin start --enable           # also enable systemd unit at boot (vLLM)
 marlin start --logs             # stream container logs while waiting for the API
 marlin start -vvv               # stream container logs to stderr alongside the spinner
 marlin start --max-runtime 2h   # auto-stop after 2 hours
+marlin start --timeout 2h       # wait longer for the API (first start that downloads weights)
 ```
 
-After switching, `marlin start` polls `server.health_path` (default `/health`) until the API responds 200, showing a spinner. If `behavior.smoke_test = true`, a quick completion/streaming/tool-call validation runs immediately after the API becomes ready.
+After switching, `marlin start` polls `server.health_path` (default `/health`) until the API responds 200, showing a spinner. It gives up after `--timeout` (default 10m) but leaves the service running, so a large first-time download keeps going; follow it with `marlin logs -f`. If `behavior.smoke_test = true`, a quick completion/streaming/tool-call validation runs immediately after the API becomes ready.
 
 Configure the health path for non-vLLM containers that use a different endpoint:
 
@@ -191,7 +196,9 @@ Switch the active inference model. Shows an interactive fuzzy picker when no arg
 
 - **vLLM**: validates the config, renders the env file (including `HF_TOKEN` from secrets when configured), atomically replaces the active symlink, and restarts the systemd unit.
 - **NIM**: prepares the host cache directory (sets GID=0 and group-write permissions), pulls the image, stops the old container, and starts a new one. Stores the pinned image digest in state.
-- **llama.cpp**: renders the env file (`LLAMA_MODEL`, `LLAMA_NGL`, `LLAMA_CONTEXT`), updates the `llamacpp.env` symlink, and restarts the `marlin-llamacpp` unit.
+- **llama.cpp**: renders the env file (`LLAMA_IMAGE`, `LLAMA_MODEL_ARGS`, `LLAMA_EXTRA_ARGS`, `HF_TOKEN`), updates the `llamacpp.env` symlink, and restarts the `marlin-llamacpp` unit.
+
+vLLM and llama.cpp share `server.port`, so `switch` stops whichever of the two units is live (checked with systemd, not just `state.toml`) before starting the other.
 
 Records `switch_start` and `switch_ready` events to the history log with elapsed time. Abstract models (base configs with `abstract = true`) are hidden from the picker.
 
@@ -556,7 +563,7 @@ marlin edit qwen25-72b-awq
 
 ### `marlin install`
 
-Install the vLLM systemd unit file. Run once before using `marlin start --enable` for boot-time autostart.
+Install the vLLM systemd unit file (or, with `--provider llamacpp`, the llama.cpp one). Run once before using `marlin start --enable` for boot-time autostart.
 
 In the default `container` mode the unit runs vLLM inside the official NVIDIA container — no local vLLM install required. `marlin install` probes for Docker, Podman, or nerdctl and warns with installation links if none is found. The image is read from `VLLM_IMAGE` in the active model env file, so switching models updates the container automatically without reinstalling the unit.
 
@@ -570,7 +577,10 @@ To use a locally installed vLLM binary instead, set `service.vllm_mode = "binary
 
 ```bash
 marlin install --force  # overwrite an existing unit file
+sudo marlin install --provider llamacpp   # install the llama.cpp unit (marlin-llamacpp)
 ```
+
+The llama.cpp unit runs `service.llamacpp_image` as container `marlin-llamacpp` with the host Hugging Face cache (`paths.hf_cache`) mounted at `/root/.cache/huggingface`, so `-hf` downloads survive restarts and weights already in your cache are reused. It overrides the image's health check, which otherwise probes port 8080 regardless of `server.port`. Set `service.llamacpp_mode = "binary"` to run a host `llama-server` instead.
 
 ### `marlin restart`
 
@@ -645,27 +655,27 @@ Common NIM env vars:
 
 ### llama.cpp / GGUF model
 
-Requires a `marlin-llamacpp.service` systemd unit that reads `/etc/marlin/llamacpp.env` and runs `llama-server`:
-
-```ini
-[Service]
-EnvironmentFile=/etc/marlin/llamacpp.env
-ExecStart=llama-server -m ${LLAMA_MODEL} --ngl ${LLAMA_NGL} -c ${LLAMA_CONTEXT:-4096} --port 8080
-```
+Install the unit once with `sudo marlin install --provider llamacpp`. Point `model.id` at a Hugging Face GGUF repo, optionally with a quant tag; llama-server downloads it (all shards) into the HF cache on first start:
 
 ```toml
 [model]
-id     = "bartowski/Llama-3.2-3B-Instruct-GGUF"
+id     = "unsloth/Qwen3-30B-A3B-GGUF:Q4_K_M"   # <org>/<repo>[:<quant>]
 type   = "llamacpp"
 status = "working"
+# image = "ghcr.io/ggml-org/llama.cpp:server-cuda13"  # optional override of service.llamacpp_image
 
 [serve]
-gguf_path    = "/var/cache/huggingface/hub/models--bartowski--Llama-3.2-3B-Instruct-GGUF/snapshots/latest/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
-ngl          = 99        # GPU layers to offload; default 99 (all)
-context_size = 8192
+served_model_name = ["local"]   # passed as --alias (comma-joined)
+context_size      = 16384       # -c
+ngl               = 0           # -ngl; 0/unset = offload all layers
+extra_flags       = ["-fa", "on", "--jinja"]
 ```
 
-`marlin switch` writes `LLAMA_MODEL`, `LLAMA_NGL`, and `LLAMA_CONTEXT` to `<models_dir>/<slug>.llamacpp.env`, updates the `paths.llamacpp_env_file` symlink, and restarts the `service.llamacpp_unit` systemd unit.
+To serve a file you already have, set `serve.gguf_path` instead; it takes precedence over `model.id` and its directory is mounted read-only into the container.
+
+`marlin switch` writes `<models_dir>/<slug>.llamacpp.env` (`LLAMA_IMAGE`, `LLAMA_MODEL_ARGS` = `-hf <id>` or `-m <gguf_path>`, `LLAMA_EXTRA_ARGS`, `HF_TOKEN` from secrets), updates the `paths.llamacpp_env_file` symlink, and restarts the `service.llamacpp_unit` unit. The legacy `LLAMA_MODEL`/`LLAMA_NGL`/`LLAMA_CONTEXT` variables are still written for hand-made units.
+
+A first start of a large GGUF can take far longer than the default readiness wait; use `marlin start <model> --timeout 3h` or follow `marlin logs -f`. `gpu_memory_utilization` and `tool_call_parser` don't apply to llama.cpp (tool calls come from the chat template via `--jinja`).
 
 ### Config inheritance
 

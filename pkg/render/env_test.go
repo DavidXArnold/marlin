@@ -195,10 +195,42 @@ func TestLlamaCppEnvBasic(t *testing.T) {
 		},
 	}
 
-	out := LlamaCppEnv(m)
+	out := LlamaCppEnv(m, "", "")
 	assert.Contains(t, out, "LLAMA_MODEL=/models/llama-3.2-3b-q4_k_m.gguf")
 	assert.Contains(t, out, "LLAMA_NGL=99")
 	assert.Contains(t, out, "LLAMA_CONTEXT=4096")
+	assert.Contains(t, out, "LLAMA_MODEL_ARGS=-m /models/llama-3.2-3b-q4_k_m.gguf\n")
+	assert.Contains(t, out, "LLAMA_CONTAINER_ARGS=-v /models:/models:ro\n")
+	assert.Contains(t, out, "LLAMA_EXTRA_ARGS=-ngl 99 -c 4096\n")
+	assert.NotContains(t, out, "-hf")
+}
+
+func TestLlamaCppEnvHuggingFaceRef(t *testing.T) {
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{ID: "org/Model-GGUF:Q4_K_M", Type: config.ProviderLlamaCpp},
+		Serve: config.ServeConfig{
+			ServedModelName: []string{"local", "my-model"},
+			ContextSize:     16384,
+			ExtraFlags:      []string{"-fa", "on", "--jinja"},
+		},
+	}
+
+	out := LlamaCppEnv(m, "ghcr.io/example/llama.cpp:server", "hf_secret")
+	assert.Contains(t, out, "LLAMA_IMAGE=ghcr.io/example/llama.cpp:server\n")
+	assert.Contains(t, out, "HF_TOKEN=hf_secret\n")
+	assert.Contains(t, out, "LLAMA_MODEL_ARGS=-hf org/Model-GGUF:Q4_K_M\n")
+	assert.Contains(t, out, "LLAMA_EXTRA_ARGS=-ngl 999 --alias local,my-model -c 16384 -fa on --jinja\n")
+	assert.NotContains(t, out, "LLAMA_CONTAINER_ARGS")
+	assert.NotContains(t, out, "LLAMA_MODEL=")
+}
+
+func TestLlamaCppEnvOmitsImageAndTokenWhenEmpty(t *testing.T) {
+	m := &config.ModelConfig{Model: config.ModelMeta{ID: "org/Model-GGUF"}}
+
+	out := LlamaCppEnv(m, "", "")
+	assert.NotContains(t, out, "LLAMA_IMAGE")
+	assert.NotContains(t, out, "HF_TOKEN")
+	assert.Contains(t, out, "LLAMA_MODEL_ARGS=-hf org/Model-GGUF\n")
 }
 
 func TestLlamaCppEnvDefaultNGL(t *testing.T) {
@@ -206,8 +238,9 @@ func TestLlamaCppEnvDefaultNGL(t *testing.T) {
 		Serve: config.ServeConfig{GGUFPath: "/models/test.gguf"},
 	}
 
-	out := LlamaCppEnv(m)
-	assert.Contains(t, out, "LLAMA_NGL=99")
+	out := LlamaCppEnv(m, "", "")
+	assert.Contains(t, out, "LLAMA_NGL=999")
+	assert.Contains(t, out, "LLAMA_EXTRA_ARGS=-ngl 999\n")
 }
 
 func TestLlamaCppEnvOmitsContextWhenZero(t *testing.T) {
@@ -215,6 +248,6 @@ func TestLlamaCppEnvOmitsContextWhenZero(t *testing.T) {
 		Serve: config.ServeConfig{GGUFPath: "/models/test.gguf", NGL: 35},
 	}
 
-	out := LlamaCppEnv(m)
+	out := LlamaCppEnv(m, "", "")
 	assert.NotContains(t, out, "LLAMA_CONTEXT")
 }

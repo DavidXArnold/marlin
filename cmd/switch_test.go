@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -374,4 +375,69 @@ func TestGlobalConfigNoCandidates(t *testing.T) {
 	require.NoError(t, err)
 	// Either defaults (when no candidate exists) or a loaded config — both are valid.
 	assert.NotNil(t, cfg)
+}
+
+// TestStopConflictingServicesStopsLiveUnit: a running vLLM unit is stopped when
+// switching to llama.cpp even though state.toml knows nothing about it.
+func TestStopConflictingServicesStopsLiveUnit(t *testing.T) {
+	vllmMock := &mockProv{statusRunning: true}
+	built := map[config.ProviderType]int{}
+	old := buildProvider
+	buildProvider = func(pt config.ProviderType, _ *config.Config) (provider.Provider, error) {
+		built[pt]++
+		return vllmMock, nil
+	}
+	t.Cleanup(func() { buildProvider = old })
+
+	var buf bytes.Buffer
+	stopConflictingServices(context.Background(), &buf, config.Defaults(), config.ProviderLlamaCpp)
+
+	assert.True(t, vllmMock.stopCalled)
+	assert.Equal(t, 1, built[config.ProviderVLLM])
+	assert.Zero(t, built[config.ProviderLlamaCpp], "the target provider must not be checked")
+	assert.Contains(t, buf.String(), "stopped running vllm service")
+}
+
+// TestStopConflictingServicesLeavesStoppedUnit: an inactive unit is left alone.
+func TestStopConflictingServicesLeavesStoppedUnit(t *testing.T) {
+	m := &mockProv{}
+	injectProvider(t, m)
+
+	var buf bytes.Buffer
+	stopConflictingServices(context.Background(), &buf, config.Defaults(), config.ProviderVLLM)
+
+	assert.False(t, m.stopCalled)
+	assert.Empty(t, buf.String())
+}
+
+// TestStopConflictingServicesStopError: a failed stop is reported as a warning.
+func TestStopConflictingServicesStopError(t *testing.T) {
+	injectProvider(t, &mockProv{statusRunning: true, stopErr: fmt.Errorf("boom")})
+
+	var buf bytes.Buffer
+	stopConflictingServices(context.Background(), &buf, config.Defaults(), config.ProviderVLLM)
+
+	assert.Contains(t, buf.String(), "warning: stopping llamacpp service: boom")
+}
+
+// TestStopConflictingServicesBuildError: providers that can't be built are skipped.
+func TestStopConflictingServicesBuildError(t *testing.T) {
+	old := buildProvider
+	buildProvider = func(config.ProviderType, *config.Config) (provider.Provider, error) {
+		return nil, fmt.Errorf("no secrets")
+	}
+	t.Cleanup(func() { buildProvider = old })
+
+	var buf bytes.Buffer
+	stopConflictingServices(context.Background(), &buf, config.Defaults(), config.ProviderVLLM)
+	assert.Empty(t, buf.String())
+}
+
+// TestPreflightForProviderLlamaCppNoUnitFile: a missing llama.cpp unit points at install --provider.
+func TestPreflightForProviderLlamaCppNoUnitFile(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Service.LlamaCppUnit = "marlin-llamacpp-test-nonexistent"
+	err := preflightForProvider(config.ProviderLlamaCpp, cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "marlin install --provider llamacpp")
 }

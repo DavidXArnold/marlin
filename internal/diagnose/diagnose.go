@@ -57,7 +57,17 @@ var signatures = []signature{
 	{contains("ZeroDivisionError", "speculative"),
 		"speculative decoding config is incompatible with this checkpoint/vLLM build — remove --speculative-config"},
 	{contains("is already in use by container"),
-		"a stale container holds the name — run 'docker rm -f marlin-vllm'"},
+		"a stale container holds the name — remove it with 'docker rm -f <name>' (marlin-vllm / marlin-llamacpp)"},
+
+	// llama.cpp (llama-server)
+	{contains("unknown model architecture: '"),
+		"this llama.cpp build doesn't know the model's architecture — set [model] image (or service.llamacpp_image) to a newer llama.cpp image"},
+	{containsAny("cudaMalloc failed: out of memory", "failed to allocate buffer for kv cache", "unable to allocate CUDA"),
+		"model doesn't fit in GPU memory — use a smaller quant in model.id, lower serve.context_size, or lower serve.ngl to keep some layers on the CPU"},
+	{containsAny("failed to download model from HuggingFace", "download failed:"),
+		"the Hugging Face download failed — check model.id is '<org>/<repo>:<quant>' with an existing quant, and that HF_TOKEN can access the repo"},
+	{contains("couldn't bind HTTP server socket"),
+		"server.port is already in use — stop the other inference server (another marlin service or a hand-run container) first"},
 }
 
 // Lines that carry no diagnostic value on their own.
@@ -71,7 +81,7 @@ var prefixes = []*regexp.Regexp{
 	regexp.MustCompile(`^(ERROR|WARNING|INFO) [\d-]+ [\d:]+ \[[^\]]+\] `),
 }
 
-var errorLine = regexp.MustCompile(`([A-Za-z]+(Error|Exception)\b|Error response from daemon|error:|out of memory)`)
+var errorLine = regexp.MustCompile(`([A-Za-z]+(Error|Exception)\b|Error response from daemon|error:|out of memory|error loading model|failed to allocate|download failed|couldn't bind)`)
 
 func clean(line string) string {
 	for _, p := range prefixes {
