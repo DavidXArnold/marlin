@@ -56,11 +56,11 @@ max_model_len = 32768
 	m, err := ResolveModel("qwen3-32b", dir)
 	require.NoError(t, err)
 	assert.Equal(t, "nvidia/Qwen3-32B-NVFP4", m.Model.ID)
-	assert.Equal(t, "nvfp4", m.Serve.Quantization)       // inherited
+	assert.Equal(t, "nvfp4", m.Serve.Quantization)               // inherited
 	assert.InDelta(t, 0.90, m.Serve.GPUMemoryUtilization, 0.001) // inherited
-	assert.Equal(t, "hermes", m.Serve.ToolCallParser)    // inherited
-	assert.Equal(t, 32768, m.Serve.MaxModelLen)           // child wins
-	assert.Equal(t, ProviderVLLM, m.Model.Type)           // inherited
+	assert.Equal(t, "hermes", m.Serve.ToolCallParser)            // inherited
+	assert.Equal(t, 32768, m.Serve.MaxModelLen)                  // child wins
+	assert.Equal(t, ProviderVLLM, m.Model.Type)                  // inherited
 }
 
 func TestResolveModelChildWins(t *testing.T) {
@@ -116,9 +116,9 @@ max_model_len = 4096
 	m, err := ResolveModel("leaf", dir)
 	require.NoError(t, err)
 	assert.Equal(t, "some/leaf", m.Model.ID)
-	assert.Equal(t, "awq_marlin", m.Serve.Quantization) // mid wins over root
+	assert.Equal(t, "awq_marlin", m.Serve.Quantization)          // mid wins over root
 	assert.InDelta(t, 0.80, m.Serve.GPUMemoryUtilization, 0.001) // from root
-	assert.Equal(t, 4096, m.Serve.MaxModelLen)          // from leaf
+	assert.Equal(t, 4096, m.Serve.MaxModelLen)                   // from leaf
 }
 
 func TestResolveModelCircularError(t *testing.T) {

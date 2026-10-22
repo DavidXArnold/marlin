@@ -74,7 +74,7 @@ func resolveLogsTarget(
 	}
 
 	// No query: build candidate list.
-	var candidates []logsTarget
+	candidates := make([]logsTarget, 0, len(running))
 	for _, a := range running {
 		desc := a.Status
 		if a.Port != "" {

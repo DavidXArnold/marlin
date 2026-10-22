@@ -147,11 +147,11 @@ type StreamChunk struct {
 // so callers can compute prefill throughput (prompt tokens / TTFT).
 func (c *Client) ChatStream(ctx context.Context, model, prompt string, maxTokens int, fn func(StreamChunk) error) error {
 	body, err := json.Marshal(map[string]any{
-		"model":           model,
-		"stream":          true,
-		"max_tokens":      maxTokens,
-		"messages":        []map[string]string{{"role": "user", "content": prompt}},
-		"stream_options":  map[string]bool{"include_usage": true},
+		"model":          model,
+		"stream":         true,
+		"max_tokens":     maxTokens,
+		"messages":       []map[string]string{{"role": "user", "content": prompt}},
+		"stream_options": map[string]bool{"include_usage": true},
 	})
 	if err != nil {
 		return fmt.Errorf("encoding request: %w", err)

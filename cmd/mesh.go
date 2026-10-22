@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -165,7 +166,7 @@ func runMeshStatus(cmd *cobra.Command, _ []string) error {
 	for _, p := range info.Peers {
 		models := ""
 		if len(p.Models) > 0 {
-			models = "  [" + joinStrings(p.Models, ", ") + "]"
+			models = "  [" + strings.Join(p.Models, ", ") + "]"
 		}
 		if err := out.printf("  %-14s %s%s\n", shortID(p.ID), p.Addr, models); err != nil {
 			return err
@@ -217,7 +218,7 @@ func runMeshPeers(cmd *cobra.Command, _ []string) error {
 	for _, p := range info.Peers {
 		models := "(no models)"
 		if len(p.Models) > 0 {
-			models = joinStrings(p.Models, ", ")
+			models = strings.Join(p.Models, ", ")
 		}
 		if err := out.printf("%-20s  %-20s  %s\n", shortID(p.ID), p.Addr, models); err != nil {
 			return err
@@ -287,16 +288,4 @@ func runMeshPushConfig(cmd *cobra.Command, args []string) error {
 // meshExecFunc is injectable for tests.
 var meshExecFunc = func(ctx context.Context, bin string, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, bin, args...).Output()
-}
-
-// joinStrings joins ss with sep (avoids importing strings just for this).
-func joinStrings(ss []string, sep string) string {
-	out := ""
-	for i, s := range ss {
-		if i > 0 {
-			out += sep
-		}
-		out += s
-	}
-	return out
 }

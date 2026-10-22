@@ -35,14 +35,14 @@ func TestLastNLines(t *testing.T) {
 // fakeNIMProvider is a minimal provider.Provider that returns a fixed Status and
 // streams a canned log line.
 type fakeNIMProvider struct {
-	status       *provider.Status
-	statusErr    error
-	logLine      string
-	logsErr      error
+	status    *provider.Status
+	statusErr error
+	logLine   string
+	logsErr   error
 }
 
-func (f *fakeNIMProvider) Switch(_ context.Context, _ string) error             { return nil }
-func (f *fakeNIMProvider) Stop(_ context.Context) error                         { return nil }
+func (f *fakeNIMProvider) Switch(_ context.Context, _ string) error { return nil }
+func (f *fakeNIMProvider) Stop(_ context.Context) error             { return nil }
 func (f *fakeNIMProvider) Status(_ context.Context) (*provider.Status, error) {
 	return f.status, f.statusErr
 }

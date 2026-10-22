@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"strings"
 
-
 	"github.com/DavidXArnold/marlin/internal/config"
 	"github.com/DavidXArnold/marlin/internal/privilege"
 )
@@ -23,7 +22,7 @@ import (
 type ContainerdNIMProvider struct {
 	cfg          *config.Config
 	ngcKey       string
-	w            io.Writer                    // for privilege prompts; defaults to os.Stderr
+	w            io.Writer                     // for privilege prompts; defaults to os.Stderr
 	prepareCache func(io.Writer, string) error // injectable for tests
 	refreshPerms func(string) error            // injectable for tests
 	// cmdOutput runs a nerdctl sub-command and returns its combined output.
@@ -34,7 +33,7 @@ type ContainerdNIMProvider struct {
 	loginFunc     func(ctx context.Context, registry, key string) error
 	loadModel     func(slug string) (*config.ModelConfig, error)
 	getDigestFunc func(context.Context, string) (string, error)
-	pullImageFunc  func(context.Context, string) error
+	pullImageFunc func(context.Context, string) error
 }
 
 func NewContainerdNIMProvider(cfg *config.Config, ngcKey string) (*ContainerdNIMProvider, error) {

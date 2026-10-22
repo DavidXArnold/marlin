@@ -6,8 +6,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
-	"github.com/DavidXArnold/marlin/internal/sysinfo"
 	"github.com/DavidXArnold/marlin/internal/state"
+	"github.com/DavidXArnold/marlin/internal/sysinfo"
 	"github.com/DavidXArnold/marlin/internal/top"
 )
 

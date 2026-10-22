@@ -313,4 +313,3 @@ func ContainerBinary() (string, error) {
 	}
 	return "", fmt.Errorf("no container runtime found — install docker or nerdctl")
 }
-

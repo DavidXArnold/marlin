@@ -342,7 +342,10 @@ func TestNIMPullImageError(t *testing.T) {
 }
 
 func TestExtractDigest(t *testing.T) {
-	cases := []struct{ input []string; want string }{
+	cases := []struct {
+		input []string
+		want  string
+	}{
 		{[]string{"nvcr.io/nim/meta/llama@sha256:abc"}, "sha256:abc"},
 		{[]string{"sha256:abc"}, "sha256:abc"},
 		{nil, ""},

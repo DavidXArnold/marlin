@@ -150,8 +150,8 @@ func TestNerdctlClientContainerCreate(t *testing.T) {
 	c := newTestNerdctlClient(t, `echo "deadbeef1234"`)
 	resp, err := c.ContainerCreate(context.Background(),
 		&container.Config{
-			Image: "nvcr.io/nim/meta/llama:latest",
-			Env:   []string{"NGC_API_KEY=test"},
+			Image:  "nvcr.io/nim/meta/llama:latest",
+			Env:    []string{"NGC_API_KEY=test"},
 			Labels: map[string]string{"marlin.managed": "true"},
 		},
 		&container.HostConfig{

@@ -28,9 +28,7 @@ Use --enable to also configure the service to start automatically at boot.`,
 }
 
 // installSystemdManagerFunc is injectable for tests.
-var installSystemdManagerFunc = func(unit string) *service.SystemdManager {
-	return service.NewSystemdManager(unit)
-}
+var installSystemdManagerFunc = service.NewSystemdManager
 
 // installUnitPathFunc is injectable for tests.
 var installUnitPathFunc = render.SystemdUnitPath

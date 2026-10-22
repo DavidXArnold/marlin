@@ -373,7 +373,10 @@ func TestStartLogsPromptYesStreamsLogs(t *testing.T) {
 	oldLogs := p.Logs // can't override method, use a custom provider
 	_ = oldLogs
 	// Use a provider that records Logs being called.
-	type loggingProv struct{ *mockProv; called *bool }
+	type loggingProv struct {
+		*mockProv
+		called *bool
+	}
 	lp := &loggingProv{mockProv: p, called: &logsCalled}
 	// Can't override embedded method, so inject a fresh mockProv and intercept via
 	// a test-only injectable. Instead just verify logs output appears.

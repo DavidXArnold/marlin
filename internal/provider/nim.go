@@ -78,11 +78,11 @@ type NIMProvider struct {
 	ngcKey        string
 	docker        dockerClient
 	loadModel     func(slug string) (*config.ModelConfig, error)
-	w             io.Writer                    // for privilege prompts; defaults to os.Stderr
+	w             io.Writer                     // for privilege prompts; defaults to os.Stderr
 	prepareCache  func(io.Writer, string) error // injectable for tests
 	refreshPerms  func(string) error            // injectable for tests
 	getDigestFunc func(context.Context, string) (string, error)
-	pullImageFunc  func(context.Context, string) error
+	pullImageFunc func(context.Context, string) error
 }
 
 func NewNIMProvider(cfg *config.Config, ngcKey string) (*NIMProvider, error) {

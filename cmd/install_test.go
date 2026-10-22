@@ -148,7 +148,7 @@ func TestRunInstallContainerMode(t *testing.T) {
 	data, err := os.ReadFile(unitPath)
 	require.NoError(t, err)
 	content := string(data)
-	assert.Contains(t, content, "run")              // docker/podman/nerdctl run
+	assert.Contains(t, content, "run")               // docker/podman/nerdctl run
 	assert.Contains(t, content, "--entrypoint vllm") // prevents double-invocation from image ENTRYPOINT
 	assert.Contains(t, content, "VLLM_IMAGE")        // image sourced from env file
 }

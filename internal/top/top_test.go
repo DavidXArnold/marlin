@@ -18,7 +18,7 @@ func TestBar(t *testing.T) {
 	assert.Equal(t, "[████████████████████]", bar(1.0, 20))
 	assert.Equal(t, "[░░░░░░░░░░░░░░░░░░░░]", bar(0.0, 20))
 	assert.Equal(t, "[██████████░░░░░░░░░░]", bar(0.5, 20))
-	assert.Equal(t, "[████████████████████]", bar(1.5, 20)) // clamped
+	assert.Equal(t, "[████████████████████]", bar(1.5, 20))  // clamped
 	assert.Equal(t, "[░░░░░░░░░░░░░░░░░░░░]", bar(-0.5, 20)) // clamped
 }
 

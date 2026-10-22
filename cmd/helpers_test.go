@@ -28,7 +28,7 @@ func TestGlobalConfigMissingFile(t *testing.T) {
 	defer func() { cfgFile = old }()
 
 	cfg, err := globalConfig()
-	require.NoError(t, err) // missing file → returns defaults
+	require.NoError(t, err)                                  // missing file → returns defaults
 	assert.Contains(t, cfg.Paths.ModelsDir, "marlin/models") // varies by $HOME
 }
 
