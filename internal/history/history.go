@@ -14,7 +14,7 @@ import (
 // HistoryEvent is one record written to the JSONL history file.
 type HistoryEvent struct {
 	Timestamp   time.Time `json:"timestamp"`
-	Event       string    `json:"event"`                  // "switch_start", "switch_ready", "stop", "crash"
+	Event       string    `json:"event"` // "switch_start", "switch_ready", "stop", "crash"
 	Slug        string    `json:"slug,omitempty"`
 	Provider    string    `json:"provider,omitempty"`
 	FromSlug    string    `json:"from_slug,omitempty"`

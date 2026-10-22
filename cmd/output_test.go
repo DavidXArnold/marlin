@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/DavidXArnold/marlin/internal/provider"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/DavidXArnold/marlin/internal/history"
@@ -58,7 +58,7 @@ func TestListPlain(t *testing.T) {
 	require.NoError(t, runList(cmdWithContext(&buf), nil))
 	out := buf.String()
 	assert.Contains(t, out, "qwen25-72b")
-	assert.Contains(t, out, "\t") // tab-separated
+	assert.Contains(t, out, "\t")      // tab-separated
 	assert.NotContains(t, out, "SLUG") // no header
 }
 

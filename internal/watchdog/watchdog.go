@@ -17,7 +17,7 @@ type Config struct {
 
 // nowFunc and afterFunc are injectable for tests.
 var nowFunc = time.Now
-var afterFunc = func(d time.Duration) <-chan time.Time { return time.After(d) }
+var afterFunc = time.After
 
 // SetAfterFuncForTest replaces the timer function and returns a restore func.
 func SetAfterFuncForTest(fn func(time.Duration) <-chan time.Time) func() {

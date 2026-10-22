@@ -12,8 +12,20 @@ linters:
   - misspell
   - noctx
   - bodyclose
+  - unconvert
+  - gocritic
+  settings:
+    gocritic:
+      disabled-checks:
+      # Bubble Tea's `switch msg := msg.(type)` in Update() and provider-type
+      # dispatch are idiomatic as switches even with one case today.
+      - singleCaseSwitch
   exclusions:
     rules:
     - path: _test\.go
       linters:
       - errcheck
+
+formatters:
+  enable:
+  - gofmt

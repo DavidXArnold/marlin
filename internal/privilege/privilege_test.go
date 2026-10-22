@@ -285,7 +285,10 @@ func TestPromptAndWriteFileUserConfirms(t *testing.T) {
 	var written []byte
 	sudoTeeRun = func(_ string, data []byte) error { written = data; return nil }
 	defer func() {
-		getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo; sudoTeeRun = oldTee
+		getuid = oldGetuid
+		stdinR = oldStdin
+		sudoRun = oldSudo
+		sudoTeeRun = oldTee
 	}()
 
 	dir := nonWritableDir(t)
@@ -325,7 +328,10 @@ func TestPromptAndWriteFileSudoFails(t *testing.T) {
 	sudoRun = func(_ []string) error { return nil }
 	sudoTeeRun = func(_ string, _ []byte) error { return fmt.Errorf("tee denied") }
 	defer func() {
-		getuid = oldGetuid; stdinR = oldStdin; sudoRun = oldSudo; sudoTeeRun = oldTee
+		getuid = oldGetuid
+		stdinR = oldStdin
+		sudoRun = oldSudo
+		sudoTeeRun = oldTee
 	}()
 
 	dir := nonWritableDir(t)

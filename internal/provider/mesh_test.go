@@ -19,11 +19,11 @@ var _ = service.NewSystemdManager
 
 // stubMeshClient implements meshClient for testing.
 type stubMeshClient struct {
-	loadErr    error
-	unloadErr  error
-	runtimeInfo *mesh.RuntimeInfo
-	runtimeErr  error
-	loadCalled  []string
+	loadErr      error
+	unloadErr    error
+	runtimeInfo  *mesh.RuntimeInfo
+	runtimeErr   error
+	loadCalled   []string
 	unloadCalled []string
 }
 

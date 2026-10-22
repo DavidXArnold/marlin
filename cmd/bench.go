@@ -81,7 +81,7 @@ func defaultRunBench(cmd *cobra.Command, _ []string) error {
 	w := cmd.OutOrStdout()
 	_, _ = fmt.Fprintf(w, "benchmarking %s (%d run(s))…\n\n", model, runs)
 
-	var results []*bench.Result
+	results := make([]*bench.Result, 0, runs)
 	for i := range runs {
 		_, _ = fmt.Fprintf(w, "run %d/%d… ", i+1, runs)
 		r, runErr := bench.Run(cmd.Context(), stream, model, prompt, maxTokens)

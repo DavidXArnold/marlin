@@ -26,13 +26,15 @@ type mockNIMProv struct {
 	switchErr error
 }
 
-func (m *mockNIMProv) PullImage(_ context.Context, _ string) error       { return m.pullErr }
+func (m *mockNIMProv) PullImage(_ context.Context, _ string) error { return m.pullErr }
 func (m *mockNIMProv) GetDigest(_ context.Context, _ string) (string, error) {
 	return m.digest, m.digestErr
 }
-func (m *mockNIMProv) Switch(_ context.Context, _ string) error              { return m.switchErr }
-func (m *mockNIMProv) Stop(_ context.Context) error                           { return nil }
-func (m *mockNIMProv) Status(_ context.Context) (*provider.Status, error)    { return &provider.Status{}, nil }
+func (m *mockNIMProv) Switch(_ context.Context, _ string) error { return m.switchErr }
+func (m *mockNIMProv) Stop(_ context.Context) error             { return nil }
+func (m *mockNIMProv) Status(_ context.Context) (*provider.Status, error) {
+	return &provider.Status{}, nil
+}
 func (m *mockNIMProv) Logs(_ context.Context, _ io.Writer, _ bool, _ int) error { return nil }
 
 // updateEnv sets up a temp dir with a config pointing at it, a NIM model file,

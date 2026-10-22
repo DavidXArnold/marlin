@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,14 +15,10 @@ import (
 
 var (
 	upgradeConfirmFunc  = ui.Confirm
-	upgradeDownloadFunc = func(ctx context.Context, url, dest string) error {
-		return update.Download(ctx, url, dest)
-	}
-	upgradeExtractFunc = func(archive, bin, dest string) error {
-		return update.ExtractBinary(archive, bin, dest)
-	}
-	upgradeInstallFunc = privilege.PromptAndInstallBinary
-	upgradeExeFunc     = os.Executable
+	upgradeDownloadFunc = update.Download
+	upgradeExtractFunc  = update.ExtractBinary
+	upgradeInstallFunc  = privilege.PromptAndInstallBinary
+	upgradeExeFunc      = os.Executable
 )
 
 var upgradeCmd = &cobra.Command{

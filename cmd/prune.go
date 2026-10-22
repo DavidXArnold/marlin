@@ -122,7 +122,7 @@ func scanHFCache(dir string) ([]pruneEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []pruneEntry
+	out := make([]pruneEntry, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -145,7 +145,7 @@ func scanNIMCache(dir string) ([]pruneEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []pruneEntry
+	out := make([]pruneEntry, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -170,4 +170,3 @@ func dirSizeGB(path string) float64 {
 	})
 	return float64(total) / (1 << 30)
 }
-

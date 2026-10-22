@@ -105,9 +105,9 @@ func TestDetectGPUsMalformedLine(t *testing.T) {
 
 func TestIsUMAGPU(t *testing.T) {
 	cases := []struct {
-		name  string
-		vram  uint64
-		want  bool
+		name string
+		vram uint64
+		want bool
 	}{
 		{"NVIDIA A100-SXM4-80GB", 81920, false},
 		{"NVIDIA H100 80GB HBM3", 81920, false},
@@ -117,7 +117,7 @@ func TestIsUMAGPU(t *testing.T) {
 		{"NVIDIA GH200 96GB", 98304, true},
 		{"NVIDIA GB200", 0, true},
 		{"NVIDIA GB300", 0, true},
-		{"SomeGPU", 0, true},           // zero VRAM without name → still UMA
+		{"SomeGPU", 0, true}, // zero VRAM without name → still UMA
 	}
 	for _, c := range cases {
 		assert.Equal(t, c.want, isUMAGPU(c.name, c.vram), "name=%q vram=%d", c.name, c.vram)

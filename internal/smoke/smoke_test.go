@@ -33,7 +33,7 @@ func TestRunAllPass(t *testing.T) {
 		if strings.Contains(string(body), `"stream":true`) {
 			return mockResponse(200, streamResp), nil
 		}
-		if strings.Contains(string(path), "chat") {
+		if strings.Contains(path, "chat") {
 			return mockResponse(200, completionResp), nil
 		}
 		return mockResponse(200, completionResp), nil

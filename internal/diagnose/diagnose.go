@@ -93,7 +93,7 @@ func Analyze(logs string) Result {
 	}
 
 	lines := strings.Split(logs, "\n")
-	var candidates []string
+	candidates := make([]string, 0, len(lines))
 	for _, raw := range lines {
 		l := clean(raw)
 		if l == "" || noise.MatchString(l) || !errorLine.MatchString(l) {

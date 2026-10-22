@@ -16,11 +16,11 @@ type Quant struct {
 
 // KnownQuants lists supported quantizations in quality order (best first).
 var KnownQuants = []Quant{
-	{Name: "fp16",       BytesPerParam: 2.0,   Label: "fp16 (full precision)"},
-	{Name: "fp8",        BytesPerParam: 1.0,   Label: "fp8 (8-bit float)"},
-	{Name: "nvfp4",      BytesPerParam: 0.5,   Label: "nvfp4 (NVIDIA Blackwell)"},
-	{Name: "awq_marlin", BytesPerParam: 0.5,   Label: "AWQ (4-bit)"},
-	{Name: "gptq",       BytesPerParam: 0.5,   Label: "GPTQ (4-bit)"},
+	{Name: "fp16", BytesPerParam: 2.0, Label: "fp16 (full precision)"},
+	{Name: "fp8", BytesPerParam: 1.0, Label: "fp8 (8-bit float)"},
+	{Name: "nvfp4", BytesPerParam: 0.5, Label: "nvfp4 (NVIDIA Blackwell)"},
+	{Name: "awq_marlin", BytesPerParam: 0.5, Label: "AWQ (4-bit)"},
+	{Name: "gptq", BytesPerParam: 0.5, Label: "GPTQ (4-bit)"},
 }
 
 // Recommendation holds a single quant's VRAM estimate and fit status.

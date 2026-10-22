@@ -16,7 +16,6 @@ import (
 // Set by the application entry point (cmd package).
 var BundledModels fs.FS
 
-
 type ModelStatus string
 type ProviderType string
 
@@ -152,8 +151,8 @@ func ListModels(dir string) ([]*ModelConfig, []string, error) {
 		return nil, nil, fmt.Errorf("reading models dir %s: %w", dir, err)
 	}
 
-	var models []*ModelConfig
-	var names []string
+	models := make([]*ModelConfig, 0, len(entries))
+	names := make([]string, 0, len(entries))
 
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".toml") {

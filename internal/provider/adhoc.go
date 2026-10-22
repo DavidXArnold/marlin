@@ -43,7 +43,7 @@ type AdhocRunner struct {
 	cfg          *config.Config
 	docker       dockerClient
 	loadModel    func(slug string) (*config.ModelConfig, error)
-	w            io.Writer                    // for privilege prompts; defaults to os.Stderr
+	w            io.Writer                     // for privilege prompts; defaults to os.Stderr
 	prepareCache func(io.Writer, string) error // injectable for tests
 	refreshPerms func(string) error            // injectable for tests
 }

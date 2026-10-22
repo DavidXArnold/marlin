@@ -53,12 +53,12 @@ type GPUInfo struct {
 	IsUMA       bool   // true for unified-memory architectures (GB10, GH200, GB200, GB300)
 
 	// Telemetry fields — populated by SampleTelemetry, zeroed by Detect.
-	PowerDrawW      float64 // current power draw in watts
-	PowerLimitW     float64 // power limit in watts
-	TempC           float64 // GPU junction temp in Celsius
-	MemTempC        float64 // memory temp in Celsius (0 if unavailable)
-	GraphicsClockMHz int    // current graphics clock in MHz
-	MemClockMHz      int    // current memory clock in MHz
+	PowerDrawW       float64 // current power draw in watts
+	PowerLimitW      float64 // power limit in watts
+	TempC            float64 // GPU junction temp in Celsius
+	MemTempC         float64 // memory temp in Celsius (0 if unavailable)
+	GraphicsClockMHz int     // current graphics clock in MHz
+	MemClockMHz      int     // current memory clock in MHz
 }
 
 // umaGPUNames lists GPU model strings that use unified CPU+GPU memory.
@@ -126,8 +126,9 @@ func detectGPUs() []GPUInfo {
 	if err != nil {
 		return nil
 	}
-	var gpus []GPUInfo
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	gpus := make([]GPUInfo, 0, len(lines))
+	for _, line := range lines {
 		if line == "" {
 			continue
 		}

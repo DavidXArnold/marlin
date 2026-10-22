@@ -137,7 +137,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		name    string
 		results []registry.ModelInfo
 	}
-	var perRegistry []registryResults
+	perRegistry := make([]registryResults, 0, len(registries))
 
 	for _, r := range registries {
 		results, err := r.Search(cmd.Context(), query)
@@ -348,4 +348,3 @@ func formatVRAM(mb uint64) string {
 	}
 	return sysinfo.FormatMB(mb)
 }
-

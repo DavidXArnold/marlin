@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -16,10 +15,8 @@ import (
 // injectable for tests
 var (
 	rmConfirmFunc   = ui.Confirm
-	rmMultiPickFunc = func(names []string, cfgs []*config.ModelConfig, active string, history map[string]time.Time) ([]string, error) {
-		return ui.MultiPickModel(names, cfgs, active, history)
-	}
-	isBundledFunc = config.IsBundled
+	rmMultiPickFunc = ui.MultiPickModel
+	isBundledFunc   = config.IsBundled
 )
 
 var rmCmd = &cobra.Command{

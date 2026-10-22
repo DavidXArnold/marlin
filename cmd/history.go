@@ -60,7 +60,7 @@ func runHistory(cmd *cobra.Command, _ []string) error {
 		sinceTime = time.Now().Add(-d)
 	}
 
-	var filtered []history.HistoryEvent
+	filtered := make([]history.HistoryEvent, 0, len(events))
 	for _, ev := range events {
 		if slugFilter != "" && ev.Slug != slugFilter {
 			continue

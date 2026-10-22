@@ -13,8 +13,8 @@ import (
 
 // injectable for tests
 var (
-	getuid  = os.Getuid
-	osExit  = os.Exit
+	getuid            = os.Getuid
+	osExit            = os.Exit
 	stdinR  io.Reader = os.Stdin
 	sudoRun           = func(args []string) error {
 		cmd := exec.Command("sudo", args...)

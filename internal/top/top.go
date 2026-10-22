@@ -27,11 +27,11 @@ type StatusLine struct {
 
 // Model is the bubbletea model for marlin top.
 type Model struct {
-	sample  SampleFn
-	info    *sysinfo.SystemInfo
-	status  StatusLine
-	err     error
-	width   int
+	sample   SampleFn
+	info     *sysinfo.SystemInfo
+	status   StatusLine
+	err      error
+	width    int
 	quitting bool
 }
 

@@ -59,7 +59,8 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			liveStatus, _ = p.Status(cmd.Context())
 		}
 
-		if liveStatus != nil && liveStatus.ContainerState != "" {
+		switch {
+		case liveStatus != nil && liveStatus.ContainerState != "":
 			// Container provider (NIM): show container ID and state.
 			id := shortID(liveStatus.ContainerID)
 			var containerLine string
@@ -71,7 +72,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			if err := out.printf("container    : %s\n", containerLine); err != nil {
 				return err
 			}
-		} else if liveStatus != nil {
+		case liveStatus != nil:
 			// Service provider (vLLM/llama.cpp): show the systemd substate so
 			// transitions (starting/stopping) are visible, not just active/inactive.
 			svcState := liveStatus.State
@@ -87,7 +88,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 			if err := out.printf("service      : %s\n", svcState); err != nil {
 				return err
 			}
-		} else if cur.ContainerID != "" {
+		case cur.ContainerID != "":
 			// Fallback: cached container ID from state.
 			if err := out.printf("container    : %s\n", shortID(cur.ContainerID)); err != nil {
 				return err

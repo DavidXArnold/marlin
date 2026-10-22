@@ -21,9 +21,10 @@ type logsAdhocRunner struct {
 	logsErr    error
 }
 
-func (r *logsAdhocRunner) Start(_ context.Context, _ string) (string, error)   { return "", nil }
+func (r *logsAdhocRunner) Start(_ context.Context, _ string) (string, error) { return "", nil }
 func (r *logsAdhocRunner) RunForeground(ctx context.Context, _ string, _ io.Writer) error {
-	<-ctx.Done(); return nil
+	<-ctx.Done()
+	return nil
 }
 func (r *logsAdhocRunner) LogsFor(_ context.Context, _ string, _ io.Writer, _ bool, _ int) error {
 	return r.logsErr
@@ -31,8 +32,8 @@ func (r *logsAdhocRunner) LogsFor(_ context.Context, _ string, _ io.Writer, _ bo
 func (r *logsAdhocRunner) List(_ context.Context) ([]provider.AdhocInfo, error) {
 	return r.containers, nil
 }
-func (r *logsAdhocRunner) Stop(_ context.Context, _ string) error               { return nil }
-func (r *logsAdhocRunner) StopAll(_ context.Context) error                      { return nil }
+func (r *logsAdhocRunner) Stop(_ context.Context, _ string) error { return nil }
+func (r *logsAdhocRunner) StopAll(_ context.Context) error        { return nil }
 func (r *logsAdhocRunner) DetectUnmanaged(_ context.Context) ([]provider.UnmanagedContainer, error) {
 	return nil, nil
 }
