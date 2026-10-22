@@ -200,3 +200,21 @@ func TestLoadSkipsMalformedLines(t *testing.T) {
 	assert.Equal(t, "stop", events[0].Event)
 	assert.Equal(t, "crash", events[1].Event)
 }
+
+func TestAppendToUnwritableFileInWritableDir(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses file permissions")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "history.jsonl")
+	require.NoError(t, Append(path, HistoryEvent{Event: "stop", Slug: "a"}))
+	require.NoError(t, os.Chmod(path, 0o444))
+
+	require.NoError(t, Append(path, HistoryEvent{Event: "switch_start", Slug: "b"}))
+
+	evs, err := Load(path, 10)
+	require.NoError(t, err)
+	require.Len(t, evs, 2)
+	assert.Equal(t, "a", evs[0].Slug)
+	assert.Equal(t, "b", evs[1].Slug)
+}

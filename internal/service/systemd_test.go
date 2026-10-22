@@ -225,3 +225,26 @@ func TestDaemonReloadFail(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "daemon-reload")
 }
+
+func TestRestarts(t *testing.T) {
+	runner := func(out string, err error) ExecRunner {
+		return func(_ context.Context, _ string, _ ...string) ([]byte, error) { return []byte(out), err }
+	}
+	m := &SystemdManager{unit: "marlin", execRunner: runner("12\n", nil)}
+	n, err := m.Restarts(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 12, n)
+
+	m.execRunner = runner("", nil)
+	n, err = m.Restarts(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+
+	m.execRunner = runner("abc", nil)
+	_, err = m.Restarts(context.Background())
+	assert.Error(t, err)
+
+	m.execRunner = runner("", fmt.Errorf("boom"))
+	_, err = m.Restarts(context.Background())
+	assert.Error(t, err)
+}

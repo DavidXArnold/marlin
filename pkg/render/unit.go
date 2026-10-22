@@ -59,6 +59,8 @@ func SystemdUnit(cfg *config.Config, vllmBin string) string {
 	return fmt.Sprintf(`[Unit]
 Description=Marlin vLLM inference service
 After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -109,11 +111,14 @@ func SystemdUnitContainerized(cfg *config.Config, containerBin string) string {
 	return fmt.Sprintf(`[Unit]
 Description=Marlin vLLM inference service (containerized)
 After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
 EnvironmentFile=-%s
 EnvironmentFile=%s
+ExecStartPre=-%s rm -f marlin-vllm
 ExecStart=/bin/bash -c 'exec %s run --rm --gpus all --ipc host --network host --name marlin-vllm --label marlin.managed=true --entrypoint vllm -e "HF_TOKEN=${HF_TOKEN:-}" "${VLLM_IMAGE}" serve "${VLLM_MODEL}" --host 0.0.0.0 --port %d ${VLLM_EXTRA_ARGS:-}'
 Restart=on-failure
 RestartSec=10
@@ -126,6 +131,7 @@ WantedBy=multi-user.target
 `,
 		cfg.Paths.SecretsEnv,
 		cfg.Paths.ActiveSymlink,
+		containerBin,
 		containerBin,
 		cfg.Server.Port,
 		cfg.Service.SystemdUnit,

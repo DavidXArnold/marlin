@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -81,6 +82,25 @@ func (s *SystemdManager) ActiveState(ctx context.Context) (string, error) {
 		return "inactive", nil
 	}
 	return "", fmt.Errorf("systemctl is-active %s: %w\n%s", s.unit, err, out)
+}
+
+// Restarts returns how many times systemd has automatically restarted the unit
+// since it was last started explicitly (NRestarts). A climbing count while
+// waiting for readiness means the service is crash-looping.
+func (s *SystemdManager) Restarts(ctx context.Context) (int, error) {
+	out, err := s.execRunner(ctx, "systemctl", "show", "-p", "NRestarts", "--value", s.unit)
+	if err != nil {
+		return 0, fmt.Errorf("systemctl show %s: %w", s.unit, err)
+	}
+	v := strings.TrimSpace(string(out))
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("parsing NRestarts %q: %w", v, err)
+	}
+	return n, nil
 }
 
 // FriendlyState maps a raw systemd ActiveState to a short, user-facing word.

@@ -187,3 +187,19 @@ func splitLines(s string) []string {
 	}
 	return lines
 }
+
+func TestSystemdUnitsLimitCrashLoops(t *testing.T) {
+	cfg := config.Defaults()
+	for name, unit := range map[string]string{
+		"binary":        SystemdUnit(cfg, "/usr/bin/vllm"),
+		"containerized": SystemdUnitContainerized(cfg, "/usr/bin/docker"),
+	} {
+		assert.Contains(t, unit, "StartLimitIntervalSec=300", name)
+		assert.Contains(t, unit, "StartLimitBurst=5", name)
+		// Start limits belong in [Unit]; in [Service] systemd ignores them.
+		assert.Less(t, strings.Index(unit, "StartLimitBurst"), strings.Index(unit, "[Service]"), name)
+	}
+	c := SystemdUnitContainerized(cfg, "/usr/bin/docker")
+	assert.Contains(t, c, "ExecStartPre=-/usr/bin/docker rm -f marlin-vllm")
+	assert.Less(t, strings.Index(c, "ExecStartPre"), strings.Index(c, "ExecStart="))
+}

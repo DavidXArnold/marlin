@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -386,4 +387,84 @@ func TestStartLogsPromptYesStreamsLogs(t *testing.T) {
 	out, err := executeCmd("start", "llama-8b")
 	require.NoError(t, err)
 	assert.Contains(t, out, "show logs?")
+}
+
+// crashLoopProv simulates a systemd-managed service crash-looping: the first
+// Status call (the baseline) reports restartsBefore, later calls report
+// restartsAfter / state. Logs returns canned journal output.
+type crashLoopProv struct {
+	mockProv
+	calls          atomic.Int32
+	restartsBefore int
+	restartsAfter  int
+	state          string
+	logs           string
+}
+
+func (c *crashLoopProv) Status(_ context.Context) (*provider.Status, error) {
+	if c.calls.Add(1) == 1 {
+		return &provider.Status{State: "starting", Restarts: c.restartsBefore}, nil
+	}
+	return &provider.Status{State: c.state, Restarts: c.restartsAfter}, nil
+}
+
+func (c *crashLoopProv) Logs(_ context.Context, w io.Writer, _ bool, _ int) error {
+	_, err := io.WriteString(w, c.logs)
+	return err
+}
+
+const oomJournal = `Oct 21 20:14:22 gn100-01 marlin[2756075]: (EngineCore pid=279) ERROR 10-22 02:14:22 [core.py:1436] torch.AcceleratorError: CUDA error: out of memory
+Oct 21 20:14:24 gn100-01 marlin[2756075]: (APIServer pid=1) RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}`
+
+func notReadyServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestWaitForReadyDetectsCrashLoop(t *testing.T) {
+	cfg := cfgWithServer(t, notReadyServer(t))
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().BoolP("logs", "l", false, "")
+
+	// Baseline 3 (a pre-existing count from earlier crashes must not trigger),
+	// then 4 → one new restart during the wait.
+	p := &crashLoopProv{restartsBefore: 3, restartsAfter: 4, state: "starting", logs: oomJournal}
+	start := time.Now()
+	ok := waitForReady(cmd, cfg, "qwen-next", p)
+
+	assert.False(t, ok)
+	assert.Less(t, time.Since(start), 10*time.Second, "should bail on the first tick, not wait for the timeout")
+	out := buf.String()
+	assert.Contains(t, out, "crashed and is restarting (1 restart(s))")
+	assert.Contains(t, out, "cause: torch.AcceleratorError: CUDA error: out of memory")
+	assert.Contains(t, out, "hint :")
+	assert.Contains(t, out, "marlin stop")
+}
+
+func TestWaitForReadyDetectsFailedState(t *testing.T) {
+	cfg := cfgWithServer(t, notReadyServer(t))
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().BoolP("logs", "l", false, "")
+
+	p := &crashLoopProv{state: "failed", logs: "KeyError: 'weird_param'"}
+	assert.False(t, waitForReady(cmd, cfg, "m", p))
+	assert.Contains(t, buf.String(), "service failed")
+	assert.Contains(t, buf.String(), "cause: KeyError: 'weird_param'")
+}
+
+func TestWaitForReadyCrashWithoutRecognisableLogs(t *testing.T) {
+	cfg := cfgWithServer(t, notReadyServer(t))
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().BoolP("logs", "l", false, "")
+
+	p := &crashLoopProv{restartsAfter: 1, state: "starting", logs: "INFO nothing useful"}
+	assert.False(t, waitForReady(cmd, cfg, "m", p))
+	assert.Contains(t, buf.String(), "run 'marlin logs' for details")
 }

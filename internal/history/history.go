@@ -38,19 +38,52 @@ func Append(path string, ev HistoryEvent) error {
 	if err := Rotate(path, rotateThreshold); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-
 	data, err := json.Marshal(ev)
 	if err != nil {
 		return err
 	}
 	data = append(data, '\n')
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if os.IsPermission(err) {
+		// The file is owned by another user (e.g. root, from an earlier
+		// `sudo marlin`) but the directory may still be writable to us.
+		return appendByReplace(path, data)
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
 	_, err = f.Write(data)
 	return err
+}
+
+// appendByReplace appends data by rewriting the whole file to a temp file in
+// the same directory and renaming it over path. Rename needs only directory
+// write permission, so this works when path is read-only to us. The history
+// file is capped at rotateThreshold, so the full rewrite stays cheap.
+func appendByReplace(path string, data []byte) error {
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if _, err := tmp.Write(append(existing, data...)); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 // Load reads the last limit lines from the JSONL file at path. If the file
