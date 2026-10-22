@@ -316,3 +316,28 @@ func TestBuildContainerConfigVLLMEntrypointAndCmd(t *testing.T) {
 
 	assert.Equal(t, container.IpcMode("host"), hc.IpcMode)
 }
+
+// Every ad-hoc query must require marlin.mode=adhoc, or the systemd unit's
+// marlin-vllm container (marlin.managed=true, no mode) leaks in: it showed up
+// in `status`/`logs` as a nameless ad-hoc container and StopAll would remove it.
+func TestAdhocQueriesExcludeServiceContainer(t *testing.T) {
+	d := &stubDocker{
+		listResult: []container.Summary{{ID: "abcdef1234567890", Labels: map[string]string{labelModel: "m"}}},
+		logsReader: io.NopCloser(strings.NewReader("")),
+	}
+	a, _ := testAdhocRunner(t, d)
+	ctx := context.Background()
+
+	_, _ = a.List(ctx)
+	_ = a.StopAll(ctx)
+	_ = a.Stop(ctx, "m")
+	_ = a.LogsFor(ctx, "m", io.Discard, false, 10)
+
+	require.Len(t, d.listOpts, 4)
+	for i, opts := range d.listOpts {
+		labels := opts.Filters.Get("label")
+		assert.Contains(t, labels, "marlin.managed=true", "call %d", i)
+		assert.Contains(t, labels, "marlin.mode=adhoc", "call %d", i)
+	}
+	assert.Contains(t, d.listOpts[2].Filters.Get("label"), "marlin.model=m")
+}
