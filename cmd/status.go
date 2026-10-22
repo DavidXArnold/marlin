@@ -81,6 +81,9 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 					svcState = "running"
 				}
 			}
+			if liveStatus.Restarts > 0 {
+				svcState += fmt.Sprintf("  (restarted %d× — likely crash-looping, see 'marlin logs')", liveStatus.Restarts)
+			}
 			if err := out.printf("service      : %s\n", svcState); err != nil {
 				return err
 			}

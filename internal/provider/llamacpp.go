@@ -85,6 +85,9 @@ func (l *LlamaCppProvider) Status(ctx context.Context) (*Status, error) {
 	active := raw == "active" || raw == "reloading"
 
 	s := &Status{Running: active, State: service.FriendlyState(raw)}
+	if n, err := l.svc.Restarts(ctx); err == nil {
+		s.Restarts = n
+	}
 
 	if active {
 		symlink := l.cfg.Paths.LlamaCppEnvFile

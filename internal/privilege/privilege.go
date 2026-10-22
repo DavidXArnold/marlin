@@ -99,7 +99,7 @@ func PromptAndWriteFile(w io.Writer, dir, path string, data []byte) (bool, error
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return false, err
 		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
+		if err := replaceFile(path, data, 0o644); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -333,4 +333,31 @@ func WarnAndRequireRoot(w io.Writer, targetPath string) {
 		return
 	}
 	osExit(0)
+}
+
+// replaceFile writes data to path via a temp file in the same directory and
+// an atomic rename. Rename only needs write permission on the directory, so
+// this succeeds even when path itself is owned by another user (e.g. a
+// root-owned state.toml left by an earlier `sudo marlin`, inside a
+// group-writable /var/lib/marlin) — where a direct os.WriteFile would fail
+// with "permission denied". It also never leaves a half-written file.
+func replaceFile(path string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }() // no-op after a successful rename
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }

@@ -9,6 +9,7 @@ import (
 type Status struct {
 	Running        bool
 	State          string // "running", "starting", "stopping", "stopped", "failed", "unknown" (systemd-backed providers)
+	Restarts       int    // automatic systemd restarts since the last explicit start (systemd-backed providers)
 	ModelID        string // model ID currently loaded, empty if not running
 	ContainerID    string // populated for NIM providers
 	ContainerState string // "running", "exited", "not found", etc. (NIM providers)

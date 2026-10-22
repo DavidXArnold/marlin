@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DavidXArnold/marlin/internal/config"
+	"github.com/DavidXArnold/marlin/internal/diagnose"
 	"github.com/DavidXArnold/marlin/internal/provider"
 	"github.com/DavidXArnold/marlin/internal/service"
 	"github.com/DavidXArnold/marlin/internal/smoke"
@@ -200,6 +202,14 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 		_, _ = fmt.Fprintf(w, "waiting for %s ...\n", slug)
 	}
 
+	// Baseline systemd's restart counter: any increase while we wait means the
+	// service crashed and Restart=on-failure brought it back — a crash loop,
+	// not a slow start. Without this we'd spin until startWaitTimeout.
+	baseRestarts := 0
+	if st, err := p.Status(cmd.Context()); err == nil {
+		baseRestarts = st.Restarts
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -222,14 +232,27 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 				return true
 			}
 
-			// Detect container exit so we don't spin indefinitely.
+			// Detect container exit / service crash so we don't spin indefinitely.
 			if status, err := p.Status(cmd.Context()); err == nil {
 				if cs := status.ContainerState; cs != "" && cs != "running" {
 					if isTTY {
 						_, _ = fmt.Fprintf(w, "\r\033[K")
 					}
-					_, _ = fmt.Fprintf(w, "container exited (%s) after %s — run 'marlin logs' for details\n",
-						cs, time.Since(start).Round(time.Second))
+					_, _ = fmt.Fprintf(w, "container exited (%s) after %s\n", cs, time.Since(start).Round(time.Second))
+					reportCrashCause(cmd.Context(), w, p)
+					return false
+				}
+				if status.State == "failed" || status.Restarts > baseRestarts {
+					if isTTY {
+						_, _ = fmt.Fprintf(w, "\r\033[K")
+					}
+					what := "service failed"
+					if status.Restarts > baseRestarts {
+						what = fmt.Sprintf("service crashed and is restarting (%d restart(s))", status.Restarts-baseRestarts)
+					}
+					_, _ = fmt.Fprintf(w, "%s %s after %s\n", slug, what, time.Since(start).Round(time.Second))
+					reportCrashCause(cmd.Context(), w, p)
+					_, _ = fmt.Fprintln(w, "  stop the crash loop with 'marlin stop'")
 					return false
 				}
 			}
@@ -241,5 +264,27 @@ func waitForReady(cmd *cobra.Command, cfg *config.Config, slug string, p provide
 				frame++
 			}
 		}
+	}
+}
+
+// crashLogLines is how much log history reportCrashCause scans.
+const crashLogLines = 400
+
+// reportCrashCause pulls recent logs and prints the root-cause error line and,
+// for recognised failures, a suggested fix. Soft-fails to a pointer at logs.
+func reportCrashCause(ctx context.Context, w io.Writer, p provider.Provider) {
+	var buf bytes.Buffer
+	if err := p.Logs(ctx, &buf, false, crashLogLines); err != nil {
+		_, _ = fmt.Fprintln(w, "  run 'marlin logs' for details")
+		return
+	}
+	r := diagnose.Analyze(buf.String())
+	if r.Cause == "" {
+		_, _ = fmt.Fprintln(w, "  run 'marlin logs' for details")
+		return
+	}
+	_, _ = fmt.Fprintf(w, "  cause: %s\n", r.Cause)
+	if r.Hint != "" {
+		_, _ = fmt.Fprintf(w, "  hint : %s\n", r.Hint)
 	}
 }

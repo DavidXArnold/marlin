@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -811,4 +812,36 @@ func TestPromptAndInstallBinarySudoFails(t *testing.T) {
 	_, err := PromptAndInstallBinary(&buf, src, dest)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "sudo install")
+}
+
+// TestPromptAndWriteFileReplacesUnwritableFile reproduces gn100's state.toml
+// failure: the directory is writable but the file itself isn't (there it was
+// root-owned; here read-only, which fails the same way for a non-root user).
+func TestPromptAndWriteFileReplacesUnwritableFile(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root bypasses file permissions")
+	}
+	old := getuid
+	getuid = func() int { return 1000 }
+	defer func() { getuid = old }()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.toml")
+	require.NoError(t, os.WriteFile(path, []byte("old"), 0o444))
+	require.Error(t, os.WriteFile(path, []byte("x"), 0o644), "precondition: direct write must fail")
+
+	ok, err := PromptAndWriteFile(io.Discard, dir, path, []byte("new"))
+	require.NoError(t, err)
+	assert.True(t, ok)
+
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, "new", string(got))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm())
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "temp file must not be left behind")
 }
