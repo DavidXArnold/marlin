@@ -289,3 +289,30 @@ func TestNewAdhocRunnerCustomSocket(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, r)
 }
+
+func TestBuildContainerConfigVLLMEntrypointAndCmd(t *testing.T) {
+	a, _ := testAdhocRunner(t, &stubDocker{})
+	m := &config.ModelConfig{
+		Model: config.ModelMeta{Type: config.ProviderVLLM, ID: "org/some-model"},
+		Serve: config.ServeConfig{
+			ServedModelName:      []string{"local"},
+			GPUMemoryUtilization: 0.85,
+			ExtraFlags:           []string{"--kv-cache-dtype", "fp8"},
+		},
+	}
+
+	_, provider, cc, hc, err := a.buildContainerConfig("some-model", m)
+	require.NoError(t, err)
+	assert.Equal(t, "vllm", provider)
+
+	// Entrypoint is forced to vllm so both NGC (exec "$@") and upstream
+	// (ENTRYPOINT vllm serve) images run `vllm serve <model> ...`.
+	assert.Equal(t, []string{"vllm"}, []string(cc.Entrypoint))
+	require.GreaterOrEqual(t, len(cc.Cmd), 2)
+	assert.Equal(t, []string{"serve", "org/some-model"}, []string(cc.Cmd[:2]))
+	assert.NotContains(t, []string(cc.Cmd), "--model")
+	assert.Contains(t, []string(cc.Cmd), "--served-model-name")
+	assert.Equal(t, []string{"--kv-cache-dtype", "fp8"}, []string(cc.Cmd[len(cc.Cmd)-2:]))
+
+	assert.Equal(t, container.IpcMode("host"), hc.IpcMode)
+}
