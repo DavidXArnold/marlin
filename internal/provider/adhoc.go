@@ -334,7 +334,13 @@ func (a *AdhocRunner) buildContainerConfig(slug string, m *config.ModelConfig) (
 		providerName = "vllm"
 		labels[labelProvider] = "vllm"
 
-		cmd := []string{"--model", m.Model.ID}
+		// Force the vllm binary as entrypoint, matching the systemd unit's
+		// `--entrypoint vllm ... serve <model>`. Image entrypoints differ:
+		// NGC's nvidia_entrypoint.sh does `exec "$@"` (so bare flags fail),
+		// while upstream vllm-openai's is already `vllm serve` (so a
+		// `vllm serve` Cmd would be doubled). Overriding works for both.
+		entrypoint := []string{"vllm"}
+		cmd := []string{"serve", m.Model.ID}
 		for _, name := range m.Serve.ServedModelName {
 			cmd = append(cmd, "--served-model-name", name)
 		}
@@ -354,10 +360,14 @@ func (a *AdhocRunner) buildContainerConfig(slug string, m *config.ModelConfig) (
 			Image:        image,
 			ExposedPorts: portSet,
 			Labels:       labels,
+			Entrypoint:   entrypoint,
 			Cmd:          cmd,
 		}
+		// Docker's default 64MB /dev/shm is too small for vLLM; the systemd
+		// unit uses --ipc host for the same reason.
 		hostCfg = &container.HostConfig{
 			PortBindings: portBindings,
+			IpcMode:      "host",
 			Resources:    container.Resources{DeviceRequests: gpuReq},
 		}
 	}
