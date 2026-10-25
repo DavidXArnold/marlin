@@ -88,7 +88,11 @@ var buildProvider = func(pt config.ProviderType, cfg *config.Config) (provider.P
 		}
 		return provider.NewNIMProvider(cfg, sec["NGC_API_KEY"])
 	case config.ProviderLlamaCpp:
-		return provider.NewLlamaCppProvider(cfg, effectiveDirs(cfg)), nil
+		sec, err := secrets.Load(cfg.Paths.SecretsEnv)
+		if err != nil {
+			return nil, fmt.Errorf("loading secrets: %w", err)
+		}
+		return provider.NewLlamaCppProvider(cfg, effectiveDirs(cfg), sec["HF_TOKEN"]), nil
 	case config.ProviderMesh:
 		return provider.NewMeshProvider(cfg, effectiveDirs(cfg)), nil
 	default:

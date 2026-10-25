@@ -43,6 +43,12 @@ func checkModelID(m *config.ModelConfig) []Issue {
 		}
 		return nil
 	}
+	if m.Model.Type == config.ProviderLlamaCpp {
+		if m.Model.ID == "" && m.Serve.GGUFPath == "" {
+			return []Issue{{Level: LevelError, Message: "model.id (a Hugging Face GGUF repo) or serve.gguf_path is required for llama.cpp models"}}
+		}
+		return nil
+	}
 	if m.Model.ID == "" {
 		return []Issue{{Level: LevelError, Message: "model.id is required"}}
 	}
@@ -50,8 +56,9 @@ func checkModelID(m *config.ModelConfig) []Issue {
 }
 
 func checkGPUMemory(m *config.ModelConfig) []Issue {
-	// NIM containers manage GPU memory internally — this field is not applicable.
-	if m.Model.Type == config.ProviderNIM {
+	// NIM containers manage GPU memory internally and llama.cpp sizes by layers
+	// offloaded (ngl) — this field is not applicable to either.
+	if m.Model.Type == config.ProviderNIM || m.Model.Type == config.ProviderLlamaCpp {
 		return nil
 	}
 	if m.Serve.GPUMemoryUtilization <= 0 {
@@ -111,8 +118,9 @@ var parserByFamily = map[string]string{
 }
 
 func checkToolCallParser(m *config.ModelConfig) []Issue {
-	// NIM exposes its own tool-call handling; model.id is not set for NIM.
-	if m.Model.Type == config.ProviderNIM {
+	// NIM exposes its own tool-call handling; llama.cpp parses tool calls from
+	// the chat template (--jinja) and has no parser flag.
+	if m.Model.Type == config.ProviderNIM || m.Model.Type == config.ProviderLlamaCpp {
 		return nil
 	}
 	if m.Serve.ToolCallParser == "" {

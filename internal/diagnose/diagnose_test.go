@@ -78,3 +78,38 @@ func TestAnalyzeTruncatesLongCause(t *testing.T) {
 	assert.LessOrEqual(t, len([]rune(r.Cause)), 301)
 	assert.True(t, strings.HasSuffix(r.Cause, "…"))
 }
+
+// llama.cpp (llama-server) failures, shaped like its journald output.
+
+func TestAnalyzeLlamaCppUnknownArchitecture(t *testing.T) {
+	logs := `Oct 22 09:01:02 host marlin-llamacpp[42]: llama_model_load: error loading model: error loading model architecture: unknown model architecture: 'qwen9'
+Oct 22 09:01:02 host marlin-llamacpp[42]: llama_model_load_from_file_impl: failed to load model
+Oct 22 09:01:02 host marlin-llamacpp[42]: main: exiting due to model loading error`
+	r := Analyze(logs)
+	assert.Equal(t, "llama_model_load: error loading model: error loading model architecture: unknown model architecture: 'qwen9'", r.Cause)
+	assert.Contains(t, r.Hint, "newer llama.cpp image")
+}
+
+func TestAnalyzeLlamaCppOOM(t *testing.T) {
+	logs := `ggml_backend_cuda_buffer_type_alloc_buffer: allocating 98304.00 MiB on device 0: cudaMalloc failed: out of memory
+alloc_tensor_range: failed to allocate CUDA0 buffer of size 103079215104
+llama_model_load: error loading model: unable to allocate CUDA0 buffer`
+	r := Analyze(logs)
+	assert.Equal(t, "llama_model_load: error loading model: unable to allocate CUDA0 buffer", r.Cause)
+	assert.Contains(t, r.Hint, "smaller quant")
+}
+
+func TestAnalyzeLlamaCppDownloadFailed(t *testing.T) {
+	logs := `common_download_file_single: download failed: Unauthorized (status: 401)
+error: failed to download model from HuggingFace`
+	r := Analyze(logs)
+	assert.Equal(t, "error: failed to download model from HuggingFace", r.Cause)
+	assert.Contains(t, r.Hint, "HF_TOKEN")
+}
+
+func TestAnalyzeLlamaCppPortInUse(t *testing.T) {
+	logs := `srv    start: couldn't bind HTTP server socket, hostname: 0.0.0.0, port: 8000`
+	r := Analyze(logs)
+	assert.Contains(t, r.Cause, "couldn't bind HTTP server socket")
+	assert.Contains(t, r.Hint, "server.port is already in use")
+}

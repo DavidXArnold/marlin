@@ -292,7 +292,28 @@ func TestWaitForReadyTimeout(t *testing.T) {
 
 	ok := waitForReady(cmd, cfg, "slow-model", &mockProv{})
 	assert.False(t, ok)
-	assert.Contains(t, buf.String(), "timed out")
+	assert.Contains(t, buf.String(), "not ready after 3s")
+	assert.Contains(t, buf.String(), "--timeout")
+}
+
+// TestWaitForReadyTimeoutFlag: an explicit --timeout overrides the default wait.
+func TestWaitForReadyTimeoutFlag(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	cfg := cfgWithServer(t, srv)
+
+	var buf bytes.Buffer
+	cmd := cmdWithContext(&buf)
+	cmd.Flags().BoolP("logs", "l", false, "")
+	cmd.Flags().Duration("timeout", startWaitTimeout, "")
+	require.NoError(t, cmd.Flags().Set("timeout", "1s"))
+
+	begin := time.Now()
+	assert.False(t, waitForReady(cmd, cfg, "slow-model", &mockProv{}))
+	assert.Less(t, time.Since(begin), 5*time.Second)
+	assert.Contains(t, buf.String(), "not ready after")
 }
 
 // TestWaitForReadyContainerExitDetected verifies that waitForReady exits early

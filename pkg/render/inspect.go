@@ -37,6 +37,8 @@ func Inspect(m *config.ModelConfig, cfg *config.Config, slug, hfToken string) st
 		inspectVLLM(&b, m, cfg, slug, hfToken)
 	case config.ProviderNIM:
 		inspectNIM(&b, m, cfg)
+	case config.ProviderLlamaCpp:
+		inspectLlamaCpp(&b, m, cfg, slug, hfToken)
 	}
 
 	return b.String()
@@ -124,4 +126,31 @@ func inspectNIM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config) {
 	}
 	writef("  --name marlin-nim \\\n")
 	writef("  %s\n", m.Model.Image)
+}
+
+func inspectLlamaCpp(b *strings.Builder, m *config.ModelConfig, cfg *config.Config, slug, hfToken string) {
+	writef := func(format string, args ...any) { fmt.Fprintf(b, format, args...) }
+
+	image := ""
+	if cfg.Service.LlamaCppMode != "binary" {
+		image = m.Model.Image
+		if image == "" {
+			image = cfg.Service.LlamaCppImage
+		}
+	}
+
+	writef("\n=== env file (%s/%s.llamacpp.env) ===\n", cfg.Paths.ModelsDir, slug)
+	writef("%s", LlamaCppEnv(m, image, ""))
+	if hfToken != "" {
+		writef("HF_TOKEN=*** (from secrets)\n")
+	}
+
+	writef("\n=== systemd unit (%s) ===\n", LlamaCppUnitPath(cfg))
+	if cfg.Service.LlamaCppMode == "binary" {
+		bin, _ := ResolveLlamaCppBin(cfg.Service.LlamaCppBin)
+		writef("%s", SystemdUnitLlamaCpp(cfg, bin))
+		return
+	}
+	containerBin, _ := ResolveContainerBin(cfg)
+	writef("%s", SystemdUnitLlamaCppContainerized(cfg, containerBin, ResolveHFCache(cfg)))
 }
