@@ -31,9 +31,10 @@ const (
 )
 
 type ModelConfig struct {
-	Meta  ProfileMeta `toml:"meta,omitempty"`
-	Model ModelMeta   `toml:"model"`
-	Serve ServeConfig `toml:"serve"`
+	Meta      ProfileMeta     `toml:"meta,omitempty"`
+	Model     ModelMeta       `toml:"model"`
+	Serve     ServeConfig     `toml:"serve"`
+	Container ContainerConfig `toml:"container,omitempty"`
 }
 
 type ModelMeta struct {
@@ -254,4 +255,23 @@ func PersistModelHealthPath(slug, healthPath string, dirs ...string) error {
 		}
 	}
 	return nil // no writable dir available; skip silently
+}
+
+// ContainerConfig customises the container that the vLLM and llama.cpp units
+// run, so community stacks that need extra environment, bind mounts, docker
+// flags or an in-container setup step can be expressed as a profile.
+// String fields accept the placeholders documented in render.Expand.
+type ContainerConfig struct {
+	Env        []string `toml:"env,omitempty"`        // KEY=VALUE, passed via --env-file (values may contain spaces)
+	Volumes    []string `toml:"volumes,omitempty"`    // /host:/container[:ro]
+	Args       []string `toml:"args,omitempty"`       // extra `docker run` flags, e.g. --shm-size=16g
+	PreServe   []string `toml:"pre_serve,omitempty"`  // shell commands run inside the container before the server; non-zero aborts the start
+	Entrypoint string   `toml:"entrypoint,omitempty"` // server executable in the image; default vllm / /app/llama-server
+	ModelArg   string   `toml:"model_arg,omitempty"`  // vLLM: what `vllm serve` is given instead of model.id (e.g. a path built by pre_serve)
+}
+
+// IsZero reports whether no container customisation is set.
+func (c ContainerConfig) IsZero() bool {
+	return len(c.Env) == 0 && len(c.Volumes) == 0 && len(c.Args) == 0 &&
+		len(c.PreServe) == 0 && c.Entrypoint == "" && c.ModelArg == ""
 }

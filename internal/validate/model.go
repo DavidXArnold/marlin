@@ -33,6 +33,54 @@ func Model(m *config.ModelConfig, serverAlias string) []Issue {
 	issues = append(issues, checkServedModelName(m, serverAlias)...)
 	issues = append(issues, checkQuantization(m)...)
 	issues = append(issues, checkToolCallParser(m)...)
+	issues = append(issues, checkSchemaVersion(m)...)
+	issues = append(issues, checkContainer(m)...)
+	return issues
+}
+
+func checkSchemaVersion(m *config.ModelConfig) []Issue {
+	if v := m.EffectiveSchemaVersion(); v > config.SupportedSchemaVersion {
+		return []Issue{{Level: LevelError, Message: fmt.Sprintf(
+			"profile needs schema_version %d but this marlin supports up to %d — run 'marlin upgrade'", v, config.SupportedSchemaVersion)}}
+	}
+	return nil
+}
+
+// checkContainer validates the [container] table. Volumes and args reach
+// docker through a word-split variable, so they must not contain whitespace;
+// env goes through --env-file and may.
+func checkContainer(m *config.ModelConfig) []Issue {
+	c := m.Container
+	if c.IsZero() {
+		return nil
+	}
+	if m.Model.Type == config.ProviderNIM || m.Model.Type == config.ProviderMesh {
+		return []Issue{{Level: LevelWarn, Message: fmt.Sprintf("[container] is ignored for %s models (use serve.extra_env / serve.extra_volumes for NIM)", m.Model.Type)}}
+	}
+	var issues []Issue
+	for _, e := range c.Env {
+		if k, _, ok := strings.Cut(e, "="); !ok || k == "" || strings.ContainsAny(k, " \t") {
+			issues = append(issues, Issue{Level: LevelError, Message: fmt.Sprintf("container.env entry %q must be KEY=VALUE", e)})
+		}
+	}
+	for _, v := range c.Volumes {
+		if strings.ContainsAny(v, " \t") {
+			issues = append(issues, Issue{Level: LevelError, Message: fmt.Sprintf("container.volumes entry %q must not contain whitespace", v)})
+		} else if !strings.Contains(v, ":") {
+			issues = append(issues, Issue{Level: LevelError, Message: fmt.Sprintf("container.volumes entry %q must be /host:/container[:opts]", v)})
+		}
+	}
+	for _, a := range c.Args {
+		if strings.ContainsAny(a, " \t") {
+			issues = append(issues, Issue{Level: LevelError, Message: fmt.Sprintf("container.args entry %q must not contain whitespace (write --flag=value)", a)})
+		}
+	}
+	if strings.ContainsAny(c.Entrypoint, " \t") {
+		issues = append(issues, Issue{Level: LevelError, Message: "container.entrypoint must be a single executable path"})
+	}
+	if c.ModelArg != "" && m.Model.Type == config.ProviderLlamaCpp {
+		issues = append(issues, Issue{Level: LevelWarn, Message: "container.model_arg is vLLM-only; use serve.gguf_path for llama.cpp"})
+	}
 	return issues
 }
 

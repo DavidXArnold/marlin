@@ -3,7 +3,11 @@ package config
 // SupportedSchemaVersion is the highest model-profile TOML schema version this
 // build understands. Bump only when the schema itself changes (fields added,
 // removed, or semantically changed) — not for model/content-only changes.
-const SupportedSchemaVersion = 1
+//
+//	1  original schema
+//	2  adds the [container] table (env, volumes, args, pre_serve, entrypoint,
+//	   model_arg) and {placeholder} expansion
+const SupportedSchemaVersion = 2
 
 // ProfileMeta declares versioning information for a distributable model
 // profile, as pulled via `marlin profile pull`. Profiles that predate this

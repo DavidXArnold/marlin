@@ -205,3 +205,57 @@ func TestModelLlamaCppNoSource(t *testing.T) {
 	assert.Equal(t, LevelError, issues[0].Level)
 	assert.Contains(t, issues[0].Message, "gguf_path")
 }
+
+func TestModelSchemaTooNew(t *testing.T) {
+	m := validModel()
+	m.Meta.SchemaVersion = config.SupportedSchemaVersion + 1
+	issues := Model(m, "gn100")
+	require.NotEmpty(t, issues)
+	assert.Contains(t, issues[len(issues)-1].Message, "marlin upgrade")
+}
+
+func TestModelContainerValid(t *testing.T) {
+	m := validModel()
+	m.Container = config.ContainerConfig{
+		Env:     []string{"A=x y", "B="},
+		Volumes: []string{"{home}/m:{home}/m:ro"},
+		Args:    []string{"--shm-size=16g"},
+	}
+	assert.Empty(t, Model(m, "gn100"))
+}
+
+func TestModelContainerInvalid(t *testing.T) {
+	m := validModel()
+	m.Container = config.ContainerConfig{
+		Env:        []string{"NOEQUALS", "=v", "BAD KEY=v"},
+		Volumes:    []string{"/a b:/c", "/nocolon"},
+		Args:       []string{"--shm-size 16g"},
+		Entrypoint: "bash -c",
+	}
+	var errs int
+	for _, iss := range Model(m, "gn100") {
+		if iss.Level == LevelError {
+			errs++
+		}
+	}
+	assert.Equal(t, 7, errs)
+}
+
+func TestModelContainerWarnings(t *testing.T) {
+	nim := &config.ModelConfig{
+		Model:     config.ModelMeta{Type: config.ProviderNIM, Image: "nvcr.io/nim/x:1"},
+		Container: config.ContainerConfig{Args: []string{"--shm-size=1g"}},
+	}
+	issues := Model(nim, "gn100")
+	require.Len(t, issues, 1)
+	assert.Contains(t, issues[0].Message, "ignored for nim")
+
+	ll := &config.ModelConfig{
+		Model:     config.ModelMeta{Type: config.ProviderLlamaCpp, ID: "org/m-GGUF"},
+		Serve:     config.ServeConfig{ServedModelName: []string{"gn100"}},
+		Container: config.ContainerConfig{ModelArg: "/x"},
+	}
+	issues = Model(ll, "gn100")
+	require.Len(t, issues, 1)
+	assert.Contains(t, issues[0].Message, "vLLM-only")
+}

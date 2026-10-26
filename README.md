@@ -677,6 +677,41 @@ To serve a file you already have, set `serve.gguf_path` instead; it takes preced
 
 A first start of a large GGUF can take far longer than the default readiness wait; use `marlin start <model> --timeout 3h` or follow `marlin logs -f`. `gpu_memory_utilization` and `tool_call_parser` don't apply to llama.cpp (tool calls come from the chat template via `--jinja`).
 
+### Custom containers (`[container]`, schema 2)
+
+Community serving stacks often ship a patched image plus env vars, bind mounts and a setup step. The `[container]` table expresses those in a profile for the containerized vLLM and llama.cpp units. NIM keeps using `serve.extra_env` / `serve.extra_volumes`, and the table is ignored in binary mode.
+
+```toml
+[meta]
+schema_version = 2          # older marlin builds refuse the profile instead of ignoring [container]
+
+[container]
+env        = ["HF_HUB_OFFLINE=1", "VLLM_PLE_MMAP_DIR={hf_snapshot:org/repo}/ple-table"]
+volumes    = ["{hf_cache}/hub:{hf_cache}/hub:ro", "{home}/models:{home}/models:ro"]
+args       = ["--shm-size=16g"]           # raw extra `docker run` flags
+pre_serve  = ["/mods/my-stack/run.sh"]    # run inside the container first; a failure aborts the start
+entrypoint = "vllm"                       # server executable in the image (default vllm, or /app/llama-server)
+model_arg  = "/workspace/model"           # vLLM only: served instead of model.id
+```
+
+| Key | How it reaches the container |
+|---|---|
+| `env` | Written to `<slug>.container.env` and passed with `--env-file`, so values may contain spaces. |
+| `volumes`, `args` | Appended to `docker run`. They're word-split, so no whitespace (write `--flag=value`). |
+| `pre_serve` | Written to `<slug>.pre-serve.sh`, mounted at `/marlin/pre-serve.sh`. The entrypoint becomes `bash` running it, which then `exec`s the server with the normal arguments. |
+| `entrypoint` | Overrides the server executable (and the one `pre_serve` execs). |
+| `model_arg` | Replaces `model.id` as the `vllm serve` argument, e.g. a model view that `pre_serve` builds. |
+
+Placeholders are resolved on the host at `switch` time in every `[container]` field and in `serve.extra_flags`:
+
+| Placeholder | Resolves to |
+|---|---|
+| `{home}` | The invoking user's home directory |
+| `{hf_cache}` | The host Hugging Face cache (`paths.hf_cache`, default `~/.cache/huggingface`) |
+| `{hf_snapshot:<org>/<repo>}` | The snapshot directory that `<repo>`'s `main` ref points at in that cache. Paths follow model updates, and the switch fails with a download hint if the repo isn't cached. |
+
+Other braces (such as JSON in `--speculative-config`) are left alone. `marlin validate <model> --show-config` prints the expanded env file, hook script and launch variables. The containerized vLLM unit also mounts the host HF cache now, so weights survive restarts. Re-run `sudo marlin install --force` (and `--provider llamacpp`) once to pick up the new unit variables.
+
 ### Config inheritance
 
 Use `extends` to share common settings across multiple model configs. The child wins on any field it sets; arrays replace (not append).

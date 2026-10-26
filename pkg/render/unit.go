@@ -107,7 +107,10 @@ func ResolveContainerBin(cfg *config.Config) (string, bool) {
 // The unit reads VLLM_IMAGE and VLLM_MODEL from the active model env file (written by
 // marlin start), so switching models updates the container automatically.
 // containerBin is the resolved path to docker/podman/nerdctl (see ResolveContainerBin).
-func SystemdUnitContainerized(cfg *config.Config, containerBin string) string {
+// hfCache is mounted at the container's HF cache so weights persist across the
+// --rm restarts instead of being re-downloaded. A profile's [container] table
+// reaches the unit as VLLM_CONTAINER_ARGS / VLLM_ENTRYPOINT / VLLM_PRE_ARGS.
+func SystemdUnitContainerized(cfg *config.Config, containerBin, hfCache string) string {
 	return fmt.Sprintf(`[Unit]
 Description=Marlin vLLM inference service (containerized)
 After=network.target
@@ -119,7 +122,7 @@ Type=simple
 EnvironmentFile=-%s
 EnvironmentFile=%s
 ExecStartPre=-%s rm -f marlin-vllm
-ExecStart=/bin/bash -c 'exec %s run --rm --gpus all --ipc host --network host --name marlin-vllm --label marlin.managed=true --entrypoint vllm -e "HF_TOKEN=${HF_TOKEN:-}" "${VLLM_IMAGE}" serve "${VLLM_MODEL}" --host 0.0.0.0 --port %d ${VLLM_EXTRA_ARGS:-}'
+ExecStart=/bin/bash -c 'exec %s run --rm --gpus all --ipc host --network host --name marlin-vllm --label marlin.managed=true --entrypoint "${VLLM_ENTRYPOINT:-vllm}" -e "HF_TOKEN=${HF_TOKEN:-}" -v "%s:/root/.cache/huggingface" ${VLLM_CONTAINER_ARGS:-} "${VLLM_IMAGE}" ${VLLM_PRE_ARGS:-} serve "${VLLM_MODEL}" --host 0.0.0.0 --port %d ${VLLM_EXTRA_ARGS:-}'
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -133,6 +136,7 @@ WantedBy=multi-user.target
 		cfg.Paths.ActiveSymlink,
 		containerBin,
 		containerBin,
+		hfCache,
 		cfg.Server.Port,
 		cfg.Service.SystemdUnit,
 	)
@@ -192,7 +196,7 @@ Type=simple
 EnvironmentFile=-%s
 EnvironmentFile=%s
 ExecStartPre=-%s rm -f %s
-ExecStart=/bin/bash -c 'exec %s run --rm --gpus all --ipc host --network host --name %s --label marlin.managed=true --label marlin.provider=llamacpp -e "HF_TOKEN=${HF_TOKEN:-}" -v "%s:/root/.cache/huggingface" %s${LLAMA_CONTAINER_ARGS:-} "${LLAMA_IMAGE}" ${LLAMA_MODEL_ARGS} --host 0.0.0.0 --port %d ${LLAMA_EXTRA_ARGS:-}'
+ExecStart=/bin/bash -c 'exec %s run --rm --gpus all --ipc host --network host --name %s --label marlin.managed=true --label marlin.provider=llamacpp -e "HF_TOKEN=${HF_TOKEN:-}" -v "%s:/root/.cache/huggingface" %s${LLAMA_ENTRYPOINT:+--entrypoint "$LLAMA_ENTRYPOINT"} ${LLAMA_CONTAINER_ARGS:-} "${LLAMA_IMAGE}" ${LLAMA_PRE_ARGS:-} ${LLAMA_MODEL_ARGS} --host 0.0.0.0 --port %d ${LLAMA_EXTRA_ARGS:-}'
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal

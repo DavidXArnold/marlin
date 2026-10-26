@@ -270,3 +270,53 @@ extends = "base"
 	assert.Equal(t, []string{"from-parent"}, m.Serve.ServedModelName)
 	assert.Equal(t, []string{"--disable-log-requests"}, m.Serve.ExtraFlags)
 }
+
+func TestResolveModelInheritsContainerAndLlamaFields(t *testing.T) {
+	dir := t.TempDir()
+	writeModelFile(t, dir, "base", `
+[model]
+type = "vllm"
+abstract = true
+[serve]
+gguf_path = "/m/x.gguf"
+ngl = 40
+context_size = 8192
+[container]
+env = ["A=1"]
+volumes = ["/a:/a"]
+args = ["--shm-size=1g"]
+pre_serve = ["/mods/run.sh"]
+entrypoint = "vllm"
+model_arg = "/workspace/model"
+`)
+	writeModelFile(t, dir, "child", `
+[meta]
+schema_version = 2
+[model]
+extends = "base"
+id = "org/model"
+[container]
+env = ["B=2"]
+`)
+	m, err := ResolveModel("child", dir)
+	require.NoError(t, err)
+	assert.Equal(t, 2, m.Meta.SchemaVersion)
+	assert.Equal(t, "/m/x.gguf", m.Serve.GGUFPath)
+	assert.Equal(t, 40, m.Serve.NGL)
+	assert.Equal(t, 8192, m.Serve.ContextSize)
+	assert.Equal(t, []string{"B=2"}, m.Container.Env, "child list replaces")
+	assert.Equal(t, []string{"/a:/a"}, m.Container.Volumes)
+	assert.Equal(t, []string{"--shm-size=1g"}, m.Container.Args)
+	assert.Equal(t, []string{"/mods/run.sh"}, m.Container.PreServe)
+	assert.Equal(t, "vllm", m.Container.Entrypoint)
+	assert.Equal(t, "/workspace/model", m.Container.ModelArg)
+}
+
+func TestSaveModelOmitsEmptyContainer(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "m.toml")
+	require.NoError(t, SaveModel(path, &ModelConfig{Model: ModelMeta{ID: "x"}}))
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "[container]")
+}

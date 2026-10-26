@@ -71,9 +71,34 @@ func loadEmbeddedModel(slug string) (*ModelConfig, error) {
 
 func mergeModelConfigs(parent, child *ModelConfig) *ModelConfig {
 	return &ModelConfig{
-		Model: mergeModelMeta(parent.Model, child.Model),
-		Serve: mergeServeConfig(parent.Serve, child.Serve),
+		Meta:      child.Meta, // versioning describes the child file, never the base
+		Model:     mergeModelMeta(parent.Model, child.Model),
+		Serve:     mergeServeConfig(parent.Serve, child.Serve),
+		Container: mergeContainerConfig(parent.Container, child.Container),
 	}
+}
+
+func mergeContainerConfig(parent, child ContainerConfig) ContainerConfig {
+	result := parent
+	if len(child.Env) > 0 {
+		result.Env = child.Env
+	}
+	if len(child.Volumes) > 0 {
+		result.Volumes = child.Volumes
+	}
+	if len(child.Args) > 0 {
+		result.Args = child.Args
+	}
+	if len(child.PreServe) > 0 {
+		result.PreServe = child.PreServe
+	}
+	if child.Entrypoint != "" {
+		result.Entrypoint = child.Entrypoint
+	}
+	if child.ModelArg != "" {
+		result.ModelArg = child.ModelArg
+	}
+	return result
 }
 
 func mergeModelMeta(parent, child ModelMeta) ModelMeta {
@@ -133,6 +158,15 @@ func mergeServeConfig(parent, child ServeConfig) ServeConfig {
 	}
 	if child.HealthPath != "" {
 		result.HealthPath = child.HealthPath
+	}
+	if child.GGUFPath != "" {
+		result.GGUFPath = child.GGUFPath
+	}
+	if child.NGL > 0 {
+		result.NGL = child.NGL
+	}
+	if child.ContextSize > 0 {
+		result.ContextSize = child.ContextSize
 	}
 	return result
 }

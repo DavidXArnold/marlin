@@ -179,7 +179,7 @@ func TestProfilePullIncompatibleNoOverride(t *testing.T) {
 
 	err = runProfilePull(cmd, []string{"incompat-profile"})
 	require.Error(t, err)
-	want := `profile "incompat-profile" requires schema_version 99, this Marlin build supports up to 1.` + "\n" +
+	want := `profile "incompat-profile" requires schema_version 99, this Marlin build supports up to 2.` + "\n" +
 		"Upgrade Marlin, or re-run with --allow-newer-schema to force (unsupported fields will be ignored)."
 	assert.Equal(t, want, err.Error())
 
@@ -281,7 +281,7 @@ func TestProfileListFlagsIncompatible(t *testing.T) {
 	require.NotEmpty(t, incompatLine)
 	assert.NotContains(t, compatLine, "requires marlin upgrade")
 	assert.Contains(t, incompatLine, "requires marlin upgrade")
-	assert.Contains(t, incompatLine, "needs schema 99, this build supports 1")
+	assert.Contains(t, incompatLine, "needs schema 99, this build supports 2")
 }
 
 func TestProfileListJSON(t *testing.T) {

@@ -135,7 +135,9 @@ func renderVLLMUnit(cfg *config.Config, w io.Writer) []byte {
 	if !found {
 		_, _ = fmt.Fprintln(w, "  to use a bare vllm install instead: set service.vllm_mode = \"binary\"")
 	}
-	return []byte(render.SystemdUnitContainerized(cfg, containerBin))
+	hfCache := render.ResolveHFCache(cfg)
+	_, _ = fmt.Fprintf(w, "mounting Hugging Face cache: %s\n", hfCache)
+	return []byte(render.SystemdUnitContainerized(cfg, containerBin, hfCache))
 }
 
 func renderLlamaCppUnit(cfg *config.Config, w io.Writer) []byte {

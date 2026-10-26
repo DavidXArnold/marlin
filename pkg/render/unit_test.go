@@ -92,7 +92,7 @@ func TestResolveVLLMBinSudoUserNotSet(t *testing.T) {
 
 func TestSystemdUnitContainerizedKeyFields(t *testing.T) {
 	cfg := config.Defaults()
-	out := SystemdUnitContainerized(cfg, "docker")
+	out := SystemdUnitContainerized(cfg, "docker", "/hf")
 	assert.Contains(t, out, "[Unit]")
 	assert.Contains(t, out, "docker run")
 	assert.Contains(t, out, "--gpus all")
@@ -100,7 +100,7 @@ func TestSystemdUnitContainerizedKeyFields(t *testing.T) {
 	assert.Contains(t, out, "--network host")
 	assert.Contains(t, out, "--label marlin.managed=true")
 	assert.Contains(t, out, "${VLLM_IMAGE}")
-	assert.Contains(t, out, "--entrypoint vllm")
+	assert.Contains(t, out, `--entrypoint "${VLLM_ENTRYPOINT:-vllm}"`)
 	assert.Contains(t, out, "8000")
 	assert.NotContains(t, out, "-p 8000:8000") // network host replaces port mapping
 	assert.Contains(t, out, cfg.Service.SystemdUnit)
@@ -111,9 +111,12 @@ func TestSystemdUnitContainerizedKeyFields(t *testing.T) {
 // when the image's own ENTRYPOINT already includes "vllm serve".
 func TestSystemdUnitContainerizedEntrypointVLLM(t *testing.T) {
 	cfg := config.Defaults()
-	out := SystemdUnitContainerized(cfg, "docker")
+	out := SystemdUnitContainerized(cfg, "docker", "/hf")
 
-	assert.Contains(t, out, "--entrypoint vllm")
+	assert.Contains(t, out, `-v "/hf:/root/.cache/huggingface"`)
+	assert.Contains(t, out, `${VLLM_CONTAINER_ARGS:-} "${VLLM_IMAGE}" ${VLLM_PRE_ARGS:-} serve "${VLLM_MODEL}"`)
+
+	assert.Contains(t, out, `--entrypoint "${VLLM_ENTRYPOINT:-vllm}"`)
 	assert.Equal(t, 1, strings.Count(out, " serve "), "expected exactly one 'serve' token in ExecStart")
 }
 
@@ -121,13 +124,15 @@ func TestSystemdUnitContainerizedEntrypointVLLM(t *testing.T) {
 // the immediate next token must be "serve", and no "vllm" token may follow the image.
 func TestSystemdUnitContainerizedNoDoubleServe(t *testing.T) {
 	cfg := config.Defaults()
-	out := SystemdUnitContainerized(cfg, "docker")
+	out := SystemdUnitContainerized(cfg, "docker", "/hf")
 
 	const imgMarker = `"${VLLM_IMAGE}"`
 	imgIdx := strings.Index(out, imgMarker)
 	require.NotEqual(t, -1, imgIdx, "expected ${VLLM_IMAGE} in unit")
 
+	// Only the (normally empty) pre_serve hook args may sit between the image and serve.
 	afterImage := strings.TrimSpace(out[imgIdx+len(imgMarker):])
+	afterImage = strings.TrimPrefix(afterImage, "${VLLM_PRE_ARGS:-} ")
 	assert.True(t, strings.HasPrefix(afterImage, "serve "),
 		"expected 'serve' immediately after ${VLLM_IMAGE}, got: %q", afterImage)
 	assert.NotContains(t, afterImage, "vllm",
@@ -136,7 +141,7 @@ func TestSystemdUnitContainerizedNoDoubleServe(t *testing.T) {
 
 func TestSystemdUnitContainerizedFullBinPath(t *testing.T) {
 	cfg := config.Defaults()
-	out := SystemdUnitContainerized(cfg, "/usr/bin/podman")
+	out := SystemdUnitContainerized(cfg, "/usr/bin/podman", "/hf")
 	assert.Contains(t, out, "/usr/bin/podman run")
 	assert.NotContains(t, out, "exec docker run")
 }
@@ -192,7 +197,7 @@ func TestSystemdUnitsLimitCrashLoops(t *testing.T) {
 	cfg := config.Defaults()
 	for name, unit := range map[string]string{
 		"binary":        SystemdUnit(cfg, "/usr/bin/vllm"),
-		"containerized": SystemdUnitContainerized(cfg, "/usr/bin/docker"),
+		"containerized": SystemdUnitContainerized(cfg, "/usr/bin/docker", "/hf"),
 		"llamacpp":      SystemdUnitLlamaCpp(cfg, "/usr/bin/llama-server"),
 		"llamacpp-ctr":  SystemdUnitLlamaCppContainerized(cfg, "/usr/bin/docker", "/hf"),
 	} {
@@ -201,7 +206,7 @@ func TestSystemdUnitsLimitCrashLoops(t *testing.T) {
 		// Start limits belong in [Unit]; in [Service] systemd ignores them.
 		assert.Less(t, strings.Index(unit, "StartLimitBurst"), strings.Index(unit, "[Service]"), name)
 	}
-	c := SystemdUnitContainerized(cfg, "/usr/bin/docker")
+	c := SystemdUnitContainerized(cfg, "/usr/bin/docker", "/hf")
 	assert.Contains(t, c, "ExecStartPre=-/usr/bin/docker rm -f marlin-vllm")
 	assert.Less(t, strings.Index(c, "ExecStartPre"), strings.Index(c, "ExecStart="))
 }
@@ -217,7 +222,7 @@ func TestSystemdUnitLlamaCppContainerized(t *testing.T) {
 	assert.Contains(t, u, "--label marlin.managed=true")
 	assert.Contains(t, u, `-v "/home/u/.cache/huggingface:/root/.cache/huggingface"`)
 	assert.Contains(t, u, `-e "HF_TOKEN=${HF_TOKEN:-}"`)
-	assert.Contains(t, u, `${LLAMA_CONTAINER_ARGS:-} "${LLAMA_IMAGE}" ${LLAMA_MODEL_ARGS} --host 0.0.0.0 --port 8123 ${LLAMA_EXTRA_ARGS:-}`)
+	assert.Contains(t, u, `${LLAMA_ENTRYPOINT:+--entrypoint "$LLAMA_ENTRYPOINT"} ${LLAMA_CONTAINER_ARGS:-} "${LLAMA_IMAGE}" ${LLAMA_PRE_ARGS:-} ${LLAMA_MODEL_ARGS} --host 0.0.0.0 --port 8123 ${LLAMA_EXTRA_ARGS:-}`)
 	// Health check must follow the configured port, not the image's 8080 default.
 	assert.Contains(t, u, `--health-cmd "curl -fsS http://localhost:8123/health || exit 1"`)
 	assert.Contains(t, u, "SyslogIdentifier=marlin-llamacpp")

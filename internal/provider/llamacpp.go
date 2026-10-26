@@ -63,8 +63,23 @@ func (l *LlamaCppProvider) Switch(ctx context.Context, modelSlug string) error {
 		}
 	}
 
+	m, err = render.ExpandModel(m, render.NewExpandContext(l.cfg))
+	if err != nil {
+		return fmt.Errorf("model %q: %w", modelSlug, err)
+	}
+
+	// [container] only applies to the containerized unit.
+	var launch render.ContainerLaunch
+	if l.cfg.Service.LlamaCppMode != "binary" && !m.Container.IsZero() {
+		ctrEnv, hook, err := writeContainerFiles(l.w, l.cfg.Paths.ModelsDir, modelSlug, m.Container)
+		if err != nil {
+			return err
+		}
+		launch = render.BuildContainerLaunch(m.Container, render.LlamaCppServerBin, ctrEnv, hook)
+	}
+
 	envPath := filepath.Join(l.cfg.Paths.ModelsDir, modelSlug+".llamacpp.env")
-	envContent := []byte(render.LlamaCppEnv(m, image, l.hfToken))
+	envContent := []byte(render.LlamaCppEnv(m, image, l.hfToken, launch))
 
 	written, err := privilege.PromptAndWriteFile(l.w, filepath.Dir(envPath), envPath, envContent)
 	if err != nil {

@@ -55,7 +55,7 @@ func TestInspectVLLMEnvSection(t *testing.T) {
 	if !strings.Contains(out, "=== systemd ExecStart ===") {
 		t.Errorf("expected systemd ExecStart section, got:\n%s", out)
 	}
-	if !strings.Contains(out, "--entrypoint vllm") {
+	if !strings.Contains(out, `--entrypoint "${VLLM_ENTRYPOINT:-vllm}"`) {
 		t.Errorf("expected --entrypoint vllm in ExecStart, got:\n%s", out)
 	}
 }
