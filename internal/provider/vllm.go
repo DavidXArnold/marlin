@@ -61,8 +61,23 @@ func (v *VLLMProvider) Switch(ctx context.Context, modelSlug string) error {
 		envModel = &m2
 	}
 
+	envModel, err = render.ExpandModel(envModel, render.NewExpandContext(v.cfg))
+	if err != nil {
+		return fmt.Errorf("model %q: %w", modelSlug, err)
+	}
+
+	env := render.Env(envModel, v.hfToken)
+	// [container] only applies to the containerized unit.
+	if v.cfg.Service.VLLMMode != "binary" && !envModel.Container.IsZero() {
+		ctrEnv, hook, err := writeContainerFiles(v.w, v.cfg.Paths.ModelsDir, modelSlug, envModel.Container)
+		if err != nil {
+			return err
+		}
+		env += render.LaunchEnv("VLLM", render.BuildContainerLaunch(envModel.Container, "vllm", ctrEnv, hook))
+	}
+
 	envPath := filepath.Join(v.cfg.Paths.ModelsDir, modelSlug+".env")
-	envContent := []byte(render.Env(envModel, v.hfToken))
+	envContent := []byte(env)
 
 	written, err := privilege.PromptAndWriteFile(v.w, filepath.Dir(envPath), envPath, envContent)
 	if err != nil {

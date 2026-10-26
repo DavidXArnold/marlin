@@ -13,7 +13,11 @@ import (
 func Env(m *config.ModelConfig, hfToken string) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "VLLM_MODEL=%s\n", m.Model.ID)
+	model := m.Model.ID
+	if m.Container.ModelArg != "" {
+		model = m.Container.ModelArg
+	}
+	fmt.Fprintf(&b, "VLLM_MODEL=%s\n", model)
 
 	if m.Model.Image != "" {
 		fmt.Fprintf(&b, "VLLM_IMAGE=%s\n", m.Model.Image)
@@ -35,6 +39,10 @@ func Env(m *config.ModelConfig, hfToken string) string {
 // llama-server clamps it to the model's layer count, so it means "all".
 const llamaCppAllLayers = 999
 
+// LlamaCppServerBin is llama-server's path in the official images, exec'd by a
+// pre_serve hook when the profile sets no container.entrypoint.
+const LlamaCppServerBin = "/app/llama-server"
+
 // LlamaCppEnv renders a ModelConfig to the .env format consumed by the
 // marlin-llamacpp systemd service (llama-server).
 //
@@ -43,7 +51,9 @@ const llamaCppAllLayers = 999
 // -hf, so llama-server downloads it into the HF cache on first start).
 // image is written as LLAMA_IMAGE for the containerized unit and may be empty
 // in binary mode. hfToken is written as HF_TOKEN when non-empty.
-func LlamaCppEnv(m *config.ModelConfig, image, hfToken string) string {
+//
+// launch carries the profile's [container] table (see BuildContainerLaunch).
+func LlamaCppEnv(m *config.ModelConfig, image, hfToken string, launch ContainerLaunch) string {
 	var b strings.Builder
 
 	if image != "" {
@@ -53,14 +63,16 @@ func LlamaCppEnv(m *config.ModelConfig, image, hfToken string) string {
 		fmt.Fprintf(&b, "HF_TOKEN=%s\n", hfToken)
 	}
 
+	var mounts []string
 	if m.Serve.GGUFPath != "" {
 		fmt.Fprintf(&b, "LLAMA_MODEL_ARGS=-m %s\n", m.Serve.GGUFPath)
 		// A local file is only visible inside the container if its directory is mounted.
 		dir := filepath.Dir(m.Serve.GGUFPath)
-		fmt.Fprintf(&b, "LLAMA_CONTAINER_ARGS=-v %s:%s:ro\n", dir, dir)
+		mounts = []string{"-v", dir + ":" + dir + ":ro"}
 	} else {
 		fmt.Fprintf(&b, "LLAMA_MODEL_ARGS=-hf %s\n", m.Model.ID)
 	}
+	b.WriteString(LaunchEnv("LLAMA", launch, mounts...))
 
 	ngl := m.Serve.NGL
 	if ngl <= 0 {

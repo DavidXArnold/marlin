@@ -77,7 +77,7 @@ func TestRunInstallWritesUnitFile(t *testing.T) {
 	data, err := os.ReadFile(unitPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "[Unit]")
-	assert.Contains(t, string(data), "--entrypoint vllm")
+	assert.Contains(t, string(data), `--entrypoint "${VLLM_ENTRYPOINT:-vllm}"`)
 }
 
 // TestRunInstallWithEnable: --enable also calls systemctl enable.
@@ -159,9 +159,9 @@ func TestRunInstallContainerMode(t *testing.T) {
 	data, err := os.ReadFile(unitPath)
 	require.NoError(t, err)
 	content := string(data)
-	assert.Contains(t, content, "run")               // docker/podman/nerdctl run
-	assert.Contains(t, content, "--entrypoint vllm") // prevents double-invocation from image ENTRYPOINT
-	assert.Contains(t, content, "VLLM_IMAGE")        // image sourced from env file
+	assert.Contains(t, content, "run")                                     // docker/podman/nerdctl run
+	assert.Contains(t, content, `--entrypoint "${VLLM_ENTRYPOINT:-vllm}"`) // prevents double-invocation from image ENTRYPOINT
+	assert.Contains(t, content, "VLLM_IMAGE")                              // image sourced from env file
 }
 
 // TestRunInstallBinaryMode: vllm_mode = "binary" produces a bare-binary unit.

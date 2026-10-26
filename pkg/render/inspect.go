@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/DavidXArnold/marlin/internal/config"
@@ -80,8 +81,11 @@ func inspectVLLM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config, 
 		mDisplay = &m2
 	}
 
+	mDisplay, launch := inspectContainer(b, mDisplay, cfg, slug, cfg.Service.VLLMMode, "vllm")
+
 	writef("\n=== env file (%s/%s.env) ===\n", cfg.Paths.ModelsDir, slug)
 	writef("%s", Env(mDisplay, ""))
+	writef("%s", LaunchEnv("VLLM", launch))
 	if hfToken != "" {
 		writef("HF_TOKEN=*** (from secrets)\n")
 	}
@@ -89,13 +93,21 @@ func inspectVLLM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config, 
 	writef("\n=== systemd ExecStart ===\n")
 	if cfg.Service.VLLMMode != "binary" {
 		containerBin, _ := ResolveContainerBin(cfg)
-		writef("/bin/bash -c 'exec %s run --rm --gpus all --ipc host --network host --name marlin-vllm --label marlin.managed=true --entrypoint vllm -e \"HF_TOKEN=${HF_TOKEN:-}\" \"${VLLM_IMAGE}\" serve \"${VLLM_MODEL}\" --host 0.0.0.0 --port %d ${VLLM_EXTRA_ARGS:-}'\n",
-			containerBin, cfg.Server.Port)
+		writef("%s\n", execStartLine(SystemdUnitContainerized(cfg, containerBin, ResolveHFCache(cfg))))
 	} else {
 		vllmBin, _ := ResolveVLLMBin(cfg.Service.VLLMBin)
-		writef("/bin/bash -c 'exec %s serve \"$VLLM_MODEL\" --host %s --port %d ${VLLM_EXTRA_ARGS:-}'\n",
-			vllmBin, cfg.Server.Host, cfg.Server.Port)
+		writef("%s\n", execStartLine(SystemdUnit(cfg, vllmBin)))
 	}
+}
+
+// execStartLine returns the ExecStart command of a rendered unit.
+func execStartLine(unit string) string {
+	for _, l := range strings.Split(unit, "\n") {
+		if strings.HasPrefix(l, "ExecStart=") {
+			return strings.TrimPrefix(l, "ExecStart=")
+		}
+	}
+	return ""
 }
 
 func inspectNIM(b *strings.Builder, m *config.ModelConfig, cfg *config.Config) {
@@ -139,8 +151,10 @@ func inspectLlamaCpp(b *strings.Builder, m *config.ModelConfig, cfg *config.Conf
 		}
 	}
 
+	m, launch := inspectContainer(b, m, cfg, slug, cfg.Service.LlamaCppMode, LlamaCppServerBin)
+
 	writef("\n=== env file (%s/%s.llamacpp.env) ===\n", cfg.Paths.ModelsDir, slug)
-	writef("%s", LlamaCppEnv(m, image, ""))
+	writef("%s", LlamaCppEnv(m, image, "", launch))
 	if hfToken != "" {
 		writef("HF_TOKEN=*** (from secrets)\n")
 	}
@@ -153,4 +167,34 @@ func inspectLlamaCpp(b *strings.Builder, m *config.ModelConfig, cfg *config.Conf
 	}
 	containerBin, _ := ResolveContainerBin(cfg)
 	writef("%s", SystemdUnitLlamaCppContainerized(cfg, containerBin, ResolveHFCache(cfg)))
+}
+
+// inspectContainer expands placeholders and prints what the profile's
+// [container] table renders to. It returns the expanded model (or m unchanged
+// when expansion fails, after printing why) and the container launch.
+func inspectContainer(b *strings.Builder, m *config.ModelConfig, cfg *config.Config, slug, mode, defaultEntrypoint string) (*config.ModelConfig, ContainerLaunch) {
+	writef := func(format string, args ...any) { fmt.Fprintf(b, format, args...) }
+
+	expanded, err := ExpandModel(m, NewExpandContext(cfg))
+	if err != nil {
+		writef("\nwarning: %v\n", err)
+	}
+	if expanded.Container.IsZero() {
+		return expanded, ContainerLaunch{}
+	}
+	if mode == "binary" {
+		writef("\nnote: [container] is ignored in binary mode\n")
+		return expanded, ContainerLaunch{}
+	}
+
+	envFile, hookFile := "", ""
+	if len(expanded.Container.Env) > 0 {
+		envFile = filepath.Join(cfg.Paths.ModelsDir, slug+".container.env")
+		writef("\n=== container env file (%s) ===\n%s", envFile, ContainerEnvFile(expanded.Container.Env))
+	}
+	if len(expanded.Container.PreServe) > 0 {
+		hookFile = filepath.Join(cfg.Paths.ModelsDir, slug+".pre-serve.sh")
+		writef("\n=== pre_serve script (%s → %s) ===\n%s", hookFile, PreServeMount, PreServeScript(expanded.Container.PreServe))
+	}
+	return expanded, BuildContainerLaunch(expanded.Container, defaultEntrypoint, envFile, hookFile)
 }
